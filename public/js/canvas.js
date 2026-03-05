@@ -26,6 +26,15 @@ const Canvas = (() => {
   let onShapesChange = null; // callback
   let hoveredId = null;      // annotation list hover highlight
 
+  // ── Undo / Redo ──────────────────────────────────────────────────────────
+  let undoStack = [];
+  let redoStack = [];
+  function pushHistory() {
+    undoStack.push(JSON.stringify(shapes));
+    if (undoStack.length > 60) undoStack.shift();
+    redoStack = [];
+  }
+
   // ── Copy / Paste ghost ─────────────────────────────────────────────────────
   let copiedShape  = null;
   let pasteActive  = false;
@@ -272,6 +281,7 @@ const Canvas = (() => {
     // Place a pasted copy
     if (pasteActive && copiedShape) {
       let newData;
+      pushHistory();
       if (copiedShape.type === 'bbox') {
         const { width, height } = copiedShape.data;
         newData = { x: imgPt.x - width/2, y: imgPt.y - height/2, width, height };
@@ -296,6 +306,7 @@ const Canvas = (() => {
       const hit = hitTest(imgPt.x, imgPt.y);
       if (hit) {
         selectedId = hit;
+        pushHistory(); // record state before potential move
         movingShape = shapes.find(s => s.id === hit);
         moveStart = imgPt;
         moveOrigData = JSON.parse(JSON.stringify(movingShape.data));
@@ -313,6 +324,7 @@ const Canvas = (() => {
     } else if (tool === 'point') {
       App.promptLabel(label => {
         if (!label) return;
+        pushHistory();
         const s = { id: genId(), label, type: 'point', data: imgPt, color: colorFor(label) };
         shapes.push(s);
         selectedId = s.id;
@@ -367,6 +379,7 @@ const Canvas = (() => {
       if (Math.abs(w) < 5 || Math.abs(h) < 5) { draw(); return; }
       App.promptLabel(label => {
         if (!label) return;
+        pushHistory();
         const bbox = {
           x: w < 0 ? imgPt.x : startPt.x,
           y: h < 0 ? imgPt.y : startPt.y,
@@ -387,6 +400,7 @@ const Canvas = (() => {
     if (polygonPts.length < 3) { polygonPts = []; return; }
     App.promptLabel(label => {
       if (!label) { polygonPts = []; return; }
+      pushHistory();
       const s = { id: genId(), label, type: 'polygon', data: [...polygonPts], color: colorFor(label) };
       shapes.push(s);
       selectedId = s.id;
@@ -439,6 +453,8 @@ const Canvas = (() => {
     },
 
     loadImage(src, existingShapes = []) {
+      undoStack = [];
+      redoStack = [];
       shapes = existingShapes.map(a => ({
         id: a.id || genId(),
         label: a.label,
@@ -463,8 +479,20 @@ const Canvas = (() => {
 
     setSelected(id) { selectedId = id; draw(); if (onShapesChange) onShapesChange(shapes, id); },
 
+    relabelSelected(newLabel) {
+      const s = shapes.find(x => x.id === selectedId);
+      if (!s) return false;
+      pushHistory();
+      s.label = newLabel;
+      s.color = labelColorMap[newLabel] || colorFor(newLabel);
+      draw();
+      if (onShapesChange) onShapesChange(shapes, selectedId);
+      return true;
+    },
+
     deleteSelected() {
       if (!selectedId) return;
+      pushHistory();
       shapes = shapes.filter(s => s.id !== selectedId);
       selectedId = null;
       draw();
@@ -497,6 +525,7 @@ const Canvas = (() => {
 
     // Add multiple shapes at once (e.g. from inference results)
     addShapes(newShapes) {
+      pushHistory();
       newShapes.forEach(s => {
         shapes.push({
           id: genId(),
@@ -530,6 +559,27 @@ const Canvas = (() => {
 
     highlightShape(id) { hoveredId = id; draw(); },
     clearHighlight()   { hoveredId = null; draw(); },
+
+    undo() {
+      if (!undoStack.length) return;
+      redoStack.push(JSON.stringify(shapes));
+      shapes = JSON.parse(undoStack.pop());
+      selectedId = null;
+      hoveredId = null;
+      draw();
+      if (onShapesChange) onShapesChange(shapes, null);
+    },
+    redo() {
+      if (!redoStack.length) return;
+      undoStack.push(JSON.stringify(shapes));
+      shapes = JSON.parse(redoStack.pop());
+      selectedId = null;
+      hoveredId = null;
+      draw();
+      if (onShapesChange) onShapesChange(shapes, null);
+    },
+    canUndo() { return undoStack.length > 0; },
+    canRedo() { return redoStack.length > 0; },
 
     colorFor,
   };

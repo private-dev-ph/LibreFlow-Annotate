@@ -82,7 +82,17 @@
       chip.title = lc.name;
       chip.textContent = lc.name;
       chip.dataset.idx = i;
-      chip.addEventListener('click', () => { activeLabel = i; renderLabels(); });
+      chip.addEventListener('click', () => {
+        // If an annotation is selected, re-label it instead of just switching active label
+        const relabelled = Canvas.relabelSelected(lc.name);
+        if (relabelled) {
+          unsaved = true;
+          saveIndicator.classList.add('show');
+          showToast(`Relabelled to "${lc.name}"`);
+        }
+        activeLabel = i;
+        renderLabels();
+      });
       labelsContainer.appendChild(chip);
     });
   }
@@ -293,10 +303,11 @@
 
   // -- Export dialog ----------------------------------------------------------
   const FORMAT_DESCS = {
-    yolo: 'YOLO TXT - one .txt per image with normalized coords + classes.txt. Popular for YOLOv5/v8.',
-    coco: 'COCO JSON - MS COCO instances format. Compatible with most object-detection frameworks.',
-    voc:  'Pascal VOC - one XML annotation per image. Compatible with TensorFlow Object Detection API.',
-    csv:  'CSV - flat table with image filename, label, and pixel coordinates. Easy to process in scripts.',
+    yolo:      'YOLO TXT - one .txt per image with normalized coords + classes.txt. Popular for YOLOv5/v8.',
+    roboflow:  'Roboflow YOLO - same label format as YOLO but packaged with data.yaml and train/labels/ structure for direct Roboflow compatibility.',
+    coco:      'COCO JSON - MS COCO instances format. Compatible with most object-detection frameworks.',
+    voc:       'Pascal VOC - one XML annotation per image. Compatible with TensorFlow Object Detection API.',
+    csv:       'CSV - flat table with image filename, label, and pixel coordinates. Easy to process in scripts.',
   };
 
   document.getElementById('btn-export').addEventListener('click', () => {
@@ -418,6 +429,8 @@
   });
 
   document.getElementById('tool-delete').addEventListener('click', () => Canvas.deleteSelected());
+  document.getElementById('tool-undo').addEventListener('click',   () => Canvas.undo());
+  document.getElementById('tool-redo').addEventListener('click',   () => Canvas.redo());
   document.getElementById('tool-zoom-in').addEventListener('click',  () => Canvas.zoomIn());
   document.getElementById('tool-zoom-out').addEventListener('click', () => Canvas.zoomOut());
   document.getElementById('tool-fit').addEventListener('click',      () => Canvas.fitToScreen());
@@ -430,9 +443,11 @@
     if (map[e.key]) { document.getElementById(map[e.key]).click(); }
     else if (e.key === 'Delete' || e.key === 'Backspace') Canvas.deleteSelected();
     else if ((e.ctrlKey||e.metaKey) && e.key === 's') { e.preventDefault(); saveAnnotations(); }
+    else if ((e.ctrlKey||e.metaKey) && e.key === 'z') { e.preventDefault(); Canvas.undo(); }
+    else if ((e.ctrlKey||e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); Canvas.redo(); }
     else if ((e.ctrlKey||e.metaKey) && e.key === 'c') {
       const ok = Canvas.copySelected();
-      if (ok) showToast('Annotation copied - press Ctrl+V to paste');
+      if (ok) { Canvas.activatePaste(); showToast('Click canvas to place - Esc to cancel'); }
     }
     else if ((e.ctrlKey||e.metaKey) && e.key === 'v') {
       if (Canvas.hasCopy()) { Canvas.activatePaste(); showToast('Click canvas to place - Esc to cancel'); }

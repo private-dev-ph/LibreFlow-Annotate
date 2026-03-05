@@ -124,6 +124,8 @@ router.get('/export/:projectId', (req, res) => {
 
 // ─── ZIP export ───────────────────────────────────────────────────────────────
 
+const BATCHES_FILE = path.join(__dirname, '..', 'data', 'batches.json');
+
 router.get('/export-zip/:projectId', (req, res) => {
   const { projectId } = req.params;
   const format   = (req.query.format || 'yolo').toLowerCase();
@@ -134,10 +136,39 @@ router.get('/export-zip/:projectId', (req, res) => {
     ? JSON.parse(fs.readFileSync(IMAGES_FILE, 'utf-8'))
     : [];
 
-  // Only export images that have at least one annotation
+  // Optional: filter to a specific batch or sub-batch
+  let allowedImageIds = null; // null = all project images
+  if (req.query.batchId) {
+    const batches = fs.existsSync(BATCHES_FILE)
+      ? JSON.parse(fs.readFileSync(BATCHES_FILE, 'utf-8'))
+      : [];
+    const batch = batches.find(b => b.id === req.query.batchId);
+    if (batch) {
+      if (req.query.subBatchId) {
+        const sb = (batch.subBatches || []).find(s => s.id === req.query.subBatchId);
+        allowedImageIds = new Set(sb ? (sb.imageIds || []) : []);
+      } else {
+        // whole batch: union of direct imageIds + all sub-batch imageIds
+        const direct  = batch.imageIds || [];
+        const fromSubs = (batch.subBatches || []).flatMap(sb => sb.imageIds || []);
+        allowedImageIds = new Set([...direct, ...fromSubs]);
+      }
+    }
+  }
+
+  // Only export images that have at least one annotation (filtered by scope)
   const projectImages = allImages.filter(img =>
-    img.projectId === projectId && allAnnotations.some(a => a.imageId === img.id)
+    img.projectId === projectId &&
+    (!allowedImageIds || allowedImageIds.has(img.id)) &&
+    allAnnotations.some(a => a.imageId === img.id)
   );
+
+  // Build filename suffix for batch/sub-batch scoped exports
+  const scopeSuffix = req.query.subBatchId
+    ? `_sub-${req.query.subBatchId.slice(0,8)}`
+    : req.query.batchId
+      ? `_batch-${req.query.batchId.slice(0,8)}`
+      : '';
 
   // Gather unique labels
   const labelsSet = new Set();
@@ -172,6 +203,48 @@ router.get('/export-zip/:projectId', (req, res) => {
       zip.addFile(`labels/${base}.txt`, Buffer.from(lines.join('\n'), 'utf-8'));
       if (withImgs && fs.existsSync(imgPath)) {
         zip.addLocalFile(imgPath, 'images', img.originalName);
+      }
+    });
+
+  } else if (format === 'roboflow') {
+    // Roboflow YOLO structure: data.yaml + train/labels/*.txt + train/images/*
+    const namesYaml = '[' + labels.map(l => `'${l.replace(/'/g, "\\'")}'`).join(', ') + ']';
+    const dataYaml = [
+      'train: train/images',
+      'val: valid/images',
+      'test: test/images',
+      '',
+      `nc: ${labels.length}`,
+      `names: ${namesYaml}`,
+      '',
+      'roboflow:',
+      '  license: Private',
+      '  project: libreflow-export',
+      "  url: ''",
+      '  version: 1',
+      "  workspace: ''",
+    ].join('\n');
+    zip.addFile('data.yaml', Buffer.from(dataYaml, 'utf-8'));
+
+    projectImages.forEach(img => {
+      const imgPath = path.join(UPLOADS_DIR, img.filename);
+      const { w, h } = getImageDimensions(imgPath);
+      const anns = allAnnotations.filter(a => a.imageId === img.id);
+      const lines = anns
+        .filter(a => a.type === 'bbox' && a.data)
+        .map(a => {
+          const d = a.data;
+          const cx = (d.x + d.width  / 2) / w;
+          const cy = (d.y + d.height / 2) / h;
+          const bw = d.width  / w;
+          const bh = d.height / h;
+          const cls = labelIdx[a.label] ?? 0;
+          return `${cls} ${cx.toFixed(6)} ${cy.toFixed(6)} ${bw.toFixed(6)} ${bh.toFixed(6)}`;
+        });
+      const base = img.originalName.replace(/\.[^.]+$/, '');
+      zip.addFile(`train/labels/${base}.txt`, Buffer.from(lines.join('\n'), 'utf-8'));
+      if (withImgs && fs.existsSync(imgPath)) {
+        zip.addLocalFile(imgPath, 'train/images', img.originalName);
       }
     });
 
@@ -279,7 +352,7 @@ ${objects}
 
   const zipBuf = zip.toBuffer();
   res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="export_${projectId}_${format}.zip"`);
+  res.setHeader('Content-Disposition', `attachment; filename="export_${projectId}${scopeSuffix}_${format}.zip"`);
   res.setHeader('Content-Length', zipBuf.length);
   res.end(zipBuf);
 });

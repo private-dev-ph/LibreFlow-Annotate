@@ -180,9 +180,12 @@
 
       <!-- ── BATCHES panel ── -->
       <div class="tab-panel" id="panel-batches">
-        <div class="section-card">
-          <h2>Upload Batches</h2>
-          <p style="font-size:13px;color:#8892a4;margin-bottom:0">Images uploaded to this project are grouped into batches. You can split a batch into sub-batches and assign them to collaborators.</p>
+        <div class="section-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <h2>Upload Batches</h2>
+            <p style="font-size:13px;color:#8892a4;margin-bottom:0">Images uploaded to this project are grouped into batches. You can split a batch into sub-batches and assign them to collaborators.</p>
+          </div>
+          <button id="btn-export-all-batches" class="btn-primary-sm" style="white-space:nowrap;flex-shrink:0">↓ Export All Batches</button>
         </div>
         <div id="batches-list" class="batches-list"></div>
         <div id="batches-empty" class="batches-empty" style="display:none">
@@ -232,6 +235,32 @@
         </div>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ── Batch Export Modal ── -->
+  <div id="modal-batch-export" class="modal hidden">
+    <div class="modal-box">
+      <h3 class="modal-title">Export Annotations</h3>
+      <p id="batch-export-scope-label" style="font-size:13px;color:#8892a4;margin-bottom:14px"></p>
+      <div class="field-group">
+        <label class="field-label">Format</label>
+        <select id="batch-export-format" class="field-select">
+          <option value="yolo">YOLO TXT — Darknet / Ultralytics YOLOv5-v8</option>
+          <option value="roboflow">Roboflow YOLO — data.yaml + train/labels/ structure</option>
+          <option value="coco">COCO JSON — MS COCO instances format</option>
+          <option value="voc">Pascal VOC XML — TensorFlow Object Detection API</option>
+          <option value="csv">CSV — flat table, easy to script</option>
+        </select>
+      </div>
+      <label class="checkbox-label" style="margin-top:10px">
+        <input type="checkbox" id="batch-export-include-images" />
+        Include images in ZIP
+      </label>
+      <div class="modal-actions" style="margin-top:18px">
+        <button id="btn-batch-export-confirm" class="btn-primary-sm">↓ Download ZIP</button>
+        <button id="btn-batch-export-cancel" class="btn-cancel-sm">Cancel</button>
+      </div>
     </div>
   </div>
 

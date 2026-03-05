@@ -337,6 +337,37 @@
     });
   });
 
+  //─── ── BATCH EXPORT MODAL ─────────────────────────────────────────────────
+  let batchExportParams = {};
+
+  function openBatchExportModal({ batchId = null, subBatchId = null, label = '' } = {}) {
+    batchExportParams = { batchId, subBatchId };
+    const scopeEl = document.getElementById('batch-export-scope-label');
+    if (scopeEl) scopeEl.textContent = label ? `Scope: ${label}` : 'Scope: All batches in project';
+    document.getElementById('modal-batch-export').classList.remove('hidden');
+  }
+
+  document.getElementById('btn-export-all-batches')?.addEventListener('click', () => {
+    openBatchExportModal({ label: 'All batches' });
+  });
+
+  document.getElementById('btn-batch-export-cancel')?.addEventListener('click', () => {
+    document.getElementById('modal-batch-export').classList.add('hidden');
+  });
+
+  document.getElementById('btn-batch-export-confirm')?.addEventListener('click', () => {
+    const fmt      = document.getElementById('batch-export-format').value;
+    const withImgs = document.getElementById('batch-export-include-images').checked;
+    let url = `/api/annotations/export-zip/${projectId}?format=${fmt}&images=${withImgs}`;
+    if (batchExportParams.batchId)    url += `&batchId=${encodeURIComponent(batchExportParams.batchId)}`;
+    if (batchExportParams.subBatchId) url += `&subBatchId=${encodeURIComponent(batchExportParams.subBatchId)}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    a.click();
+    document.getElementById('modal-batch-export').classList.add('hidden');
+  });
+
   //─── ── Jobs badge ─────────────────────────────────────────────────────────
   function updateJobsBadge() {
     const running = Jobs.getAll().filter(j => j.status === 'running').length;
@@ -423,6 +454,7 @@
               ${buildAssignSelect(b.assignedTo, b.id, null)}
             </div>
             <div class="batch-actions" onclick="event.stopPropagation()">
+              <button class="btn-batch-action btn-export-batch" data-batch-id="${escHtml(b.id)}" data-batch-name="${escHtml(b.name)}">Export</button>
               <button class="btn-batch-action btn-split-batch" data-batch-id="${escHtml(b.id)}" data-count="${b.imageCount}">Split</button>
               <button class="btn-batch-action danger btn-del-batch" data-batch-id="${escHtml(b.id)}">Delete</button>
             </div>
@@ -442,6 +474,8 @@
                   <div class="subbatch-row">
                     <span class="subbatch-name">${escHtml(sb.name)}</span>
                     <span class="subbatch-count">${sb.imageIds ? sb.imageIds.length : 0} images</span>
+                    <button class="btn-batch-action btn-export-subbatch" style="margin-left:auto;flex-shrink:0"
+                      data-batch-id="${escHtml(b.id)}" data-sub-id="${escHtml(sb.id)}" data-sub-name="${escHtml(sb.name)}">Export</button>
                     <div class="subbatch-assign">
                       <label>Assign:</label>
                       ${buildAssignSelect(sb.assignedTo, b.id, sb.id)}
@@ -534,6 +568,22 @@
           btn.textContent = 'Saved ✓';
           setTimeout(() => { btn.textContent = 'Save'; }, 1500);
         } catch(err) { Notify.error('Failed to save note', err.message); }
+      });
+    });
+
+    // Export batch buttons
+    list.querySelectorAll('.btn-export-batch').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        openBatchExportModal({ batchId: btn.dataset.batchId, label: `Batch: ${btn.dataset.batchName}` });
+      });
+    });
+
+    // Export sub-batch buttons
+    list.querySelectorAll('.btn-export-subbatch').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        openBatchExportModal({ batchId: btn.dataset.batchId, subBatchId: btn.dataset.subId, label: `Sub-batch: ${btn.dataset.subName}` });
       });
     });
 
