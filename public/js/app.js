@@ -191,7 +191,7 @@
     images = assignedIds.size > 0
       ? allProjectImages.filter(img => assignedIds.has(img.id))
       : allProjectImages;
-    imageCountEl.textContent = images.length;
+    imageCountEl.textContent = images.filter(i => i.annotated).length + '/' + images.length;
     renderImageList();
     if (images.length > 0) await loadImage(0);
     else { canvasEmpty.classList.remove('hidden'); imageNavLabel.textContent = '-- / --'; }
@@ -199,7 +199,7 @@
 
   function renderImageList() {
     imagesList.innerHTML = '';
-    imageCountEl.textContent = images.length;
+    imageCountEl.textContent = images.filter(i => i.annotated).length + '/' + images.length;
     imagesList.className = 'images-list-' + viewMode;
 
     images.forEach((img, idx) => {
