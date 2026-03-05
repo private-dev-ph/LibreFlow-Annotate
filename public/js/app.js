@@ -73,12 +73,24 @@
     localStorage.setItem(`labels_${projectId}`, JSON.stringify(labelClasses));
   }
 
+  /** Return '#000' or '#fff' for legible text on top of a hex background color. */
+  function contrastColor(hex) {
+    const c = hex.replace('#', '');
+    const r = parseInt(c.slice(0, 2), 16) / 255;
+    const g = parseInt(c.slice(2, 4), 16) / 255;
+    const b = parseInt(c.slice(4, 6), 16) / 255;
+    const lin = v => v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    return L > 0.179 ? '#000' : '#fff';
+  }
+
   function renderLabels() {
     labelsContainer.innerHTML = '';
     labelClasses.forEach((lc, i) => {
       const chip = document.createElement('div');
       chip.className = 'label-chip' + (i === activeLabel ? ' selected' : '');
       chip.style.background = lc.color;
+      chip.style.color = contrastColor(lc.color);
       chip.title = lc.name;
       chip.textContent = lc.name;
       chip.dataset.idx = i;
@@ -232,6 +244,8 @@
     const annotations = await API.getAnnotations(img.id);
     canvasEmpty.classList.add('hidden');
     Canvas.loadImage(url, annotations);
+    unsaved = false;
+    saveIndicator.classList.remove('show');
     imageNavLabel.textContent = `${idx + 1} / ${images.length}`;
     document.getElementById('btn-prev-img').disabled = idx === 0;
     document.getElementById('btn-next-img').disabled = idx === images.length - 1;
@@ -241,8 +255,8 @@
   }
 
   // -- Shapes change callback -------------------------------------------------
-  function onShapesChange(shapes, selectedId) {
-    if (shapes.length > 0 || currentIndex >= 0) unsaved = true;
+  function onShapesChange(shapes, selectedId, dirty = false) {
+    if (dirty) unsaved = true;
     saveIndicator.classList[unsaved ? 'add' : 'remove']('show');
     renderAnnotationList(shapes, selectedId);
   }
@@ -334,6 +348,7 @@
 
   // -- Semi-auto annotation panel ---------------------------------------------
   let projectModels = [];
+  let lastModelId   = '';   // persists selected model across image navigation
 
   async function populateAutoModels() {
     try {
@@ -353,7 +368,11 @@
         sel.appendChild(opt);
       });
 
+      // Restore previously selected model
+      if (lastModelId && modelTypeMap[lastModelId]) sel.value = lastModelId;
+
       function updateSliders() {
+        lastModelId = sel.value;   // remember across navigation
         const type = modelTypeMap[sel.value] || '';
         const rowDet  = document.getElementById('slider-row-detection');
         const rowBias = document.getElementById('slider-row-bias');
@@ -362,8 +381,12 @@
         document.getElementById('btn-auto-infer').disabled = !sel.value || currentIndex < 0;
       }
 
-      sel.addEventListener('change', updateSliders);
-      updateSliders(); // set initial state for current selection
+      // Only attach listener once (first call); subsequent calls just restore value + updateSliders
+      if (!sel.dataset.listenerAttached) {
+        sel.addEventListener('change', updateSliders);
+        sel.dataset.listenerAttached = '1';
+      }
+      updateSliders(); // apply restored selection immediately
     } catch(e) { /* non-fatal */ }
   }
 
@@ -389,7 +412,7 @@
       if (data.results && data.results.length > 0) {
         Canvas.addShapes(data.results);
         unsaved = true; saveIndicator.classList.add('show');
-        if (statusEl) { statusEl.textContent = `&#10003; ${data.results.length} annotation(s) applied. Review and save.`; statusEl.className = 'auto-status success'; }
+        if (statusEl) { statusEl.textContent = `✓ ${data.results.length} annotation(s) applied. Review and save.`; statusEl.className = 'auto-status success'; }
         showToast(`${data.results.length} auto-annotation(s) applied.`);
       } else {
         const msg = data.message || data.info || 'No detections returned.';
@@ -402,7 +425,7 @@
       showToast('Inference failed - check console', 'warn');
       console.error('[Auto-Annotate]', e);
     } finally {
-      btn.disabled = false; btn.textContent = '&#9654; Run Inference';
+      btn.disabled = false; btn.textContent = '▶ Run Inference';
     }
   });
 
@@ -420,12 +443,16 @@
 
   // -- Tool buttons -----------------------------------------------------------
   const toolBtns = { 'tool-select': 'select', 'tool-bbox': 'bbox', 'tool-polygon': 'polygon', 'tool-point': 'point' };
+  const toolBtnId = { 'select': 'tool-select', 'bbox': 'tool-bbox', 'polygon': 'tool-polygon', 'point': 'tool-point' };
+
+  function switchTool(t) {
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    if (toolBtnId[t]) document.getElementById(toolBtnId[t]).classList.add('active');
+    Canvas.setTool(t);
+  }
+
   Object.entries(toolBtns).forEach(([id, t]) => {
-    document.getElementById(id).addEventListener('click', () => {
-      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById(id).classList.add('active');
-      Canvas.setTool(t);
-    });
+    document.getElementById(id).addEventListener('click', () => switchTool(t));
   });
 
   document.getElementById('tool-delete').addEventListener('click', () => Canvas.deleteSelected());
@@ -435,13 +462,50 @@
   document.getElementById('tool-zoom-out').addEventListener('click', () => Canvas.zoomOut());
   document.getElementById('tool-fit').addEventListener('click',      () => Canvas.fitToScreen());
 
+  // -- Shift: hold to hide all annotations ------------------------------------
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Shift' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) Canvas.setAnnotationsVisible(false);
+  });
+  document.addEventListener('keyup', e => {
+    if (e.key === 'Shift') Canvas.setAnnotationsVisible(true);
+  });
+  // Also restore when any modifier combo is pressed while Shift is down
+  document.addEventListener('keydown', e => {
+    if (e.shiftKey && (e.ctrlKey || e.metaKey || e.altKey)) Canvas.setAnnotationsVisible(true);
+  });
+
+  // -- Ctrl: hold to temporarily swap to Select tool -------------------------
+  let ctrlSwapTool = null; // tool to return to when Ctrl is released
+  document.addEventListener('keydown', e => {
+    const tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if ((e.key === 'Control' || e.key === 'Meta') && !e.repeat && !e.shiftKey && !e.altKey) {
+      const cur = Canvas.getCurrentTool();
+      if (cur && cur !== 'select') {
+        ctrlSwapTool = cur;
+        switchTool('select');
+      }
+    }
+    // If a second key fires while Ctrl is held (compound shortcut), abort the swap
+    if (ctrlSwapTool && e.key !== 'Control' && e.key !== 'Meta') {
+      switchTool(ctrlSwapTool);
+      ctrlSwapTool = null;
+    }
+  });
+  document.addEventListener('keyup', e => {
+    if ((e.key === 'Control' || e.key === 'Meta') && ctrlSwapTool) {
+      switchTool(ctrlSwapTool);
+      ctrlSwapTool = null;
+    }
+  });
+
   // -- Keyboard shortcuts -----------------------------------------------------
   document.addEventListener('keydown', e => {
     const tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     const map = { v: 'tool-select', b: 'tool-bbox', p: 'tool-polygon', k: 'tool-point' };
     if (map[e.key]) { document.getElementById(map[e.key]).click(); }
-    else if (e.key === 'Delete' || e.key === 'Backspace') Canvas.deleteSelected();
+    else if (e.key === 'Delete' || e.key === 'Backspace' || e.key === 'd') Canvas.deleteSelected();
     else if ((e.ctrlKey||e.metaKey) && e.key === 's') { e.preventDefault(); saveAnnotations(); }
     else if ((e.ctrlKey||e.metaKey) && e.key === 'z') { e.preventDefault(); Canvas.undo(); }
     else if ((e.ctrlKey||e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); Canvas.redo(); }
@@ -455,8 +519,13 @@
     else if (e.key === '+' || e.key === '=') Canvas.zoomIn();
     else if (e.key === '-') Canvas.zoomOut();
     else if (e.key === 'f') Canvas.fitToScreen();
-    else if (e.key === 'ArrowLeft')  document.getElementById('btn-prev-img').click();
-    else if (e.key === 'ArrowRight') document.getElementById('btn-next-img').click();
+    else if (e.key === 'ArrowLeft'  || e.key === 'q') document.getElementById('btn-prev-img').click();
+    else if (e.key === 'ArrowRight' || e.key === 'e') document.getElementById('btn-next-img').click();
+    else if (e.key === 'x') {
+      const sel = document.getElementById('auto-model-select');
+      const btn = document.getElementById('btn-auto-infer');
+      if (sel && sel.value && btn && !btn.disabled) btn.click();
+    }
   });
 
   // -- Label picker (called by canvas.js) -------------------------------------
@@ -468,6 +537,89 @@
     }
     cb(labelClasses[0].name);
   }
+
+  // -- Right-click label context menu ----------------------------------------
+  const ctxMenu = document.createElement('div');
+  ctxMenu.id = 'label-ctx-menu';
+  ctxMenu.style.cssText = [
+    'position:fixed',
+    'z-index:9999',
+    'background:#1e1e2e',
+    'border:1px solid #3a3a5c',
+    'border-radius:8px',
+    'padding:6px',
+    'box-shadow:0 4px 20px rgba(0,0,0,0.5)',
+    'display:none',
+    'min-width:140px',
+    'max-height:260px',
+    'overflow-y:auto',
+    'flex-direction:column',
+    'gap:3px',
+  ].join(';');
+  document.body.appendChild(ctxMenu);
+
+  function closeCtxMenu() {
+    ctxMenu.style.display = 'none';
+  }
+
+  function showLabelContextMenu(shapeId, clientX, clientY) {
+    ctxMenu.innerHTML = '';
+
+    // Header
+    const hdr = document.createElement('div');
+    hdr.textContent = 'Relabel as…';
+    hdr.style.cssText = 'font-size:10px;color:#888;padding:2px 6px 5px;border-bottom:1px solid #3a3a5c;margin-bottom:3px';
+    ctxMenu.appendChild(hdr);
+
+    labelClasses.forEach(lc => {
+      const item = document.createElement('button');
+      item.textContent = lc.name;
+      item.style.cssText = [
+        'display:block',
+        'width:100%',
+        'text-align:left',
+        'background:' + lc.color,
+        'color:' + contrastColor(lc.color),
+        'border:none',
+        'border-radius:5px',
+        'padding:5px 10px',
+        'font-size:12px',
+        'cursor:pointer',
+        'margin-bottom:2px',
+      ].join(';');
+      item.addEventListener('mouseenter', () => item.style.opacity = '0.85');
+      item.addEventListener('mouseleave', () => item.style.opacity = '1');
+      item.addEventListener('click', () => {
+        Canvas.setSelected(shapeId);
+        const relabelled = Canvas.relabelSelected(lc.name);
+        if (relabelled) {
+          unsaved = true;
+          saveIndicator.classList.add('show');
+          showToast(`Relabelled to "${lc.name}"`);
+        }
+        closeCtxMenu();
+      });
+      ctxMenu.appendChild(item);
+    });
+
+    // Position: avoid clipping at viewport edges
+    ctxMenu.style.display = 'flex';
+    const mw = ctxMenu.offsetWidth  || 160;
+    const mh = ctxMenu.offsetHeight || 200;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    ctxMenu.style.left = (clientX + mw > vw ? clientX - mw : clientX) + 'px';
+    ctxMenu.style.top  = (clientY + mh > vh ? clientY - mh : clientY) + 'px';
+  }
+
+  document.addEventListener('mousedown', e => {
+    if (!ctxMenu.contains(e.target)) closeCtxMenu();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeCtxMenu();
+  }, true);
+
+  Canvas.setContextMenuCallback(showLabelContextMenu);
 
   // -- Canvas init ------------------------------------------------------------
   Canvas.init(

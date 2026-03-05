@@ -24,7 +24,9 @@ const Canvas = (() => {
   let startPt = null;
   let polygonPts = [];
   let onShapesChange = null; // callback
+  let onContextMenu  = null; // right-click label picker callback
   let hoveredId = null;      // annotation list hover highlight
+  let annotationsHidden = false; // Shift-hold to temporarily hide all shapes
 
   // ── Undo / Redo ──────────────────────────────────────────────────────────
   let undoStack = [];
@@ -74,28 +76,30 @@ const Canvas = (() => {
       ctx.restore();
     }
 
-    for (const s of shapes) {
-      const isSelected = s.id === selectedId;
-      ctx.save();
-      ctx.translate(offsetX, offsetY);
-      ctx.scale(scale, scale);
-      drawShape(s, isSelected, false);
-      ctx.restore();
-    }
-
-    // Hover highlight: dim canvas then redraw the hovered shape brightly on top
-    if (hoveredId) {
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.52)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.restore();
-      const hov = shapes.find(s => s.id === hoveredId);
-      if (hov) {
+    if (!annotationsHidden) {
+      for (const s of shapes) {
+        const isSelected = s.id === selectedId;
         ctx.save();
         ctx.translate(offsetX, offsetY);
         ctx.scale(scale, scale);
-        drawShape(hov, hov.id === selectedId, true);
+        drawShape(s, isSelected, false);
         ctx.restore();
+      }
+
+      // Hover highlight: dim canvas then redraw the hovered shape brightly on top
+      if (hoveredId) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.52)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+        const hov = shapes.find(s => s.id === hoveredId);
+        if (hov) {
+          ctx.save();
+          ctx.translate(offsetX, offsetY);
+          ctx.scale(scale, scale);
+          drawShape(hov, hov.id === selectedId, true);
+          ctx.restore();
+        }
       }
     }
 
@@ -269,10 +273,68 @@ const Canvas = (() => {
     return inside;
   }
 
+  /** Clamp a bbox so it stays fully within the loaded image bounds. */
+  function clampBbox(d) {
+    if (!img) return d;
+    const iw = img.width, ih = img.height;
+    let { x, y, width, height } = d;
+    // Clamp dimensions first so they don't exceed image size
+    width  = Math.min(width,  iw);
+    height = Math.min(height, ih);
+    // Clamp origin
+    x = Math.max(0, Math.min(x, iw - width));
+    y = Math.max(0, Math.min(y, ih - height));
+    return { x, y, width, height };
+  }
+
   // Drag state for moving shapes
-  let movingShape = null, moveStart = null, moveOrigData = null;
+  let movingShape = null, moveStart = null, moveOrigData = null, moveDidChange = false;
+
+  // Drag state for resizing bbox handles
+  let resizingShape = null, resizeHandleIdx = -1, resizeOrigData = null;
+
+  // Cursor per handle index: TL TM TR  ML MR  BL BM BR
+  const HANDLE_CURSORS = [
+    'nw-resize', 'n-resize',  'ne-resize',
+    'w-resize',               'e-resize',
+    'sw-resize', 's-resize',  'se-resize',
+  ];
+
+  /** Return 8 handle positions [[hx, hy], ...] in image coords. */
+  function getHandlePositions(d) {
+    const { x, y, width: w, height: h } = d;
+    return [
+      [x,       y      ],  // 0 TL
+      [x + w/2, y      ],  // 1 TM
+      [x + w,   y      ],  // 2 TR
+      [x,       y + h/2],  // 3 ML
+      [x + w,   y + h/2],  // 4 MR
+      [x,       y + h  ],  // 5 BL
+      [x + w/2, y + h  ],  // 6 BM
+      [x + w,   y + h  ],  // 7 BR
+    ];
+  }
+
+  /** Return handle index (0-7) if (imgX, imgY) is within handle hit radius, else -1. */
+  function hitTestHandle(imgX, imgY, shape) {
+    if (shape.type !== 'bbox') return -1;
+    const handles = getHandlePositions(shape.data);
+    const r = 6 / scale;   // generous hit radius in image coords
+    for (let i = 0; i < handles.length; i++) {
+      if (Math.hypot(imgX - handles[i][0], imgY - handles[i][1]) <= r) return i;
+    }
+    return -1;
+  }
 
   function onMouseDown(e) {
+    // Middle-click always pans regardless of active tool
+    if (e.button === 1) {
+      e.preventDefault();
+      isDragging = true;
+      dragStart = { x: e.clientX, y: e.clientY };
+      canvas.style.cursor = 'grabbing';
+      return;
+    }
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
@@ -297,12 +359,28 @@ const Canvas = (() => {
       shapes.push(placed);
       selectedId = placed.id;
       // keep paste active so user can stamp multiple copies; Escape to stop
-      if (onShapesChange) onShapesChange(shapes, selectedId);
+      if (onShapesChange) onShapesChange(shapes, selectedId, true);
       draw();
       return;
     }
 
     if (tool === 'select') {
+      // Check resize handles on the already-selected bbox first
+      if (selectedId) {
+        const sel = shapes.find(s => s.id === selectedId);
+        if (sel && sel.type === 'bbox') {
+          const hIdx = hitTestHandle(imgPt.x, imgPt.y, sel);
+          if (hIdx !== -1) {
+            pushHistory();
+            resizingShape   = sel;
+            resizeHandleIdx = hIdx;
+            resizeOrigData  = { ...sel.data };
+            canvas.style.cursor = HANDLE_CURSORS[hIdx];
+            draw();
+            return;
+          }
+        }
+      }
       const hit = hitTest(imgPt.x, imgPt.y);
       if (hit) {
         selectedId = hit;
@@ -310,12 +388,13 @@ const Canvas = (() => {
         movingShape = shapes.find(s => s.id === hit);
         moveStart = imgPt;
         moveOrigData = JSON.parse(JSON.stringify(movingShape.data));
-        if (onShapesChange) onShapesChange(shapes, selectedId);
+        moveDidChange = false;
+        if (onShapesChange) onShapesChange(shapes, selectedId, false);
       } else {
         selectedId = null;
         isDragging = true;
         dragStart = { x: e.clientX, y: e.clientY };
-        if (onShapesChange) onShapesChange(shapes, selectedId);
+        if (onShapesChange) onShapesChange(shapes, selectedId, false);
       }
       draw();
     } else if (tool === 'bbox') {
@@ -328,7 +407,7 @@ const Canvas = (() => {
         const s = { id: genId(), label, type: 'point', data: imgPt, color: colorFor(label) };
         shapes.push(s);
         selectedId = s.id;
-        if (onShapesChange) onShapesChange(shapes, selectedId);
+        if (onShapesChange) onShapesChange(shapes, selectedId, true);
         draw();
       });
     }
@@ -346,26 +425,89 @@ const Canvas = (() => {
       offsetY += e.clientY - dragStart.y;
       dragStart = { x: e.clientX, y: e.clientY };
       draw();
+    } else if (resizingShape && tool === 'select') {
+      const imgPt = toImg(sx, sy);
+      const orig   = resizeOrigData;
+      let { x, y, width, height } = orig;
+      const right  = x + width;
+      const bottom = y + height;
+      switch (resizeHandleIdx) {
+        case 0: x = imgPt.x; y = imgPt.y; width = right - x;  height = bottom - y; break; // TL
+        case 1:               y = imgPt.y;                    height = bottom - y; break; // TM
+        case 2:               y = imgPt.y; width = imgPt.x - x; height = bottom - y; break; // TR
+        case 3: x = imgPt.x;              width = right - x;                       break; // ML
+        case 4:                            width = imgPt.x - x;                    break; // MR
+        case 5: x = imgPt.x;              width = right - x;  height = imgPt.y - y; break; // BL
+        case 6:                                                height = imgPt.y - y; break; // BM
+        case 7:                            width = imgPt.x - x; height = imgPt.y - y; break; // BR
+      }
+      resizingShape.data = clampBbox({
+        x,  y,
+        width:  Math.max(2, width),
+        height: Math.max(2, height),
+      });
+      draw();
     } else if (movingShape && tool === 'select') {
       const imgPt = toImg(sx, sy);
       const dx = imgPt.x - moveStart.x;
       const dy = imgPt.y - moveStart.y;
       if (movingShape.type === 'bbox') {
-        movingShape.data = { ...moveOrigData, x: moveOrigData.x + dx, y: moveOrigData.y + dy };
+        movingShape.data = clampBbox({ ...moveOrigData, x: moveOrigData.x + dx, y: moveOrigData.y + dy });
       } else if (movingShape.type === 'polygon') {
         movingShape.data = moveOrigData.map(p => ({ x: p.x + dx, y: p.y + dy }));
       } else if (movingShape.type === 'point') {
         movingShape.data = { x: moveOrigData.x + dx, y: moveOrigData.y + dy };
       }
+      moveDidChange = true;
       draw();
     } else if (tool === 'bbox' && drawing) {
       draw();
+    } else if (tool === 'select') {
+      // Update cursor to indicate resize handles or movable shapes
+      const imgPt = toImg(sx, sy);
+      let cursor = '';
+      if (selectedId) {
+        const sel = shapes.find(s => s.id === selectedId);
+        if (sel && sel.type === 'bbox') {
+          const hIdx = hitTestHandle(imgPt.x, imgPt.y, sel);
+          if (hIdx !== -1) {
+            cursor = HANDLE_CURSORS[hIdx];
+          } else if (hitTest(imgPt.x, imgPt.y) === selectedId) {
+            cursor = 'move';
+          }
+        } else if (hitTest(imgPt.x, imgPt.y)) {
+          cursor = 'move';
+        }
+      } else if (hitTest(imgPt.x, imgPt.y)) {
+        cursor = 'move';
+      }
+      canvas.style.cursor = cursor;
     }
   }
 
   function onMouseUp(e) {
-    if (isDragging) { isDragging = false; return; }
-    if (movingShape) { movingShape = null; moveStart = null; return; }
+    if (isDragging) {
+      isDragging = false;
+      canvas.style.cursor = '';
+      return;
+    }
+    if (resizingShape) {
+      resizingShape   = null;
+      resizeHandleIdx = -1;
+      resizeOrigData  = null;
+      canvas.style.cursor = '';
+      if (onShapesChange) onShapesChange(shapes, selectedId, true);
+      draw();
+      return;
+    }
+    if (movingShape) {
+      const changed = moveDidChange;
+      movingShape = null;
+      moveStart = null;
+      moveDidChange = false;
+      if (changed && onShapesChange) onShapesChange(shapes, selectedId, true);
+      return;
+    }
 
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
@@ -380,16 +522,16 @@ const Canvas = (() => {
       App.promptLabel(label => {
         if (!label) return;
         pushHistory();
-        const bbox = {
+        const bbox = clampBbox({
           x: w < 0 ? imgPt.x : startPt.x,
           y: h < 0 ? imgPt.y : startPt.y,
           width: Math.abs(w),
           height: Math.abs(h),
-        };
+        });
         const s = { id: genId(), label, type: 'bbox', data: bbox, color: colorFor(label) };
         shapes.push(s);
         selectedId = s.id;
-        if (onShapesChange) onShapesChange(shapes, selectedId);
+        if (onShapesChange) onShapesChange(shapes, selectedId, true);
         draw();
       });
     }
@@ -405,7 +547,7 @@ const Canvas = (() => {
       shapes.push(s);
       selectedId = s.id;
       polygonPts = [];
-      if (onShapesChange) onShapesChange(shapes, selectedId);
+      if (onShapesChange) onShapesChange(shapes, selectedId, true);
       draw();
     });
   }
@@ -446,6 +588,19 @@ const Canvas = (() => {
       canvas.addEventListener('dblclick', onDblClick);
       canvas.addEventListener('wheel', onWheel, { passive: false });
 
+      canvas.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const imgPt = toImg(e.clientX - rect.left, e.clientY - rect.top);
+        const hit = hitTest(imgPt.x, imgPt.y);
+        if (hit) {
+          selectedId = hit;
+          draw();
+          if (onShapesChange) onShapesChange(shapes, selectedId, false);
+          if (onContextMenu) onContextMenu(hit, e.clientX, e.clientY);
+        }
+      });
+
       // Cancel paste on Escape
       document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && pasteActive) { pasteActive = false; canvas.style.cursor = ''; draw(); }
@@ -465,7 +620,7 @@ const Canvas = (() => {
       selectedId = null;
       polygonPts = [];
       // Immediately update panel (before image loads)
-      if (onShapesChange) onShapesChange(shapes, null);
+      if (onShapesChange) onShapesChange(shapes, null, false);
       const image = new Image();
       image.onload = () => {
         img = image;
@@ -476,8 +631,10 @@ const Canvas = (() => {
     },
 
     setTool(t) { tool = t; polygonPts = []; drawing = false; draw(); },
+    getCurrentTool() { return tool; },
+    setContextMenuCallback(cb) { onContextMenu = cb; },
 
-    setSelected(id) { selectedId = id; draw(); if (onShapesChange) onShapesChange(shapes, id); },
+    setSelected(id) { selectedId = id; draw(); if (onShapesChange) onShapesChange(shapes, id, false); },
 
     relabelSelected(newLabel) {
       const s = shapes.find(x => x.id === selectedId);
@@ -486,7 +643,7 @@ const Canvas = (() => {
       s.label = newLabel;
       s.color = labelColorMap[newLabel] || colorFor(newLabel);
       draw();
-      if (onShapesChange) onShapesChange(shapes, selectedId);
+      if (onShapesChange) onShapesChange(shapes, selectedId, true);
       return true;
     },
 
@@ -496,7 +653,7 @@ const Canvas = (() => {
       shapes = shapes.filter(s => s.id !== selectedId);
       selectedId = null;
       draw();
-      if (onShapesChange) onShapesChange(shapes, null);
+      if (onShapesChange) onShapesChange(shapes, null, true);
     },
 
     getShapes() { return shapes; },
@@ -537,7 +694,7 @@ const Canvas = (() => {
       });
       selectedId = null;
       draw();
-      if (onShapesChange) onShapesChange(shapes, null);
+      if (onShapesChange) onShapesChange(shapes, null, true);
     },
 
     // Sync label→color map from project settings
@@ -560,6 +717,8 @@ const Canvas = (() => {
     highlightShape(id) { hoveredId = id; draw(); },
     clearHighlight()   { hoveredId = null; draw(); },
 
+    setAnnotationsVisible(visible) { annotationsHidden = !visible; draw(); },
+
     undo() {
       if (!undoStack.length) return;
       redoStack.push(JSON.stringify(shapes));
@@ -567,7 +726,7 @@ const Canvas = (() => {
       selectedId = null;
       hoveredId = null;
       draw();
-      if (onShapesChange) onShapesChange(shapes, null);
+      if (onShapesChange) onShapesChange(shapes, null, true);
     },
     redo() {
       if (!redoStack.length) return;
@@ -576,7 +735,7 @@ const Canvas = (() => {
       selectedId = null;
       hoveredId = null;
       draw();
-      if (onShapesChange) onShapesChange(shapes, null);
+      if (onShapesChange) onShapesChange(shapes, null, true);
     },
     canUndo() { return undoStack.length > 0; },
     canRedo() { return redoStack.length > 0; },
