@@ -1,0 +1,254 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Annotate – LibreFlow</title>
+  <link rel="stylesheet" href="/css/nav.css" />
+  <link rel="stylesheet" href="/css/annotator.css" />
+</head>
+<body>
+
+  <!-- ── Top Navigation ── -->
+  <nav id="top-nav">
+    <div class="nav-left">
+      <a class="nav-logo" href="/dashboard">
+        <span class="nav-logo-icon">■</span>
+        <span class="nav-logo-name">LibreFlow</span>
+      </a>
+      <div class="nav-links">
+        <a class="nav-link" href="/dashboard">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Dashboard
+        </a>
+        <a class="nav-link" href="/jobs">
+          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A8 8 0 0 1 4.07 11H4a1 1 0 0 1 0-2h.07A8 8 0 0 1 11 4.07V4a1 1 0 0 1 2 0v.07A8 8 0 0 1 19.93 11H20a1 1 0 0 1 0 2h-.07A8 8 0 0 1 13 16.93z"/></svg>
+          Jobs
+          <span id="jobs-badge" class="nav-badge hidden">0</span>
+        </a>
+        <a class="nav-link" href="/models">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Models
+        </a>
+      </div>
+      <span class="nav-sep">/</span>
+      <span class="nav-breadcrumb" id="nav-project-name">Loading…</span>
+    </div>
+    <div class="nav-right">
+      <div class="nav-notif-wrap" id="nav-notif-wrap">
+        <button class="nav-notif-btn" id="nav-notif-btn" title="Notifications">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="nav-notif-badge hidden" id="nav-notif-badge">0</span>
+        </button>
+        <div class="nav-inbox-dropdown hidden" id="nav-inbox-dropdown"></div>
+      </div>
+      <div class="nav-user">
+        <div class="nav-avatar" id="nav-avatar">?</div>
+        <span class="nav-username" id="nav-username">…</span>
+      </div>
+      <button class="btn-logout" id="btn-logout">Sign Out</button>
+    </div>
+  </nav>
+
+  <!-- ── Annotator Layout ── -->
+  <div id="annotator-body">
+
+    <!-- Left: Image list + Labels -->
+    <aside id="left-sidebar">
+      <!-- Label manager -->
+      <div class="sidebar-section">
+        <div class="section-header">
+          <span class="section-title">Labels</span>
+          <div class="add-label-row">
+            <input id="new-label-input" type="text" placeholder="New label…" />
+            <button id="btn-add-label" title="Add label">+</button>
+          </div>
+        </div>
+        <div id="labels-container"></div>
+      </div>
+
+      <!-- Image list -->
+      <div class="sidebar-section images-section">
+        <div class="section-header">
+          <span class="section-title">Images (<span id="image-count">0</span>)</span>
+          <div class="section-header-right">
+            <div class="view-mode-btns">
+              <button class="view-mode-btn active" data-mode="list" title="List view">☰</button>
+              <button class="view-mode-btn" data-mode="grid-sm" title="Small grid">⎕</button>
+              <button class="view-mode-btn" data-mode="grid-lg" title="Large grid">■</button>
+            </div>
+            <label class="upload-btn" title="Upload images">
+              ↑
+              <input id="upload-input" type="file" accept="image/*" multiple hidden />
+            </label>
+          </div>
+        </div>
+        <ul id="images-list"></ul>
+      </div>
+
+      <!-- Export -->
+      <button id="btn-export" class="btn-export">↓ Export Annotations</button>
+
+      <!-- Sidebar resize handle -->
+      <div id="sidebar-resize-handle"></div>
+    </aside>
+
+    <!-- Center: Toolbar + Canvas -->
+    <div id="canvas-area">
+      <!-- Toolbar -->
+      <div id="toolbar">
+        <div class="tool-group">
+          <button id="tool-select" class="tool-btn active" title="Select/Move (V)">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 2l16 9-7 2-4 7z"/></svg>
+          </button>
+          <button id="tool-bbox" class="tool-btn" title="Bounding Box (B)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+          </button>
+          <button id="tool-polygon" class="tool-btn" title="Polygon (P)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,3 21,18 3,18"/></svg>
+          </button>
+          <button id="tool-point" class="tool-btn" title="Point (K)">
+            <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>
+          </button>
+        </div>
+        <div class="toolbar-sep"></div>
+        <div class="tool-group">
+          <button id="tool-delete" class="tool-btn" title="Delete selected (Del)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+          </button>
+        </div>
+        <div class="toolbar-sep"></div>
+        <div class="tool-group">
+          <button id="tool-zoom-in"  class="tool-btn" title="Zoom In (+)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          </button>
+          <button id="tool-zoom-out" class="tool-btn" title="Zoom Out (-)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          </button>
+          <button id="tool-fit"      class="tool-btn" title="Fit (F)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+          </button>
+        </div>
+        <div class="toolbar-sep"></div>
+        <button id="btn-save" class="btn-save" title="Save (Ctrl+S)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save
+        </button>
+        <span id="save-indicator" class="save-indicator">Unsaved</span>
+      </div>
+
+      <!-- Canvas -->
+      <div id="canvas-wrapper">
+        <canvas id="annotation-canvas"></canvas>
+
+        <!-- Empty canvas state -->
+        <div id="canvas-empty" class="canvas-empty hidden">
+          <div class="canvas-empty-icon">📸</div>
+          <p>Upload images to start annotating</p>
+          <label class="upload-btn-lg">
+            ↑ Upload Images
+            <input type="file" accept="image/*" multiple hidden id="upload-input-canvas" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Image navigation -->
+      <div id="image-nav">
+        <button id="btn-prev-img" title="Previous (←)">←</button>
+        <span id="image-nav-label">– / –</span>
+        <button id="btn-next-img" title="Next (→)">→</button>
+      </div>
+    </div>
+
+    <!-- Right: Annotations + Semi-Auto -->
+    <aside id="right-panel">
+
+      <!-- Annotations sub-panel -->
+      <div class="right-sub annotations-sub">
+        <div class="section-header">
+          <span class="section-title">Annotations</span>
+          <span id="ann-count" class="ann-count">0</span>
+        </div>
+        <ul id="annotation-list"></ul>
+      </div>
+
+      <!-- Semi-automatic annotation sub-panel -->
+      <div class="right-sub auto-sub">
+        <div class="section-header">
+          <span class="section-title">Auto-Annotate</span>
+        </div>
+        <div class="auto-body">
+          <label class="auto-label">Model</label>
+          <select id="auto-model-select">
+            <option value="">– select model –</option>
+          </select>
+
+          <div class="slider-row" id="slider-row-detection" style="display:none">
+            <label class="slider-label">Detection threshold: <span id="infer-conf-val">0.25</span></label>
+            <input type="range" id="infer-conf-slider" class="infer-slider"
+                   min="0.01" max="1" step="0.01" value="0.25"
+                   oninput="document.getElementById('infer-conf-val').textContent=parseFloat(this.value).toFixed(2)" />
+          </div>
+
+          <div class="slider-row" id="slider-row-bias" style="display:none">
+            <label class="slider-label">GOOD ↔ NG bias: <span id="infer-good-bias-val">0.50</span></label>
+            <input type="range" id="infer-good-bias-slider" class="infer-slider"
+                   min="0" max="1" step="0.01" value="0.5"
+                   oninput="document.getElementById('infer-good-bias-val').textContent=parseFloat(this.value).toFixed(2)" />
+            <div class="slider-hint"><span>← all GOOD</span><span>all NG →</span></div>
+          </div>
+
+          <button id="btn-auto-infer" class="btn-infer" disabled>▶ Run Inference</button>
+          <div id="auto-status" class="auto-status"></div>
+          <p class="auto-hint">Load ML models on the <a href="/models" target="_blank">Models page</a>. Start the inference server with <code>start_inference.bat</code>.</p>
+        </div>
+      </div>
+
+    </aside>
+
+  </div><!-- /#annotator-body -->
+
+  <!-- ── Label picker modal ── -->
+  <div id="modal-label-picker" class="modal hidden">
+    <div class="modal-box-sm">
+      <div class="modal-header">Select a Label</div>
+      <ul id="label-picker-list"></ul>
+      <button class="btn-modal-cancel" id="btn-cancel-label">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Export format modal -->
+  <div id="modal-export" class="modal hidden">
+    <div class="modal-box">
+      <h3 class="modal-title">Export Annotations</h3>
+      <div class="field-group">
+        <label class="field-label">Format</label>
+        <select id="export-format" class="field-select">
+          <option value="yolo">YOLO TXT — Darknet / Ultralytics YOLOv5-v8</option>
+          <option value="coco">COCO JSON — MS COCO instances format</option>
+          <option value="voc">Pascal VOC XML — TensorFlow Object Detection API</option>
+          <option value="csv">CSV — flat table, easy to script</option>
+        </select>
+        <p id="export-desc" class="export-desc"></p>
+      </div>
+      <label class="checkbox-label">
+        <input type="checkbox" id="export-include-images" />
+        Include images in ZIP
+      </label>
+      <div class="modal-actions">
+        <button id="btn-export-confirm" class="btn-primary-sm">↓ Download ZIP</button>
+        <button id="btn-export-cancel" class="btn-cancel-sm">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast-msg"></div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/notifications.js"></script>
+  <script src="/js/jobs.js"></script>
+  <script src="/js/nav-inbox.js"></script>
+  <script src="/js/canvas.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

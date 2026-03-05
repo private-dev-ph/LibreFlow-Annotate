@@ -1,0 +1,131 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LibreFlow Annotate</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div class="logo">
+      <span class="logo-icon">■</span>
+      <span class="logo-text">LibreFlow Annotate</span>
+    </div>
+
+    <!-- Projects Panel -->
+    <div id="projects-panel">
+      <div class="panel-header">
+        <h3>Projects</h3>
+        <button id="btn-new-project" title="New Project">+</button>
+      </div>
+      <ul id="projects-list"></ul>
+    </div>
+
+    <!-- Image List Panel -->
+    <div id="images-panel" class="hidden">
+      <div class="panel-header">
+        <button id="btn-back-projects" title="Back">←</button>
+        <h3 id="project-title">Project</h3>
+      </div>
+      <div class="label-section">
+        <h4>Labels</h4>
+        <div id="labels-container"></div>
+        <div class="add-label-row">
+          <input id="new-label-input" type="text" placeholder="Add label..." />
+          <button id="btn-add-label">+</button>
+        </div>
+      </div>
+      <div class="panel-header">
+        <h4>Images</h4>
+        <label class="upload-btn" title="Upload Images">
+          ↑ Upload
+          <input id="upload-input" type="file" accept="image/*" multiple hidden />
+        </label>
+      </div>
+      <ul id="images-list"></ul>
+      <button id="btn-export" class="export-btn">↓ Export Annotations</button>
+    </div>
+  </aside>
+
+  <!-- Main Area -->
+  <main id="main">
+    <!-- Welcome screen -->
+    <div id="welcome-screen">
+      <div class="welcome-content">
+        <h1>LibreFlow Annotate</h1>
+        <p>Open-source image annotation for computer vision datasets.</p>
+        <button id="btn-get-started">Create a Project</button>
+      </div>
+    </div>
+
+    <!-- Annotator -->
+    <div id="annotator" class="hidden">
+      <!-- Toolbar -->
+      <div id="toolbar">
+        <button id="tool-select" class="tool-btn active" title="Select / Move (V)">▶</button>
+        <button id="tool-bbox" class="tool-btn" title="Bounding Box (B)">▭</button>
+        <button id="tool-polygon" class="tool-btn" title="Polygon (P)">⬡</button>
+        <button id="tool-point" class="tool-btn" title="Point (K)">•</button>
+        <div class="toolbar-sep"></div>
+        <button id="tool-delete" class="tool-btn" title="Delete selected (Del)">🗑</button>
+        <div class="toolbar-sep"></div>
+        <button id="tool-zoom-in" class="tool-btn" title="Zoom In (+)">+</button>
+        <button id="tool-zoom-out" class="tool-btn" title="Zoom Out (-)">−</button>
+        <button id="tool-fit" class="tool-btn" title="Fit to screen (F)">⛶</button>
+        <div class="toolbar-sep"></div>
+        <button id="btn-save" class="tool-btn save-btn" title="Save (Ctrl+S)">✓ Save</button>
+      </div>
+
+      <!-- Canvas wrapper -->
+      <div id="canvas-wrapper">
+        <canvas id="annotation-canvas"></canvas>
+      </div>
+
+      <!-- Right panel: annotation list -->
+      <div id="annotation-panel">
+        <h4>Annotations</h4>
+        <ul id="annotation-list"></ul>
+      </div>
+
+      <!-- Image nav -->
+      <div id="image-nav">
+        <button id="btn-prev-img">← Prev</button>
+        <span id="image-nav-label">1 / 1</span>
+        <button id="btn-next-img">Next →</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal: New Project -->
+  <div id="modal-new-project" class="modal hidden">
+    <div class="modal-box">
+      <h2>New Project</h2>
+      <label>Project Name <input id="input-project-name" type="text" placeholder="My Dataset" /></label>
+      <label>Description <input id="input-project-desc" type="text" placeholder="Optional" /></label>
+      <div class="modal-actions">
+        <button id="btn-create-project">Create</button>
+        <button class="btn-cancel" data-modal="modal-new-project">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Label picker -->
+  <div id="modal-label-picker" class="modal hidden">
+    <div class="modal-box small">
+      <h3>Select Label</h3>
+      <ul id="label-picker-list"></ul>
+      <div class="modal-actions">
+        <button class="btn-cancel" data-modal="modal-label-picker">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/canvas.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

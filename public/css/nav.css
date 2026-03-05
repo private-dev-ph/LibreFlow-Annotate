@@ -1,0 +1,289 @@
+/* nav.css – shared top navigation bar used on dashboard, annotator, and all inner pages */
+
+:root {
+  --nav-h: 56px;
+  --bg: #0f1117;
+  --bg2: #181b23;
+  --bg3: #1e2130;
+  --accent: #6c63ff;
+  --accent2: #48e5c2;
+  --text: #e2e8f0;
+  --text-dim: #8892a4;
+  --border: #2a2f45;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+/* ── Top Nav ── */
+#top-nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--nav-h);
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  z-index: 50;
+  gap: 0;
+}
+
+/* Left: logo + links */
+.nav-left {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: 1;
+}
+
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+  margin-right: 28px;
+}
+.nav-logo-icon {
+  font-size: 18px;
+  color: var(--accent);
+}
+.nav-logo-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: .3px;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--text-dim);
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: background .15s, color .15s;
+}
+.nav-link:hover { background: var(--bg3); color: var(--text); }
+.nav-link.active { background: var(--bg3); color: var(--text); }
+.nav-link svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; }
+
+/* Breadcrumb separator used in annotator */
+.nav-sep {
+  color: var(--border);
+  font-size: 18px;
+  padding: 0 4px;
+  user-select: none;
+}
+.nav-breadcrumb {
+  color: var(--text-dim);
+  font-size: 13px;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Right: user + logout */
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-user {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 12px 5px 8px;
+  cursor: default;
+}
+.nav-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+.nav-username {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.btn-logout {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 7px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.btn-logout:hover {
+  background: rgba(224,92,92,.1);
+  border-color: #e05c5c;
+  color: #e05c5c;
+}
+
+/* Content area offset so it clears the fixed nav */
+.page-body {
+  padding-top: var(--nav-h);
+  min-height: 100vh;
+}
+
+.hidden { display: none !important; }
+
+/* Jobs badge on nav link */
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #6c63ff;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 2px;
+}
+
+/* ── Notification bell ──────────────────────────────────────────────────── */
+.nav-notif-wrap {
+  position: relative;
+}
+.nav-notif-btn {
+  position: relative;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  padding: 7px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s, color .15s;
+}
+.nav-notif-btn:hover,
+.nav-notif-btn.active { background: var(--bg3); color: var(--text); }
+.nav-notif-btn svg { display: block; }
+.nav-notif-badge {
+  position: absolute;
+  top: 1px; right: 1px;
+  background: #e05c5c;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  pointer-events: none;
+  border: 2px solid var(--bg2);
+}
+.nav-notif-badge.hidden { display: none !important; }
+
+/* ── Inbox dropdown ─────────────────────────────────────────────────── */
+.nav-inbox-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 340px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.55);
+  z-index: 500;
+  overflow: hidden;
+  animation: inbox-fade-in .15s ease;
+}
+.nav-inbox-dropdown.hidden { display: none !important; }
+@keyframes inbox-fade-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.nav-inbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 11px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+}
+.btn-mark-all-read {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 0;
+}
+.btn-mark-all-read:hover { text-decoration: underline; }
+.nav-inbox-list {
+  max-height: 380px;
+  overflow-y: auto;
+}
+.nav-inbox-empty {
+  padding: 32px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.notif-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background .12s;
+  border-bottom: 1px solid rgba(42,47,69,.5);
+  position: relative;
+}
+.notif-row:last-child { border-bottom: none; }
+.notif-row:hover      { background: rgba(108,99,255,.07); }
+.notif-row.unread     { background: rgba(108,99,255,.05); }
+.notif-row-icon   { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+.notif-row-body   { flex: 1; min-width: 0; }
+.notif-row-title  { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.3; }
+.notif-row-sub    { font-size: 12px; color: var(--text-dim); margin-top: 2px; line-height: 1.4;
+                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.notif-row-time   { font-size: 11px; color: #5a6380; margin-top: 4px; }
+.notif-unread-dot {
+  width: 8px; height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 7px;
+}

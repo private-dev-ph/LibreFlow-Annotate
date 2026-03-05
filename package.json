@@ -1,0 +1,30 @@
+{
+  "name": "libreflow-annotate",
+  "version": "1.0.0",
+  "description": "Open-source image annotation tool for computer vision datasets",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "annotation",
+    "computer-vision",
+    "image-labeling",
+    "dataset"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "express-session": "^1.19.0",
+    "js-yaml": "^4.1.1",
+    "multer": "^2.1.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

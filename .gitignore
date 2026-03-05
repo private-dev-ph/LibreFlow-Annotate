@@ -134,3 +134,54 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# LibreFlow Annotate - project specific
+uploads/
+data/
+.env
+
+# ── Python inference engine ───────────────────────────────────────────────────
+# Virtual environment
+py_scripts/.venv/
+py_scripts/.venv_install.log
+
+# Python bytecode / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# Python packaging artifacts
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Pytest / coverage
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ── ML model binaries ─────────────────────────────────────────────────────────
+# Uploaded model files (tracked in models.json; binaries excluded due to size)
+models/*.pt
+models/*.pth
+models/*.onnx
+models/*.weights
+models/*.bin
+models/*.tflite
+models/*.pb
+models/*.yaml
+models/*.yml
+
+# YOLO/Ultralytics run artifacts
+runs/
+*.cache

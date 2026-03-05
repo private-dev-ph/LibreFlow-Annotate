@@ -1,0 +1,90 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LibreFlow Annotate – Sign In</title>
+  <link rel="stylesheet" href="/css/login.css" />
+</head>
+<body>
+  <div class="login-page">
+
+    <!-- ── Left Brand Panel ── -->
+    <div class="brand-panel">
+      <div class="brand-inner">
+        <div class="brand-logo">
+          <span class="brand-icon">■</span>
+          <span class="brand-name">LibreFlow</span>
+        </div>
+        <h1 class="brand-tagline">Annotate.<br/>Train.<br/>Ship.</h1>
+        <p class="brand-sub">Open-source image annotation for computer vision teams.
+          Label bounding boxes, polygons, and keypoints — completely free.</p>
+        <ul class="brand-features">
+          <li><span class="feat-icon">✓</span> Bounding box, polygon &amp; point tools</li>
+          <li><span class="feat-icon">✓</span> COCO JSON export</li>
+          <li><span class="feat-icon">✓</span> Multi-project workspace</li>
+          <li><span class="feat-icon">✓</span> Keyboard-driven workflow</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ── Right Auth Panel ── -->
+    <div class="auth-panel">
+      <div class="auth-card">
+        <!-- Tabs -->
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-tab="login">Sign In</button>
+          <button class="auth-tab" data-tab="register">Create Account</button>
+        </div>
+
+        <!-- Error banner -->
+        <div id="auth-error" class="auth-error hidden"></div>
+
+        <!-- Login Form -->
+        <form id="form-login" class="auth-form" autocomplete="on">
+          <div class="field-group">
+            <label for="login-email">Email</label>
+            <input id="login-email" type="email" placeholder="you@example.com" autocomplete="email" required />
+          </div>
+          <div class="field-group">
+            <label for="login-password">Password</label>
+            <input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password" required />
+          </div>
+          <button type="submit" class="btn-primary" id="btn-login">
+            <span class="btn-label">Sign In</span>
+            <span class="btn-spinner hidden"></span>
+          </button>
+          <p class="auth-switch">Don't have an account?
+            <a href="#" data-switch="register">Create one</a>
+          </p>
+        </form>
+
+        <!-- Register Form -->
+        <form id="form-register" class="auth-form hidden" autocomplete="on">
+          <div class="field-group">
+            <label for="reg-username">Username</label>
+            <input id="reg-username" type="text" placeholder="john_doe" autocomplete="username" required />
+          </div>
+          <div class="field-group">
+            <label for="reg-email">Email</label>
+            <input id="reg-email" type="email" placeholder="you@example.com" autocomplete="email" required />
+          </div>
+          <div class="field-group">
+            <label for="reg-password">Password <small>(min. 6 characters)</small></label>
+            <input id="reg-password" type="password" placeholder="••••••••" autocomplete="new-password" required />
+          </div>
+          <button type="submit" class="btn-primary" id="btn-register">
+            <span class="btn-label">Create Account</span>
+            <span class="btn-spinner hidden"></span>
+          </button>
+          <p class="auth-switch">Already have an account?
+            <a href="#" data-switch="login">Sign in</a>
+          </p>
+        </form>
+      </div>
+    </div>
+
+  </div>
+  <script src="/js/auth.js"></script>
+</body>
+</html>

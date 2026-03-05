@@ -1,0 +1,125 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard – LibreFlow Annotate</title>
+  <link rel="stylesheet" href="/css/nav.css" />
+  <link rel="stylesheet" href="/css/dashboard.css" />
+</head>
+<body>
+
+  <!-- ── Top Navigation ── -->
+  <nav id="top-nav">
+    <div class="nav-left">
+      <a class="nav-logo" href="/dashboard">
+        <span class="nav-logo-icon">■</span>
+        <span class="nav-logo-name">LibreFlow Annotate</span>
+      </a>
+      <div class="nav-links">
+        <a class="nav-link active" href="/dashboard">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Dashboard
+        </a>
+        <a class="nav-link" href="/jobs">
+          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A8 8 0 0 1 4.07 11H4a1 1 0 0 1 0-2h.07A8 8 0 0 1 11 4.07V4a1 1 0 0 1 2 0v.07A8 8 0 0 1 19.93 11H20a1 1 0 0 1 0 2h-.07A8 8 0 0 1 13 16.93z"/></svg>
+          Jobs
+          <span id="jobs-badge" class="nav-badge hidden">0</span>
+        </a>
+        <a class="nav-link" href="/models">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Models
+        </a>
+      </div>
+    </div>
+    <div class="nav-right">
+      <div class="nav-notif-wrap" id="nav-notif-wrap">
+        <button class="nav-notif-btn" id="nav-notif-btn" title="Notifications">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="nav-notif-badge hidden" id="nav-notif-badge">0</span>
+        </button>
+        <div class="nav-inbox-dropdown hidden" id="nav-inbox-dropdown"></div>
+      </div>
+      <div class="nav-user">
+        <div class="nav-avatar" id="nav-avatar">?</div>
+        <span class="nav-username" id="nav-username">Loading…</span>
+      </div>
+      <button class="btn-logout" id="btn-logout">Sign Out</button>
+    </div>
+  </nav>
+
+  <!-- ── Page Body ── -->
+  <div class="page-body">
+    <div class="dash-container">
+
+      <!-- Header -->
+      <div class="dash-header">
+        <div>
+          <h1 class="dash-title">Projects</h1>
+          <p class="dash-sub">Manage your annotation projects</p>
+        </div>
+        <button class="btn-new-project" id="btn-new-project">
+          <span>+</span> New Project
+        </button>
+      </div>
+
+      <!-- Search / filter bar -->
+      <div class="dash-toolbar">
+        <input id="search-projects" type="text" placeholder="🔍  Search projects…" />
+      </div>
+
+      <!-- Project grid -->
+      <div id="projects-grid" class="projects-grid"></div>
+
+      <!-- Empty state -->
+      <div id="empty-state" class="empty-state hidden">
+        <div class="empty-icon">📁</div>
+        <h2>No projects yet</h2>
+        <p>Create your first project to start annotating images.</p>
+        <button class="btn-new-project" id="btn-empty-new">+ New Project</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Modal: New Project ── -->
+  <div id="modal-new-project" class="modal hidden">
+    <div class="modal-box">
+      <h2>New Project</h2>
+      <div class="field-group">
+        <label for="input-name">Project Name <span class="req">*</span></label>
+        <input id="input-name" type="text" placeholder="My Dataset" />
+      </div>
+      <div class="field-group">
+        <label for="input-desc">Description</label>
+        <input id="input-desc" type="text" placeholder="Short description (optional)" />
+      </div>
+      <div id="modal-error" class="modal-error hidden"></div>
+      <div class="modal-actions">
+        <button id="btn-create" class="btn-primary-sm">Create Project</button>
+        <button class="btn-cancel" id="btn-cancel-modal">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: Confirm Delete ── -->
+  <div id="modal-delete" class="modal hidden">
+    <div class="modal-box modal-box-sm">
+      <h2>Delete Project?</h2>
+      <p class="delete-warn">This will permanently delete the project and all its images and annotations. This cannot be undone.</p>
+      <div class="modal-actions">
+        <button id="btn-confirm-delete" class="btn-danger">Delete</button>
+        <button class="btn-cancel" id="btn-cancel-delete">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/notifications.js"></script>
+  <script src="/js/jobs.js"></script>
+  <script src="/js/nav-inbox.js"></script>
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,137 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Models – LibreFlow Annotate</title>
+  <link rel="stylesheet" href="/css/nav.css" />
+  <link rel="stylesheet" href="/css/models-page.css" />
+</head>
+<body>
+
+  <!-- ── Top Navigation ── -->
+  <nav id="top-nav">
+    <div class="nav-left">
+      <a class="nav-logo" href="/dashboard">
+        <span class="nav-logo-icon">■</span>
+        <span class="nav-logo-name">LibreFlow Annotate</span>
+      </a>
+      <div class="nav-links">
+        <a class="nav-link" href="/dashboard">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Dashboard
+        </a>
+        <a class="nav-link" href="/jobs">
+          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A8 8 0 0 1 4.07 11H4a1 1 0 0 1 0-2h.07A8 8 0 0 1 11 4.07V4a1 1 0 0 1 2 0v.07A8 8 0 0 1 19.93 11H20a1 1 0 0 1 0 2h-.07A8 8 0 0 1 13 16.93z"/></svg>
+          Jobs
+          <span id="jobs-badge" class="nav-badge hidden">0</span>
+        </a>
+        <a class="nav-link active" href="/models">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Models
+        </a>
+      </div>
+    </div>
+    <div class="nav-right">
+      <div class="nav-notif-wrap" id="nav-notif-wrap">
+        <button class="nav-notif-btn" id="nav-notif-btn" title="Notifications">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="nav-notif-badge hidden" id="nav-notif-badge">0</span>
+        </button>
+        <div class="nav-inbox-dropdown hidden" id="nav-inbox-dropdown"></div>
+      </div>
+      <div class="nav-user">
+        <div class="nav-avatar" id="nav-avatar">?</div>
+        <span class="nav-username" id="nav-username">Loading…</span>
+      </div>
+      <button class="btn-logout" id="btn-logout">Sign Out</button>
+    </div>
+  </nav>
+
+  <!-- ── Page Body ── -->
+  <div class="page-body">
+    <div class="models-container">
+
+      <div class="models-header">
+        <div>
+          <h1 class="models-title">Models</h1>
+          <p class="models-sub">Manage all inference models across your projects</p>
+        </div>
+      </div>
+
+      <!-- Filter bar -->
+      <div class="models-toolbar">
+        <input id="search-models" type="text" placeholder="🔍  Search models…" />
+        <select id="filter-project">
+          <option value="">All projects</option>
+        </select>
+        <select id="filter-type">
+          <option value="">All types</option>
+          <option value="detection">Detection</option>
+          <option value="classification">Classification</option>
+          <option value="segmentation">Segmentation</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+
+      <!-- Models list -->
+      <div id="models-list" class="models-list"></div>
+
+      <!-- Empty state -->
+      <div id="models-empty" class="models-empty hidden">
+        <div class="empty-icon">🧠</div>
+        <h2>No models yet</h2>
+        <p>Upload a model from a project's Models tab to see it here.</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Edit Modal ── -->
+  <div id="modal-edit" class="modal hidden">
+    <div class="modal-box">
+      <h3>Edit Model</h3>
+      <input type="hidden" id="edit-model-id" />
+      <div class="field-group">
+        <label>Name</label>
+        <input id="edit-name" type="text" />
+      </div>
+      <div class="field-group">
+        <label>Task Type</label>
+        <select id="edit-type">
+          <option value="detection">Detection</option>
+          <option value="classification">Classification</option>
+          <option value="segmentation">Segmentation</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label>Description</label>
+        <input id="edit-desc" type="text" placeholder="Optional description" />
+      </div>
+      <div class="modal-actions">
+        <button id="btn-save-edit" class="btn-primary-sm">Save Changes</button>
+        <button id="btn-cancel-edit" class="btn-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Confirm Delete Modal ── -->
+  <div id="modal-delete" class="modal hidden">
+    <div class="modal-box modal-box-sm">
+      <h3>Delete Model?</h3>
+      <p class="delete-warn">This will permanently remove the model file and all its settings.</p>
+      <div class="modal-actions">
+        <button id="btn-confirm-delete" class="btn-danger">Delete</button>
+        <button id="btn-cancel-delete" class="btn-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/notifications.js"></script>
+  <script src="/js/jobs.js"></script>
+  <script src="/js/nav-inbox.js"></script>
+  <script src="/js/models-page.js"></script>
+</body>
+</html>

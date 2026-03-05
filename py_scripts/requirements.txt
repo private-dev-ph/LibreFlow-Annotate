@@ -1,0 +1,9 @@
+# LibreFlow Annotate – Python inference server dependencies
+# Install: pip install -r requirements.txt
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+ultralytics>=8.3.0
+opencv-python-headless>=4.10.0
+numpy>=1.26.0
+pyyaml>=6.0.2

@@ -1,0 +1,244 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Project – LibreFlow Annotate</title>
+  <link rel="stylesheet" href="/css/nav.css" />
+  <link rel="stylesheet" href="/css/project.css" />
+</head>
+<body>
+
+  <!-- ── Top Navigation ── -->
+  <nav id="top-nav">
+    <div class="nav-left">
+      <a class="nav-logo" href="/dashboard">
+        <span class="nav-logo-icon">■</span>
+        <span class="nav-logo-name">LibreFlow Annotate</span>
+      </a>
+      <div class="nav-links">
+        <a class="nav-link" href="/dashboard">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Dashboard
+        </a>
+        <a class="nav-link" href="/jobs">
+          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A8 8 0 0 1 4.07 11H4a1 1 0 0 1 0-2h.07A8 8 0 0 1 11 4.07V4a1 1 0 0 1 2 0v.07A8 8 0 0 1 19.93 11H20a1 1 0 0 1 0 2h-.07A8 8 0 0 1 13 16.93z"/></svg>
+          Jobs
+          <span id="jobs-badge" class="nav-badge hidden">0</span>
+        </a>
+        <a class="nav-link" href="/models">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Models
+        </a>
+        <span class="nav-sep"></span>
+        <span class="nav-breadcrumb" id="nav-breadcrumb">…</span>
+      </div>
+    </div>
+    <div class="nav-right">
+      <div class="nav-notif-wrap" id="nav-notif-wrap">
+        <button class="nav-notif-btn" id="nav-notif-btn" title="Notifications">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="nav-notif-badge hidden" id="nav-notif-badge">0</span>
+        </button>
+        <div class="nav-inbox-dropdown hidden" id="nav-inbox-dropdown"></div>
+      </div>
+      <div class="nav-user">
+        <div class="nav-avatar" id="nav-avatar">?</div>
+        <span class="nav-username" id="nav-username">Loading…</span>
+      </div>
+      <button class="btn-logout" id="btn-logout">Sign Out</button>
+    </div>
+  </nav>
+
+  <!-- ── Page Body ── -->
+  <div class="project-body">
+    <div class="project-container">
+
+      <!-- Page header -->
+      <div class="project-header">
+        <div class="project-header-left">
+          <h1 id="project-title">Loading…</h1>
+          <div class="sub" id="project-sub"></div>
+        </div>
+        <a id="btn-annotator" class="btn-open-annotator" href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 3 21 12 3 21 3 3"/></svg>
+          Open Annotator
+        </a>
+      </div>
+
+      <!-- Tab bar -->
+      <div class="project-tabs">
+        <button class="tab-btn active" data-tab="labels">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+          Labels
+        </button>
+        <button class="tab-btn" data-tab="images">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          Images
+        </button>
+        <button class="tab-btn" data-tab="models">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+          Models
+        </button>
+        <button class="tab-btn" data-tab="batches">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="17"/><line x1="9" y1="14.5" x2="15" y2="14.5"/></svg>
+          Batches
+        </button>
+        <button class="tab-btn" data-tab="collaborators">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Collaborators
+        </button>
+      </div>
+
+      <!-- ── LABELS panel ── -->
+      <div class="tab-panel active" id="panel-labels">
+        <div class="section-card">
+          <h2>Label Classes</h2>
+          <div class="labels-input-row">
+            <input type="text" id="label-text" placeholder="e.g. cat, car, person…" />
+            <input type="color" id="label-color" value="#6c63ff" title="Pick color" />
+            <button class="btn-add-label" id="btn-add-label">Add</button>
+          </div>
+          <div id="labels-list" class="labels-list">
+            <span class="labels-empty">No labels yet — add one above.</span>
+          </div>
+        </div>
+
+        <!-- YAML import card -->
+        <div class="section-card yaml-import-card">
+          <h2>Import from data.yaml</h2>
+          <p class="yaml-import-desc">Upload a YOLO-format <code>data.yaml</code> to automatically add its class names as labels. Duplicate names are skipped.</p>
+          <div class="yaml-import-row">
+            <label class="yaml-file-label" id="yaml-file-label">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span id="yaml-file-name">Choose .yaml / .yml file</span>
+              <input type="file" id="yaml-input" accept=".yaml,.yml" style="display:none" />
+            </label>
+            <button class="btn-import-yaml" id="btn-import-yaml" disabled>Import Classes</button>
+          </div>
+          <div class="yaml-import-result hidden" id="yaml-import-result"></div>
+        </div>
+      </div>
+
+      <!-- ── IMAGES panel ── -->
+      <div class="tab-panel" id="panel-images">
+        <div class="section-card">
+          <h2>Upload Images</h2>
+          <div class="drop-zone" id="drop-zone">
+            <input type="file" id="file-input" multiple accept="image/*,.zip" />
+            <div class="drop-icon">🖥</div>
+            <div class="drop-title">Drag &amp; drop images or ZIP archives here</div>
+            <div class="drop-sub">JPG, PNG, WEBP, BMP, TIFF, GIF — or ZIP containing images — 1000+ files supported</div>
+          </div>
+        </div>
+        <div class="section-card">
+          <h2>Images <span id="img-count" style="font-weight:400;font-size:14px;color:#8892a4"></span></h2>
+          <div id="images-grid" class="images-grid"></div>
+          <div id="images-empty" class="images-empty" style="display:none">No images yet.</div>
+        </div>
+      </div>
+
+      <!-- ── MODELS panel ── -->
+      <div class="tab-panel" id="panel-models">
+        <div class="section-card">
+          <h2>Add Inference Model</h2>
+          <div class="model-upload-form">
+            <div class="field">
+              <label>Model Name</label>
+              <input type="text" id="model-name" placeholder="YOLOv8 detector" />
+            </div>
+            <div class="field">
+              <label>Task Type</label>
+              <select id="model-type">
+                <option value="detection">Detection</option>
+                <option value="classification">Classification</option>
+              </select>
+            </div>
+            <div class="field field-full">
+              <label>Description (optional)</label>
+              <input type="text" id="model-desc" placeholder="Short description" />
+            </div>
+            <div class="field field-full">
+              <label>Model File (.onnx, .pt, .pth, .tflite, .bin, .pb)</label>
+              <input type="file" id="model-file" accept=".onnx,.pt,.pth,.tflite,.bin,.weights,.pb" />
+            </div>
+            <div class="field field-full">
+              <label>Config / Data YAML <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#6c63ff">(optional — e.g. YOLOv8 data.yaml)</span></label>
+              <input type="file" id="model-yaml" accept=".yaml,.yml" />
+            </div>
+            <div class="field field-full" style="display:flex;justify-content:flex-end">
+              <button class="btn-upload-model" id="btn-upload-model">Upload Model</button>
+            </div>
+          </div>
+        </div>
+        <div class="section-card">
+          <h2>Uploaded Models</h2>
+          <div id="models-list" class="models-list"></div>
+          <div id="models-empty" class="models-empty" style="display:none">No models uploaded yet.</div>
+        </div>
+      </div>
+
+      <!-- ── BATCHES panel ── -->
+      <div class="tab-panel" id="panel-batches">
+        <div class="section-card">
+          <h2>Upload Batches</h2>
+          <p style="font-size:13px;color:#8892a4;margin-bottom:0">Images uploaded to this project are grouped into batches. You can split a batch into sub-batches and assign them to collaborators.</p>
+        </div>
+        <div id="batches-list" class="batches-list"></div>
+        <div id="batches-empty" class="batches-empty" style="display:none">
+          <div style="font-size:38px;opacity:.2;margin-bottom:12px">📦</div>
+          <h3>No batches yet</h3>
+          <p>Upload images on the Images tab to create batches.</p>
+        </div>
+
+        <!-- Split dialog (hidden) -->
+        <div id="split-dialog" class="split-dialog hidden">
+          <div class="split-dialog-box">
+            <h3 id="split-dialog-title">Split Batch</h3>
+            <p id="split-dialog-sub" style="font-size:13px;color:#8892a4;margin-bottom:18px"></p>
+            <div class="split-options">
+              <label class="split-opt">
+                <input type="radio" name="split-mode" value="size" checked /> Split so each sub-batch has
+                <input type="number" id="split-size" min="1" value="50" style="width:70px;margin:0 6px" /> images
+              </label>
+              <label class="split-opt">
+                <input type="radio" name="split-mode" value="count" /> Split into
+                <input type="number" id="split-count" min="2" value="3" style="width:70px;margin:0 6px" /> equal sub-batches
+              </label>
+            </div>
+            <div class="split-dialog-actions">
+              <button class="btn-primary-sm" id="btn-split-confirm">Split</button>
+              <button class="btn-cancel" id="btn-split-cancel">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── COLLABORATORS panel ── -->
+      <div class="tab-panel" id="panel-collaborators">
+        <div class="section-card">
+          <h2>Add Collaborator</h2>
+          <p style="font-size:13px;color:#8892a4;margin-bottom:16px">Collaborators can view and annotate images in this project.</p>
+          <div class="collab-search-row">
+            <input type="text" id="collab-search" placeholder="Search by username…" />
+            <button class="btn-collab-search" id="btn-collab-search">Look Up</button>
+          </div>
+          <div id="collab-lookup-result" class="collab-lookup-result hidden"></div>
+        </div>
+        <div class="section-card">
+          <h2>Current Collaborators</h2>
+          <div id="collab-list" class="collab-list"></div>
+          <div id="collab-empty" class="collab-empty" style="display:none">No collaborators yet.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/notifications.js"></script>
+  <script src="/js/jobs.js"></script>
+  <script src="/js/nav-inbox.js"></script>
+  <script src="/js/project.js"></script>
+</body>
+</html>
