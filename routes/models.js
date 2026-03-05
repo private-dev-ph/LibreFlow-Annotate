@@ -59,12 +59,12 @@ router.get('/', (req, res) => {
     const pid = req.query.projectId;
     // Own models for this project
     const ownModels    = models.filter(m => m.userId === uid && m.projectId === pid);
-    // Shared models for this project (from the owner) where user is a collaborator
+    // Shared models: any model in this project visible to collaborators of this project
+    const collabPids = collaboratorProjectIds(uid);
     const sharedModels = models.filter(m =>
       m.userId !== uid &&
       m.projectId === pid &&
-      m.sharedWithCollaborators === true &&
-      collaboratorProjectIds(uid).includes(pid)
+      collabPids.includes(pid)
     );
     const seen = new Set();
     return res.json([...ownModels, ...sharedModels].filter(m => {

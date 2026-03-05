@@ -426,6 +426,15 @@
   color: #e05c5c;
   border-color: #e05c5c;
 }
+.model-shared-badge {
+  font-size: 11px;
+  color: #48e5c2;
+  border: 1px solid #48e5c255;
+  border-radius: 7px;
+  padding: 4px 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .models-empty { font-size: 13px; color: #8892a4; }
 
 /* ── Batches tab ──────────────────────────────────────────────────────────── */

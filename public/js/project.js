@@ -282,7 +282,7 @@
             ${m.description ? `<span>${escHtml(m.description)}</span>` : ''}
           </div>
         </div>
-        <button class="btn-del-model" data-id="${escHtml(m.id)}">Delete</button>
+        ${m.userId === me.id ? `<button class="btn-del-model" data-id="${escHtml(m.id)}">Delete</button>` : '<span class="model-shared-badge" title="Shared by project owner">Shared</span>'}
       </div>
     `).join('');
 

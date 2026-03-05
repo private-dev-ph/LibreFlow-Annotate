@@ -71,9 +71,13 @@ router.post('/', (req, res) => {
   res.status(201).json(project);
 });
 
-// GET single project
+// GET single project (owner or collaborator)
 router.get('/:id', (req, res) => {
-  const project = readProjects().find(p => p.id === req.params.id && p.userId === req.session.userId);
+  const uid = req.session.userId;
+  const project = readProjects().find(p =>
+    p.id === req.params.id &&
+    (p.userId === uid || (p.collaborators || []).some(c => c.userId === uid))
+  );
   if (!project) return res.status(404).json({ error: 'Project not found.' });
   res.json(project);
 });
