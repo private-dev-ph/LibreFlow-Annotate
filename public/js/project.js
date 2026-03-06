@@ -34,11 +34,78 @@
       document.getElementById('project-sub').textContent     = project.description || '';
       document.getElementById('nav-breadcrumb').textContent  = project.name;
       document.title = `${project.name} – LibreFlow Annotate`;
+      // Show rename button only for project owner
+      if (me.id === project.userId) {
+        document.getElementById('btn-rename').classList.remove('hidden');
+      }
       renderLabels();
     } catch(e) {
       Notify.error('Failed to load project', e.message);
     }
   }
+
+  //─── Inline rename ────────────────────────────────────────────────────────
+  const btnRename       = document.getElementById('btn-rename');
+  const renameForm      = document.getElementById('rename-form');
+  const renameNameInput = document.getElementById('rename-name');
+  const renameDescInput = document.getElementById('rename-desc');
+  const btnRenameSave   = document.getElementById('btn-rename-save');
+  const btnRenameCancel = document.getElementById('btn-rename-cancel');
+
+  function openRenameForm() {
+    renameNameInput.value = project.name;
+    renameDescInput.value = project.description || '';
+    document.getElementById('project-title').classList.add('hidden');
+    document.getElementById('project-sub').classList.add('hidden');
+    btnRename.classList.add('hidden');
+    renameForm.classList.remove('hidden');
+    renameNameInput.focus();
+    renameNameInput.select();
+  }
+
+  function closeRenameForm() {
+    renameForm.classList.add('hidden');
+    document.getElementById('project-title').classList.remove('hidden');
+    document.getElementById('project-sub').classList.remove('hidden');
+    btnRename.classList.remove('hidden');
+  }
+
+  btnRename.addEventListener('click', openRenameForm);
+  btnRenameCancel.addEventListener('click', closeRenameForm);
+
+  renameNameInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') btnRenameSave.click();
+    if (e.key === 'Escape') closeRenameForm();
+  });
+  renameDescInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') btnRenameSave.click();
+    if (e.key === 'Escape') closeRenameForm();
+  });
+
+  btnRenameSave.addEventListener('click', async () => {
+    const newName = renameNameInput.value.trim();
+    if (!newName) { Notify.warn('Project name cannot be empty.'); return; }
+    btnRenameSave.disabled = true;
+    btnRenameSave.textContent = 'Saving…';
+    try {
+      const updated = await API.updateProject(projectId, {
+        name:        newName,
+        description: renameDescInput.value.trim(),
+      });
+      project = updated;
+      document.getElementById('project-title').textContent  = project.name;
+      document.getElementById('project-sub').textContent    = project.description || '';
+      document.getElementById('nav-breadcrumb').textContent = project.name;
+      document.title = `${project.name} – LibreFlow Annotate`;
+      closeRenameForm();
+      Notify.success('Project renamed', `Now called "${project.name}".`);
+    } catch(e) {
+      Notify.error('Failed to rename project', e.message);
+    } finally {
+      btnRenameSave.disabled = false;
+      btnRenameSave.textContent = 'Save';
+    }
+  });
 
   //─── Tab switching ─────────────────────────────────────────────────────────
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -60,11 +127,30 @@
     }
     list.innerHTML = labels.map((lbl, i) => `
       <span class="label-chip">
-        <span class="label-dot" style="background:${escHtml(lbl.color || '#6c63ff')}"></span>
+        <span class="label-dot label-dot-pick" data-idx="${i}" title="Click to change color"
+              style="background:${escHtml(lbl.color || '#6c63ff')};cursor:pointer"></span>
+        <input type="color" class="label-color-input" data-idx="${i}"
+               value="${escHtml(lbl.color || '#6c63ff')}"
+               style="position:absolute;opacity:0;width:0;height:0;pointer-events:none">
         ${escHtml(lbl.name)}
         <button class="label-del" data-idx="${i}" title="Remove">✕</button>
       </span>
     `).join('');
+
+    list.querySelectorAll('.label-dot-pick').forEach(dot => {
+      dot.addEventListener('click', () => {
+        const input = dot.nextElementSibling; // the color input
+        input.click();
+      });
+    });
+
+    list.querySelectorAll('.label-color-input').forEach(input => {
+      input.addEventListener('change', async () => {
+        const idx = parseInt(input.dataset.idx);
+        const updated = labels.map((l, i) => i === idx ? { ...l, color: input.value } : l);
+        await saveLabels(updated);
+      });
+    });
 
     list.querySelectorAll('.label-del').forEach(btn => {
       btn.addEventListener('click', async () => {

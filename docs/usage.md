@@ -25,6 +25,10 @@ LibreFlow Annotate is a web-based image annotation tool for building computer vi
 3. Enter a project name and optional description.
 4. Click **Create**. The project page opens automatically.
 
+### Renaming a Project
+
+On the **Project** page, click the **✎ pencil icon** next to the project title (visible to the project owner only). The title and description become editable inputs. Press **Enter** or click **Save** to apply, or **Cancel** / **Esc** to discard.
+
 ---
 
 ## 2. Uploading Images
@@ -86,7 +90,8 @@ On the **Project** page, **Labels** tab:
 
 1. Type a new label name in the input field and click **Add Label** (or press Enter).
 2. Each label gets an auto-assigned colour for canvas rendering.
-3. Click the **×** on a label chip to delete it.
+3. **Click the coloured dot** on any existing label chip to open a colour picker and change that label's colour.
+4. Click the **×** on a label chip to delete it.
 
 Labels defined here appear in the annotator's label selector and in all exports.
 

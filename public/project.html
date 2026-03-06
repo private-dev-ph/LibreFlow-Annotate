@@ -57,8 +57,21 @@
       <!-- Page header -->
       <div class="project-header">
         <div class="project-header-left">
-          <h1 id="project-title">Loading…</h1>
+          <div class="project-title-row">
+            <h1 id="project-title">Loading…</h1>
+            <button id="btn-rename" class="btn-pencil hidden" title="Rename project">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+          </div>
           <div class="sub" id="project-sub"></div>
+          <div id="rename-form" class="rename-form hidden">
+            <input id="rename-name" class="rename-input" type="text" maxlength="120" placeholder="Project name" />
+            <input id="rename-desc" class="rename-input" type="text" maxlength="300" placeholder="Description (optional)" />
+            <div class="rename-actions">
+              <button id="btn-rename-save" class="btn-sm-primary">Save</button>
+              <button id="btn-rename-cancel" class="btn-sm-ghost">Cancel</button>
+            </div>
+          </div>
         </div>
         <a id="btn-annotator" class="btn-open-annotator" href="#">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 3 21 12 3 21 3 3"/></svg>

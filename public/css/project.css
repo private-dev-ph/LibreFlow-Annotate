@@ -49,6 +49,78 @@
 }
 .btn-open-annotator:hover { opacity: .85; }
 
+/* ── Rename header UI ── */
+.project-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-pencil {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #8892a4;
+  cursor: pointer;
+  padding: 4px 6px;
+  display: inline-flex;
+  align-items: center;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.btn-pencil:hover {
+  color: #e2e8f0;
+  border-color: #2e3347;
+  background: #1e2130;
+}
+.rename-form {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
+}
+.rename-form.hidden { display: none; }
+.rename-input {
+  background: #1a1d2b;
+  border: 1px solid #2e3347;
+  border-radius: 7px;
+  color: #e2e8f0;
+  font-size: 13px;
+  padding: 7px 11px;
+  outline: none;
+  transition: border-color .15s;
+  width: 100%;
+  box-sizing: border-box;
+}
+.rename-input:focus { border-color: #6c63ff; }
+.rename-actions {
+  display: flex;
+  gap: 8px;
+}
+.btn-sm-primary {
+  background: #6c63ff;
+  border: none;
+  border-radius: 7px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 16px;
+  transition: opacity .15s;
+}
+.btn-sm-primary:hover { opacity: .85; }
+.btn-sm-primary:disabled { opacity: .5; cursor: default; }
+.btn-sm-ghost {
+  background: transparent;
+  border: 1px solid #2e3347;
+  border-radius: 7px;
+  color: #8892a4;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 6px 14px;
+  transition: color .15s, border-color .15s;
+}
+.btn-sm-ghost:hover { color: #e2e8f0; border-color: #6c63ff; }
+
 /* ── Tab bar ── */
 .project-tabs {
   display: flex;
