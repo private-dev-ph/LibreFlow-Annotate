@@ -241,6 +241,38 @@
   transition: color .15s;
 }
 .label-chip .label-del:hover { color: #e05c5c; }
+
+.label-chip .label-name { /* no extra style needed */ }
+.label-chip .label-rename-input {
+  background: #0f1117;
+  border: 1px solid #6c63ff;
+  border-radius: 5px;
+  color: #e2e8f0;
+  font-size: 12px;
+  padding: 2px 7px;
+  width: 100px;
+  outline: none;
+}
+.label-chip .label-rename-btn,
+.label-chip .label-rename-confirm,
+.label-chip .label-rename-cancel {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color .15s;
+  display: inline-flex;
+  align-items: center;
+}
+.label-chip .label-rename-btn    { color: rgba(255,255,255,.4); }
+.label-chip .label-rename-btn:hover { color: #e2e8f0; }
+.label-chip .label-rename-confirm { color: #48e5c2; }
+.label-chip .label-rename-confirm:hover { color: #6cf0d0; }
+.label-chip .label-rename-cancel  { color: rgba(255,255,255,.4); }
+.label-chip .label-rename-cancel:hover  { color: #e05c5c; }
+
 .labels-empty { font-size: 13px; color: #8892a4; }
 
 /* ── YAML import card ──────────────────────────────────────────── */

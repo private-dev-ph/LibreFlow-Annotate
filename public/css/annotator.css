@@ -223,6 +223,34 @@ html, body { height: 100%; overflow: hidden; }
 }
 .save-indicator.show { opacity: 1; color: #f5a623; }
 
+.btn-mark-null {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 34px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+  white-space: nowrap;
+}
+.btn-mark-null:hover {
+  background: rgba(245,100,80,.12);
+  border-color: #f56450;
+  color: #f56450;
+}
+.btn-mark-null.is-null {
+  background: rgba(245,100,80,.18);
+  border-color: #f56450;
+  color: #f56450;
+}
+.btn-mark-null.is-null svg { stroke: #f56450; }
+
 /* Canvas wrapper */
 #canvas-wrapper {
   flex: 1;

@@ -126,35 +126,94 @@
       return;
     }
     list.innerHTML = labels.map((lbl, i) => `
-      <span class="label-chip">
+      <span class="label-chip" data-idx="${i}">
         <span class="label-dot label-dot-pick" data-idx="${i}" title="Click to change color"
               style="background:${escHtml(lbl.color || '#6c63ff')};cursor:pointer"></span>
         <input type="color" class="label-color-input" data-idx="${i}"
                value="${escHtml(lbl.color || '#6c63ff')}"
                style="position:absolute;opacity:0;width:0;height:0;pointer-events:none">
-        ${escHtml(lbl.name)}
+        <span class="label-name">${escHtml(lbl.name)}</span>
+        <input class="label-rename-input hidden" type="text" data-idx="${i}"
+               value="${escHtml(lbl.name)}" maxlength="80" />
+        <button class="label-rename-btn" data-idx="${i}" title="Rename label">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="label-rename-confirm hidden" data-idx="${i}" title="Save rename">✓</button>
+        <button class="label-rename-cancel  hidden" data-idx="${i}" title="Cancel">×</button>
         <button class="label-del" data-idx="${i}" title="Remove">✕</button>
       </span>
     `).join('');
 
-    list.querySelectorAll('.label-dot-pick').forEach(dot => {
-      dot.addEventListener('click', () => {
-        const input = dot.nextElementSibling; // the color input
-        input.click();
-      });
-    });
+    function enterRename(idx) {
+      const chip = list.querySelector(`.label-chip[data-idx="${idx}"]`);
+      chip.querySelector('.label-name').classList.add('hidden');
+      chip.querySelector('.label-rename-btn').classList.add('hidden');
+      chip.querySelector('.label-del').classList.add('hidden');
+      const inp = chip.querySelector('.label-rename-input');
+      inp.classList.remove('hidden');
+      chip.querySelector('.label-rename-confirm').classList.remove('hidden');
+      chip.querySelector('.label-rename-cancel').classList.remove('hidden');
+      inp.focus(); inp.select();
+    }
+    function exitRename(idx) {
+      const chip = list.querySelector(`.label-chip[data-idx="${idx}"]`);
+      chip.querySelector('.label-name').classList.remove('hidden');
+      chip.querySelector('.label-rename-btn').classList.remove('hidden');
+      chip.querySelector('.label-del').classList.remove('hidden');
+      chip.querySelector('.label-rename-input').classList.add('hidden');
+      chip.querySelector('.label-rename-confirm').classList.add('hidden');
+      chip.querySelector('.label-rename-cancel').classList.add('hidden');
+    }
+    async function doRename(idx) {
+      const chip    = list.querySelector(`.label-chip[data-idx="${idx}"]`);
+      const inp     = chip.querySelector('.label-rename-input');
+      const newName = inp.value.trim();
+      const oldName = labels[idx].name;
+      if (!newName) { Notify.warn('Label name cannot be empty.'); inp.focus(); return; }
+      if (newName === oldName) { exitRename(idx); return; }
+      if (labels.some((l, i) => i !== idx && l.name.toLowerCase() === newName.toLowerCase())) {
+        Notify.warn('A label with that name already exists.'); inp.focus(); return;
+      }
+      try {
+        project = await API.updateProject(projectId, {
+          labelClasses: labels.map((l, i) => i === idx ? { ...l, name: newName } : l),
+        });
+        await API.relabelAnnotations(projectId, oldName, newName);
+        Notify.success('Label renamed', `“${oldName}” → “${newName}”`);
+      } catch(e) {
+        Notify.error('Failed to rename label', e.message);
+      }
+      renderLabels();
+    }
 
+    list.querySelectorAll('.label-dot-pick').forEach(dot => {
+      dot.addEventListener('click', () => dot.nextElementSibling.click());
+    });
     list.querySelectorAll('.label-color-input').forEach(input => {
       input.addEventListener('change', async () => {
-        const idx = parseInt(input.dataset.idx);
+        const idx     = parseInt(input.dataset.idx);
         const updated = labels.map((l, i) => i === idx ? { ...l, color: input.value } : l);
         await saveLabels(updated);
       });
     });
-
+    list.querySelectorAll('.label-rename-btn').forEach(btn => {
+      btn.addEventListener('click', () => enterRename(parseInt(btn.dataset.idx)));
+    });
+    list.querySelectorAll('.label-rename-confirm').forEach(btn => {
+      btn.addEventListener('click', () => doRename(parseInt(btn.dataset.idx)));
+    });
+    list.querySelectorAll('.label-rename-cancel').forEach(btn => {
+      btn.addEventListener('click', () => exitRename(parseInt(btn.dataset.idx)));
+    });
+    list.querySelectorAll('.label-rename-input').forEach(inp => {
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter')  doRename(parseInt(inp.dataset.idx));
+        if (e.key === 'Escape') exitRename(parseInt(inp.dataset.idx));
+      });
+    });
     list.querySelectorAll('.label-del').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const idx = parseInt(btn.dataset.idx);
+        const idx     = parseInt(btn.dataset.idx);
         const updated = [...labels];
         updated.splice(idx, 1);
         await saveLabels(updated);
@@ -441,10 +500,27 @@
     document.getElementById('modal-batch-export').classList.add('hidden');
   });
 
+  document.getElementById('batch-export-include-images')?.addEventListener('change', function () {
+    const nullLabel = document.getElementById('batch-export-null-label');
+    const nullChk   = document.getElementById('batch-export-include-null');
+    if (this.checked) {
+      nullLabel.style.opacity = '1';
+      nullLabel.style.pointerEvents = 'auto';
+      nullChk.disabled = false;
+    } else {
+      nullLabel.style.opacity = '.45';
+      nullLabel.style.pointerEvents = 'none';
+      nullChk.disabled = true;
+      nullChk.checked  = false;
+    }
+  });
+
   document.getElementById('btn-batch-export-confirm')?.addEventListener('click', () => {
-    const fmt      = document.getElementById('batch-export-format').value;
-    const withImgs = document.getElementById('batch-export-include-images').checked;
+    const fmt         = document.getElementById('batch-export-format').value;
+    const withImgs    = document.getElementById('batch-export-include-images').checked;
+    const includeNull = document.getElementById('batch-export-include-null').checked;
     let url = `/api/annotations/export-zip/${projectId}?format=${fmt}&images=${withImgs}`;
+    if (includeNull) url += '&includeNull=true';
     if (batchExportParams.batchId)    url += `&batchId=${encodeURIComponent(batchExportParams.batchId)}`;
     if (batchExportParams.subBatchId) url += `&subBatchId=${encodeURIComponent(batchExportParams.subBatchId)}`;
     const a = document.createElement('a');

@@ -144,6 +144,11 @@
           Save
         </button>
         <span id="save-indicator" class="save-indicator">Unsaved</span>
+        <div class="toolbar-sep"></div>
+        <button id="btn-mark-null" class="btn-mark-null" title="Mark this image as intentionally empty (no objects to annotate). Will be included in exports without annotation entries.">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="9"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+          Mark as Null
+        </button>
       </div>
 
       <!-- Canvas -->
@@ -244,6 +249,10 @@
       <label class="checkbox-label">
         <input type="checkbox" id="export-include-images" />
         Include images in ZIP
+      </label>
+      <label class="checkbox-label" id="export-null-label" style="margin-top:6px;margin-left:18px;opacity:.45;pointer-events:none">
+        <input type="checkbox" id="export-include-null" disabled />
+        Include unannotated images as null images to dataset
       </label>
       <div class="modal-actions">
         <button id="btn-export-confirm" class="btn-primary-sm">↓ Download ZIP</button>

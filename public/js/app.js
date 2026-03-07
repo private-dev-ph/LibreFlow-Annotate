@@ -235,6 +235,16 @@
   function esc(s) { return String(s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
   // -- Load image into canvas -------------------------------------------------
+  const btnMarkNull = document.getElementById('btn-mark-null');
+
+  function updateNullButton(img) {
+    if (!img) { btnMarkNull.classList.remove('is-null'); btnMarkNull.textContent = ''; return; }
+    btnMarkNull.innerHTML = img.isNull
+      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="9"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Unmark Null`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="9"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Mark as Null`;
+    btnMarkNull.classList.toggle('is-null', Boolean(img.isNull));
+  }
+
   async function loadImage(idx) {
     currentIndex = idx;
     unsaved = false;
@@ -249,10 +259,31 @@
     imageNavLabel.textContent = `${idx + 1} / ${images.length}`;
     document.getElementById('btn-prev-img').disabled = idx === 0;
     document.getElementById('btn-next-img').disabled = idx === images.length - 1;
+    updateNullButton(img);
     renderImageList();
     // Populate semi-auto after image loads
     populateAutoModels();
   }
+
+  btnMarkNull.addEventListener('click', async () => {
+    if (currentIndex < 0) return;
+    const img       = images[currentIndex];
+    const markingNull = !img.isNull;
+    if (markingNull) {
+      // Clear canvas and persist empty annotations, then flag as null
+      Canvas.loadImage(`/uploads/${img.filename}`, []);
+      await API.saveAnnotations(img.id, []);
+    }
+    const updated = await API.updateImage(img.id, { isNull: markingNull });
+    images[currentIndex].isNull    = updated.isNull;
+    images[currentIndex].annotated = updated.annotated;
+    updateNullButton(images[currentIndex]);
+    renderImageList();
+    showToast(
+      markingNull ? 'Image marked as null.' : 'Null mark removed.',
+      markingNull ? 'success' : 'info'
+    );
+  });
 
   // -- Shapes change callback -------------------------------------------------
   function onShapesChange(shapes, selectedId, dirty = false) {
@@ -292,7 +323,7 @@
     await API.saveAnnotations(img.id, shapes);
     unsaved = false;
     saveIndicator.classList.remove('show');
-    images[currentIndex].annotated = shapes.length > 0;
+    images[currentIndex].annotated = shapes.length > 0 || Boolean(images[currentIndex].isNull);
     renderImageList();
     showToast('Annotations saved.', 'success');
   }
@@ -331,6 +362,22 @@
   document.getElementById('btn-export-cancel').addEventListener('click', () => document.getElementById('modal-export').classList.add('hidden'));
   document.getElementById('export-format').addEventListener('change', updateExportDesc);
 
+  // Enable/disable the null-images toggle depending on include-images checkbox
+  document.getElementById('export-include-images').addEventListener('change', function () {
+    const nullLabel = document.getElementById('export-null-label');
+    const nullChk   = document.getElementById('export-include-null');
+    if (this.checked) {
+      nullLabel.style.opacity = '1';
+      nullLabel.style.pointerEvents = 'auto';
+      nullChk.disabled = false;
+    } else {
+      nullLabel.style.opacity = '.45';
+      nullLabel.style.pointerEvents = 'none';
+      nullChk.disabled = true;
+      nullChk.checked  = false;
+    }
+  });
+
   function updateExportDesc() {
     const fmt = document.getElementById('export-format').value;
     const desc = document.getElementById('export-desc');
@@ -338,9 +385,11 @@
   }
 
   document.getElementById('btn-export-confirm').addEventListener('click', () => {
-    const fmt    = document.getElementById('export-format').value;
-    const withImg= document.getElementById('export-include-images').checked;
-    const url    = `/api/annotations/export-zip/${projectId}?format=${fmt}&images=${withImg}`;
+    const fmt         = document.getElementById('export-format').value;
+    const withImg     = document.getElementById('export-include-images').checked;
+    const includeNull = document.getElementById('export-include-null').checked;
+    let url = `/api/annotations/export-zip/${projectId}?format=${fmt}&images=${withImg}`;
+    if (includeNull) url += '&includeNull=true';
     const a = document.createElement('a');
     a.href = url; a.download = `export_${project.name}_${fmt}.zip`; a.click();
     document.getElementById('modal-export').classList.add('hidden');
@@ -526,6 +575,7 @@
       const btn = document.getElementById('btn-auto-infer');
       if (sel && sel.value && btn && !btn.disabled) btn.click();
     }
+    else if (e.key === 'n') btnMarkNull.click();
   });
 
   // -- Label picker (called by canvas.js) -------------------------------------

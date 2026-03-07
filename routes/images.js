@@ -219,5 +219,25 @@ router.delete('/:id', (req, res) => {
   res.json({ message: 'Image deleted.' });
 });
 
+// ── PATCH /api/images/:id ─────────────────────────────────────────────────────
+// Accepts: { isNull: boolean }
+router.patch('/:id', (req, res) => {
+  const images = readImages();
+  const uid    = req.session.userId;
+  const img    = images.find(i => i.id === req.params.id);
+  if (!img) return res.status(404).json({ error: 'Image not found.' });
+  if (!canAccessProject(img.projectId, uid))
+    return res.status(403).json({ error: 'Not authorized.' });
+
+  const { isNull } = req.body;
+  if (isNull !== undefined) {
+    img.isNull    = Boolean(isNull);
+    // Null-marked images count as annotated; un-marking resets to unannotated
+    img.annotated = img.isNull ? true : false;
+  }
+  writeImages(images);
+  res.json(img);
+});
+
 module.exports = router;
 

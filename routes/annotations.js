@@ -29,6 +29,32 @@ function markImageAnnotated(imageId) {
   }
 }
 
+// POST bulk-rename a label across all annotations in a project
+// Body: { projectId, oldName, newName }
+router.post('/rename-label', (req, res) => {
+  const { projectId, oldName, newName } = req.body;
+  if (!projectId || !oldName || !newName)
+    return res.status(400).json({ error: 'projectId, oldName and newName are required.' });
+
+  const allImages = fs.existsSync(IMAGES_FILE)
+    ? JSON.parse(fs.readFileSync(IMAGES_FILE, 'utf-8'))
+    : [];
+  const projectImageIds = new Set(
+    allImages.filter(i => i.projectId === projectId).map(i => i.id)
+  );
+
+  const annotations = readAnnotations();
+  let count = 0;
+  annotations.forEach(a => {
+    if (projectImageIds.has(a.imageId) && a.label === oldName) {
+      a.label = newName;
+      count++;
+    }
+  });
+  writeAnnotations(annotations);
+  res.json({ updated: count });
+});
+
 // GET annotations for an image
 router.get('/:imageId', (req, res) => {
   const annotations = readAnnotations().filter(a => a.imageId === req.params.imageId);
@@ -156,11 +182,14 @@ router.get('/export-zip/:projectId', (req, res) => {
     }
   }
 
-  // Only export images that have at least one annotation (filtered by scope)
+  // includeNull=true → also export images that have zero annotations
+  const includeNull = req.query.includeNull === 'true';
+
+  // isNull images are always exported (they are intentionally empty)
   const projectImages = allImages.filter(img =>
     img.projectId === projectId &&
     (!allowedImageIds || allowedImageIds.has(img.id)) &&
-    allAnnotations.some(a => a.imageId === img.id)
+    (img.isNull || includeNull || allAnnotations.some(a => a.imageId === img.id))
   );
 
   // Build filename suffix for batch/sub-batch scoped exports

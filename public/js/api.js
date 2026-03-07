@@ -57,6 +57,15 @@ const API = {
   async deleteImage(id) {
     await fetch(`/api/images/${id}`, { method: 'DELETE', credentials: 'include' });
   },
+  async updateImage(id, data) {
+    const r = await fetch(`/api/images/${id}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return r.json();
+  },
 
   // ── Annotations ───────────────────────────────────────────────────────────
   async getAnnotations(imageId) {
@@ -69,6 +78,15 @@ const API = {
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imageId, shapes }),
+    });
+    return r.json();
+  },
+  async relabelAnnotations(projectId, oldName, newName) {
+    const r = await fetch('/api/annotations/rename-label', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, oldName, newName }),
     });
     return r.json();
   },
