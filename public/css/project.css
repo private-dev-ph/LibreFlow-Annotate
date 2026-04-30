@@ -352,6 +352,37 @@
   padding: 12px;
   margin-bottom: 14px;
 }
+.dataset-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.dataset-import-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.dataset-import-row.hidden { display: none; }
+.dataset-import-row select {
+  min-width: 220px;
+  background: #0f1117;
+  border: 1px solid #2f3550;
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+.dataset-checkbox {
+  font-size: 12px;
+  color: #9aa6bd;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .compression-controls label {
   display: block;
   font-size: 12px;

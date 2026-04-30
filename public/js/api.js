@@ -183,4 +183,69 @@ const API = {
     });
     return r.json();
   },
+
+  // ── Datasets ─────────────────────────────────────────────────────────────
+  async getDatasets() {
+    const r = await fetch('/api/datasets', { credentials: 'include' });
+    return r.json();
+  },
+  async getDataset(id) {
+    const r = await fetch(`/api/datasets/${id}`, { credentials: 'include' });
+    return r.json();
+  },
+  async exportDatasetFromProject(projectId, payload = {}) {
+    const r = await fetch('/api/datasets/export-from-project', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, ...payload }),
+    });
+    return r.json();
+  },
+  async uploadDataset(formData) {
+    const r = await fetch('/api/datasets/upload', {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+    return r.json();
+  },
+  async patchDataset(id, data) {
+    const r = await fetch(`/api/datasets/${id}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return r.json();
+  },
+  async deleteDataset(id) {
+    const r = await fetch(`/api/datasets/${id}`, { method: 'DELETE', credentials: 'include' });
+    return r.json();
+  },
+  async importDatasetToProject(id, projectId, includeTags = true) {
+    const r = await fetch(`/api/datasets/${id}/import`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, includeTags }),
+    });
+    return r.json();
+  },
+  async patchDatasetImage(datasetId, imageId, data) {
+    const r = await fetch(`/api/datasets/${datasetId}/images/${imageId}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return r.json();
+  },
+  async deleteDatasetImage(datasetId, imageId) {
+    const r = await fetch(`/api/datasets/${datasetId}/images/${imageId}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    return r.json();
+  },
 };

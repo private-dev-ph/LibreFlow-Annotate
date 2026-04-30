@@ -30,6 +30,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
           Models
         </a>
+        <a class="nav-link" href="/datasets">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="7.5 4.2 12 6.8 16.5 4.2"/><polyline points="7.5 19.8 7.5 12.6 3 10"/><polyline points="16.5 19.8 16.5 12.6 21 10"/></svg>
+          Datasets
+        </a>
         <span class="nav-sep"></span>
         <span class="nav-breadcrumb" id="nav-breadcrumb">…</span>
       </div>
@@ -137,6 +141,16 @@
       <div class="tab-panel" id="panel-images">
         <div class="section-card">
           <h2>Upload Images</h2>
+          <div class="dataset-actions-row">
+            <button id="btn-export-dataset" class="btn-sm-primary" type="button">Export as Dataset</button>
+            <label class="dataset-checkbox"><input type="checkbox" id="export-dataset-include-tags" checked /> Include tags</label>
+            <button id="btn-add-from-dataset" class="btn-sm-ghost" type="button">Add from Dataset</button>
+          </div>
+          <div class="dataset-import-row hidden" id="dataset-import-row">
+            <select id="dataset-select"></select>
+            <label class="dataset-checkbox"><input type="checkbox" id="import-dataset-include-tags" checked /> Include tags</label>
+            <button id="btn-import-dataset" class="btn-sm-primary" type="button">Import</button>
+          </div>
           <div class="compression-controls">
             <label for="compression-quality">Compression Quality</label>
             <div class="compression-quality-row">

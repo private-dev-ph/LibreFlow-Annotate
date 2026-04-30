@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Datasets – LibreFlow Annotate</title>
+  <link rel="stylesheet" href="/css/nav.css" />
+  <link rel="stylesheet" href="/css/datasets.css" />
+</head>
+<body>
+  <nav id="top-nav">
+    <div class="nav-left">
+      <a class="nav-logo" href="/dashboard">
+        <span class="nav-logo-icon">■</span>
+        <span class="nav-logo-name">LibreFlow Annotate</span>
+      </a>
+      <div class="nav-links">
+        <a class="nav-link" href="/dashboard">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Dashboard
+        </a>
+        <a class="nav-link" href="/jobs">
+          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A8 8 0 0 1 4.07 11H4a1 1 0 0 1 0-2h.07A8 8 0 0 1 11 4.07V4a1 1 0 0 1 2 0v.07A8 8 0 0 1 19.93 11H20a1 1 0 0 1 0 2h-.07A8 8 0 0 1 13 16.93z"/></svg>
+          Jobs
+          <span id="jobs-badge" class="nav-badge hidden">0</span>
+        </a>
+        <a class="nav-link" href="/models">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Models
+        </a>
+        <a class="nav-link active" href="/datasets">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="7.5 4.2 12 6.8 16.5 4.2"/><polyline points="7.5 19.8 7.5 12.6 3 10"/><polyline points="16.5 19.8 16.5 12.6 21 10"/></svg>
+          Datasets
+        </a>
+      </div>
+    </div>
+    <div class="nav-right">
+      <div class="nav-user">
+        <div class="nav-avatar" id="nav-avatar">?</div>
+        <span class="nav-username" id="nav-username">Loading…</span>
+      </div>
+      <button class="btn-logout" id="btn-logout">Sign Out</button>
+    </div>
+  </nav>
+
+  <div class="page-body">
+    <div class="datasets-layout">
+      <section class="datasets-list-card">
+        <div class="row">
+          <h2>Datasets</h2>
+          <div class="row-actions">
+            <button id="btn-refresh" class="btn icon-btn" title="Refresh">
+              <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3.2-6.9"/><polyline points="21 3 21 9 15 9"/></svg>
+              Refresh
+            </button>
+            <button id="btn-new-dataset" class="btn icon-btn primary" title="Create new dataset">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              New Dataset
+            </button>
+          </div>
+        </div>
+        <input id="dataset-search" type="text" placeholder="Search datasets..." />
+        <div id="datasets-list"></div>
+      </section>
+
+      <section class="dataset-main-card">
+        <h2 id="dataset-title">Select dataset</h2>
+        <p id="dataset-sub">Choose a dataset to view and manage images.</p>
+
+        <div class="toolbar">
+          <button id="btn-add-image" class="btn icon-btn">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            Add Image to Dataset
+          </button>
+          <button id="btn-export-zip" class="btn icon-btn">
+            <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+            Export ZIP
+          </button>
+          <label class="small-check"><input type="checkbox" id="export-include-tags" checked /> Include tags</label>
+          <button id="btn-edit-dataset" class="btn icon-btn">
+            <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            Edit
+          </button>
+          <button id="btn-delete-dataset" class="btn icon-btn danger">
+            <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/></svg>
+            Delete
+          </button>
+        </div>
+
+        <div class="images-tools">
+          <input id="dataset-image-search" type="text" placeholder='Search images (e.g. name:item tag:"component A" size:>1mb date:2026-04-30)' />
+          <select id="dataset-image-sort">
+            <option value="uploadedAt_desc">Newest</option>
+            <option value="uploadedAt_asc">Oldest</option>
+            <option value="name_asc">Name A-Z</option>
+            <option value="name_desc">Name Z-A</option>
+            <option value="size_desc">Size High-Low</option>
+            <option value="size_asc">Size Low-High</option>
+          </select>
+          <select id="dataset-image-group">
+            <option value="none">Group: None</option>
+            <option value="tag">Group: Tag</option>
+            <option value="date">Group: Date</option>
+            <option value="size">Group: Size</option>
+          </select>
+        </div>
+
+        <div id="dataset-images-scroll" class="dataset-images-scroll">
+          <div id="dataset-images-grid" class="dataset-images-grid"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="edit-modal" class="modal hidden">
+    <div class="modal-box">
+      <h3>Edit Dataset</h3>
+      <input type="text" id="edit-dataset-name" placeholder="Dataset name" />
+      <input type="text" id="edit-dataset-desc" placeholder="Description" />
+      <label><input type="checkbox" id="edit-dataset-shared" /> Share with collaborators</label>
+      <div class="modal-row">
+        <button id="btn-save-edit-dataset" class="btn primary">Save</button>
+        <button id="btn-cancel-edit-dataset" class="btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="upload-modal" class="modal hidden">
+    <div class="modal-box">
+      <h3 id="upload-modal-title">New Dataset</h3>
+      <input id="dataset-name-upload" type="text" placeholder="Dataset name" />
+      <input id="dataset-desc-upload" type="text" placeholder="Description (optional)" />
+      <input id="dataset-upload-input" type="file" multiple accept="image/*,.zip" />
+      <p class="modal-help">Supports image files and ZIP archives. Compression quality defaults to 70%.</p>
+      <div class="modal-row">
+        <button id="btn-submit-upload-modal" class="btn primary">Upload</button>
+        <button id="btn-cancel-upload-modal" class="btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/jobs.js"></script>
+  <script src="/js/notifications.js"></script>
+  <script src="/js/datasets.js"></script>
+</body>
+</html>

@@ -11,13 +11,14 @@ const projectsRouter    = require('./routes/projects');
 const modelsRouter      = require('./routes/models');
 const batchesRouter        = require('./routes/batches');
 const notificationsRouter  = require('./routes/notifications');
+const datasetsRouter    = require('./routes/datasets');
 
 const app = express();
 const PORT = process.env.PORT || 6767;
 const HOST = '0.0.0.0'; // accessible on local network
 
 // Ensure required directories exist
-['uploads', 'data', 'models'].forEach(dir => {
+['uploads', 'data', 'models', 'datasets'].forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -35,6 +36,7 @@ app.use(session({
 // Static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/models-static', express.static(path.join(__dirname, 'models')));
+app.use('/datasets-files', express.static(path.join(__dirname, 'datasets')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Auth routes (public) ──────────────────────────────────────────────────────
@@ -61,6 +63,7 @@ app.get('/project',   requireAuth, (req, res) => res.sendFile(path.join(__dirnam
 app.get('/annotator', requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'annotator.html')));
 app.get('/jobs',      requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'jobs.html')));
 app.get('/models',    requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'models.html')));
+app.get('/datasets',  requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'datasets.html')));
 
 // ── Protected API routes ──────────────────────────────────────────────────────
 app.use('/api/projects',    requireAuth, projectsRouter);
@@ -69,6 +72,7 @@ app.use('/api/annotations', requireAuth, annotationsRouter);
 app.use('/api/models',      requireAuth, modelsRouter);
 app.use('/api/batches',        requireAuth, batchesRouter);
 app.use('/api/notifications', requireAuth, notificationsRouter);
+app.use('/api/datasets',    requireAuth, datasetsRouter);
 
 // ── 404 fallback ──────────────────────────────────────────────────────────────
 app.use((req, res) => res.redirect('/'));

@@ -27,6 +27,7 @@ const Canvas = (() => {
   let onContextMenu  = null; // right-click label picker callback
   let hoveredId = null;      // annotation list hover highlight
   let annotationsHidden = false; // Shift-hold to temporarily hide all shapes
+  let lastCtrlMiddleDownAt = 0;
 
   // ── Undo / Redo ──────────────────────────────────────────────────────────
   let undoStack = [];
@@ -248,6 +249,36 @@ const Canvas = (() => {
     draw();
   }
 
+  function getFitScale() {
+    if (!img || !canvas) return 1;
+    const padding = 40;
+    const scaleX = (canvas.width - padding * 2) / img.width;
+    const scaleY = (canvas.height - padding * 2) / img.height;
+    return Math.min(scaleX, scaleY, 1);
+  }
+
+  function setScaleAroundScreenPoint(targetScale, sx, sy) {
+    if (!img || !canvas) return;
+    const imgX = (sx - offsetX) / scale;
+    const imgY = (sy - offsetY) / scale;
+    scale = targetScale;
+    offsetX = sx - imgX * scale;
+    offsetY = sy - imgY * scale;
+    draw();
+  }
+
+  function toggleMiddleDoubleZoom(sx, sy) {
+    if (!img || !canvas) return;
+    const fitScale = getFitScale();
+    const epsilon = 0.005;
+    // "Unzoomed" -> jump to 300% of fit. Otherwise reset to fit/unzoom.
+    if (Math.abs(scale - fitScale) <= epsilon) {
+      setScaleAroundScreenPoint(fitScale * 3, sx, sy);
+    } else {
+      fitImage();
+    }
+  }
+
   function hitTest(imgX, imgY) {
     for (let i = shapes.length - 1; i >= 0; i--) {
       const s = shapes[i];
@@ -330,6 +361,22 @@ const Canvas = (() => {
     // Middle-click always pans regardless of active tool
     if (e.button === 1) {
       e.preventDefault();
+      if (e.ctrlKey || e.metaKey) {
+        const now = Date.now();
+        if (now - lastCtrlMiddleDownAt <= 280) {
+          lastCtrlMiddleDownAt = 0;
+          isDragging = false;
+          canvas.style.cursor = '';
+          const rect = canvas.getBoundingClientRect();
+          const sx = e.clientX - rect.left;
+          const sy = e.clientY - rect.top;
+          toggleMiddleDoubleZoom(sx, sy);
+          return;
+        }
+        lastCtrlMiddleDownAt = now;
+      } else {
+        lastCtrlMiddleDownAt = 0;
+      }
       isDragging = true;
       dragStart = { x: e.clientX, y: e.clientY };
       canvas.style.cursor = 'grabbing';

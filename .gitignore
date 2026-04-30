@@ -186,3 +186,5 @@ models/*.yml
 runs/
 *.cache
 py_scripts/.venv
+
+datasets/

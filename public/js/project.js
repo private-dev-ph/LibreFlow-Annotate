@@ -569,6 +569,69 @@
     renderImagesV2();
   });
 
+  const btnExportDataset = document.getElementById('btn-export-dataset');
+  const btnAddFromDataset = document.getElementById('btn-add-from-dataset');
+  const datasetImportRow = document.getElementById('dataset-import-row');
+  const datasetSelect = document.getElementById('dataset-select');
+  const btnImportDataset = document.getElementById('btn-import-dataset');
+  const chkExportIncludeTags = document.getElementById('export-dataset-include-tags');
+  const chkImportIncludeTags = document.getElementById('import-dataset-include-tags');
+
+  async function refreshDatasetOptions() {
+    if (!datasetSelect) return;
+    const datasets = await API.getDatasets();
+    const owned = datasets.filter(d => d.userId === me.id || d.sharedWithCollaborators);
+    datasetSelect.innerHTML = owned.length
+      ? owned.map(d => `<option value="${escHtml(d.id)}">${escHtml(d.name)} (${d.imageCount || 0})</option>`).join('')
+      : '<option value="">No datasets available</option>';
+  }
+
+  btnAddFromDataset?.addEventListener('click', async () => {
+    datasetImportRow?.classList.toggle('hidden');
+    if (!datasetImportRow?.classList.contains('hidden')) {
+      try { await refreshDatasetOptions(); } catch {}
+    }
+  });
+
+  btnExportDataset?.addEventListener('click', async () => {
+    try {
+      const name = `${project.name} Dataset`;
+      const out = await API.exportDatasetFromProject(projectId, {
+        name,
+        includeTags: Boolean(chkExportIncludeTags?.checked),
+      });
+      if (out.error) throw new Error(out.error);
+      Notify.success('Dataset exported', `Created "${out.name}" with ${out.imageCount} images.`);
+    } catch (e) {
+      Notify.error('Dataset export failed', e.message);
+    }
+  });
+
+  btnImportDataset?.addEventListener('click', async () => {
+    const datasetId = datasetSelect?.value;
+    if (!datasetId) return;
+    try {
+      const out = await API.importDatasetToProject(datasetId, projectId, Boolean(chkImportIncludeTags?.checked));
+      if (out.error) throw new Error(out.error);
+      Notify.success('Dataset imported', `${out.images?.length || 0} images added.`);
+      await Promise.all([loadImages(), loadBatches()]);
+    } catch (e) {
+      Notify.error('Dataset import failed', e.message);
+    }
+  });
+  document.getElementById('image-search')?.addEventListener('input', e => {
+    imageSearchQuery = e.target.value || '';
+    renderImagesV2();
+  });
+  document.getElementById('image-sort-by')?.addEventListener('change', e => {
+    imageSortBy = e.target.value || 'uploadedAt_desc';
+    renderImagesV2();
+  });
+  document.getElementById('image-group-by')?.addEventListener('change', e => {
+    imageGroupBy = e.target.value || 'none';
+    renderImagesV2();
+  });
+
   function handleFiles(files) {
     const validFiles = files.filter(f =>
       f.type.startsWith('image/') || /\.zip$/i.test(f.name)
