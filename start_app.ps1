@@ -6,9 +6,33 @@
 $ErrorActionPreference = 'SilentlyContinue'
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+# Ensure Node.js is in PATH
+$env:Path = "C:\Program Files\nodejs;" + $env:Path
+
 Write-Host ""
 Write-Host "  LibreFlow Annotate" -ForegroundColor Cyan
 Write-Host "  ==================" -ForegroundColor Cyan
+Write-Host ""
+
+# ── Clean up any existing LibreFlow processes ─────────────────────────────────
+Write-Host "  Checking for existing LibreFlow instances..." -ForegroundColor Gray
+
+# Kill any Node.js processes (port 6767)
+$nodeProcs = Get-Process node -ErrorAction SilentlyContinue
+if ($nodeProcs) {
+    Write-Host "  Stopping existing Node.js servers..." -ForegroundColor Yellow
+    $nodeProcs | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
+}
+
+# Kill any Python/Uvicorn processes (port 7878)
+$pythonProcs = Get-Process python -ErrorAction SilentlyContinue
+if ($pythonProcs) {
+    Write-Host "  Stopping existing Python inference servers..." -ForegroundColor Yellow
+    $pythonProcs | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
+}
+
 Write-Host ""
 
 # ── Resolve paths ─────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ const path    = require('path');
 const fs      = require('fs');
 const AdmZip  = require('adm-zip');
 const { v4: uuidv4 } = require('uuid');
+const sharp   = require('sharp');
 
 const router = express.Router();
 const DATA_FILE    = path.join(__dirname, '..', 'data', 'images.json');
@@ -59,8 +60,38 @@ function canAccessProject(projectId, userId) {
   } catch { return false; }
 }
 
+function clampCompressionQuality(raw) {
+  const q = Number(raw);
+  if (!Number.isFinite(q)) return 70;
+  return Math.max(10, Math.min(100, Math.round(q)));
+}
+
+async function compressImageInPlace(filePath, quality) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.svg' || ext === '.gif') return;
+  if (!['.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff'].includes(ext)) return;
+
+  const original = fs.readFileSync(filePath);
+  let pipeline = sharp(original, { failOnError: false, limitInputPixels: false }).rotate();
+
+  if (ext === '.jpg' || ext === '.jpeg') {
+    pipeline = pipeline.jpeg({ quality, mozjpeg: true });
+  } else if (ext === '.png') {
+    pipeline = pipeline.png({ quality, compressionLevel: 9, effort: 10, palette: true });
+  } else if (ext === '.webp') {
+    pipeline = pipeline.webp({ quality, effort: 6 });
+  } else {
+    pipeline = pipeline.tiff({ quality, compression: 'lzw' });
+  }
+
+  const out = await pipeline.toBuffer();
+  if (out.length > 0 && out.length < original.length) {
+    fs.writeFileSync(filePath, out);
+  }
+}
+
 // Extract images from a ZIP, save to UPLOADS_DIR, return [{filename, originalName, size}]
-function extractZip(zipFilePath) {
+async function extractZip(zipFilePath, quality) {
   const zip     = new AdmZip(zipFilePath);
   const entries = zip.getEntries();
   const results = [];
@@ -72,6 +103,7 @@ function extractZip(zipFilePath) {
     const newName = uuidv4() + ext;
     const dest    = path.join(UPLOADS_DIR, newName);
     fs.writeFileSync(dest, entry.getData());
+    try { await compressImageInPlace(dest, quality); } catch {}
     results.push({ filename: newName, originalName: name, size: fs.statSync(dest).size });
   }
   return results;
@@ -103,12 +135,14 @@ router.get('/', (req, res) => {
 //  chunks end up in the same batch.
 router.post('/upload', (req, res) => {
   upload.array('images', 2000)(req, res, (err) => {
+    (async () => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 500 MB per file).' });
       return res.status(400).json({ error: err.message || 'Upload failed.' });
     }
 
     const { projectId, batchId: incomingBatchId, batchName } = req.body;
+    const compressionQuality = clampCompressionQuality(req.body.compressionQuality);
     if (!projectId) return res.status(400).json({ error: 'projectId is required.' });
 
     const uid = req.session.userId;
@@ -122,14 +156,21 @@ router.post('/upload', (req, res) => {
     const regularFiles = files.filter(f => !ALLOWED_ZIP_EXT.test(path.extname(f.originalname)));
     const zipFiles     = files.filter(f =>  ALLOWED_ZIP_EXT.test(path.extname(f.originalname)));
 
-    const toSave = regularFiles.map(f => ({
-      filename: f.filename, originalName: f.originalname, size: f.size,
-    }));
+    const toSave = [];
+    for (const f of regularFiles) {
+      const fp = path.join(UPLOADS_DIR, f.filename);
+      try { await compressImageInPlace(fp, compressionQuality); } catch {}
+      toSave.push({
+        filename: f.filename,
+        originalName: f.originalname,
+        size: fs.statSync(fp).size,
+      });
+    }
 
     // Extract each ZIP
     for (const zf of zipFiles) {
       const zipPath = path.join(UPLOADS_DIR, zf.filename);
-      try   { toSave.push(...extractZip(zipPath)); }
+      try   { toSave.push(...await extractZip(zipPath, compressionQuality)); }
       catch (e) { console.error(`ZIP extraction failed for ${zf.originalname}:`, e.message); }
       finally   { try { fs.unlinkSync(zipPath); } catch {} }
     }
@@ -184,6 +225,10 @@ router.post('/upload', (req, res) => {
     writeBatches(batches);
 
     res.status(201).json({ images: uploaded, batchId: batch.id, isNewBatch });
+    })().catch((e) => {
+      console.error('Upload pipeline failed:', e);
+      res.status(500).json({ error: 'Upload processing failed.' });
+    });
   });
 });
 

@@ -365,6 +365,25 @@
   // Drag-and-drop + click upload
   const dropZone = document.getElementById('drop-zone');
   const fileInput = document.getElementById('file-input');
+  const compressionQualitySlider = document.getElementById('compression-quality');
+  const compressionQualityInput = document.getElementById('compression-quality-input');
+
+  function getCompressionQuality() {
+    const raw = Number(compressionQualitySlider?.value || compressionQualityInput?.value || 70);
+    const safe = Number.isFinite(raw) ? raw : 70;
+    return Math.max(10, Math.min(100, Math.round(safe)));
+  }
+
+  function syncCompressionQuality(value, source) {
+    const clamped = Math.max(10, Math.min(100, Math.round(Number(value) || 70)));
+    if (source !== 'slider' && compressionQualitySlider) compressionQualitySlider.value = String(clamped);
+    if (source !== 'input' && compressionQualityInput) compressionQualityInput.value = String(clamped);
+  }
+
+  compressionQualitySlider?.addEventListener('input', () => syncCompressionQuality(compressionQualitySlider.value, 'slider'));
+  compressionQualityInput?.addEventListener('input', () => syncCompressionQuality(compressionQualityInput.value, 'input'));
+  compressionQualityInput?.addEventListener('blur', () => syncCompressionQuality(compressionQualityInput.value, 'input'));
+  syncCompressionQuality(70);
 
   dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
@@ -384,6 +403,7 @@
     Jobs.uploadChunked(projectId, validFiles, {
       name: label,
       batchName: label,
+      compressionQuality: getCompressionQuality(),
       onDone: ({ batchId }) => {
         loadImages();
         loadBatches();

@@ -200,7 +200,7 @@ const Jobs = (() => {
    *
    * @param {string}   projectId
    * @param {File[]}   files        – flat array of File objects
-   * @param {object}   opts         – { name, batchName, onDone, onError, onProgress }
+   * @param {object}   opts         – { name, batchName, compressionQuality, onDone, onError, onProgress }
    * @returns {string} jobId
    */
   function uploadChunked(projectId, files, opts = {}) {
@@ -208,6 +208,7 @@ const Jobs = (() => {
     const jobId      = `job-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
     const name       = opts.name  || `${files.length} files`;
     const batchLabel = opts.batchName || name;
+    const compressionQuality = Math.max(10, Math.min(100, Math.round(Number(opts.compressionQuality) || 70)));
     const total      = files.length;
 
     const job = {
@@ -250,6 +251,7 @@ const Jobs = (() => {
       const fd    = new FormData();
       fd.append('projectId', projectId);
       fd.append('batchName', batchLabel);
+      fd.append('compressionQuality', String(compressionQuality));
       if (batchId) fd.append('batchId', batchId);
       chunk.forEach(f => fd.append('images', f));
 

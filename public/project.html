@@ -137,6 +137,15 @@
       <div class="tab-panel" id="panel-images">
         <div class="section-card">
           <h2>Upload Images</h2>
+          <div class="compression-controls">
+            <label for="compression-quality">Compression Quality</label>
+            <div class="compression-quality-row">
+              <input type="range" id="compression-quality" min="10" max="100" value="70" />
+              <input type="number" id="compression-quality-input" min="10" max="100" value="70" />
+              <span class="compression-quality-suffix">%</span>
+            </div>
+            <div class="compression-help">Default 70%. Lower value = smaller file size, higher value = better quality.</div>
+          </div>
           <div class="drop-zone" id="drop-zone">
             <input type="file" id="file-input" multiple accept="image/*,.zip" />
             <div class="drop-icon">🖥</div>

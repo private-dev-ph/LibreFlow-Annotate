@@ -139,7 +139,7 @@ dist
 uploads/
 data/
 .env
-
+.venv
 # ── Python inference engine ───────────────────────────────────────────────────
 # Virtual environment
 py_scripts/.venv/
@@ -185,3 +185,4 @@ models/*.yml
 # YOLO/Ultralytics run artifacts
 runs/
 *.cache
+py_scripts/.venv

@@ -345,6 +345,37 @@
 .yaml-import-result.error   { background: rgba(224,92,92,.1);   border: 1px solid rgba(224,92,92,.3);   color: #e05c5c; }
 
 /* ── Images tab ── */
+.compression-controls {
+  background: #141828;
+  border: 1px solid #252a3d;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.compression-controls label {
+  display: block;
+  font-size: 12px;
+  color: #9aa6bd;
+  margin-bottom: 8px;
+}
+.compression-quality-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.compression-quality-row input[type="range"] { flex: 1; }
+.compression-quality-row input[type="number"] {
+  width: 72px;
+  background: #0f1117;
+  border: 1px solid #2f3550;
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+.compression-quality-suffix { color: #9aa6bd; font-size: 13px; }
+.compression-help { margin-top: 8px; font-size: 12px; color: #8892a4; }
+
 .drop-zone {
   border: 2px dashed #252a3d;
   border-radius: 12px;
