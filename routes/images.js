@@ -213,6 +213,7 @@ router.post('/upload', (req, res) => {
         originalName: f.originalName,
         url:          `/uploads/${f.filename}`,
         size:         f.size,
+        tags:         [],
         annotated:    false,
         uploadedAt:   new Date().toISOString(),
       };
@@ -265,7 +266,7 @@ router.delete('/:id', (req, res) => {
 });
 
 // ── PATCH /api/images/:id ─────────────────────────────────────────────────────
-// Accepts: { isNull: boolean }
+// Accepts: { isNull?: boolean, tags?: string[]|string }
 router.patch('/:id', (req, res) => {
   const images = readImages();
   const uid    = req.session.userId;
@@ -274,11 +275,29 @@ router.patch('/:id', (req, res) => {
   if (!canAccessProject(img.projectId, uid))
     return res.status(403).json({ error: 'Not authorized.' });
 
-  const { isNull } = req.body;
+  const { isNull, tags } = req.body;
   if (isNull !== undefined) {
     img.isNull    = Boolean(isNull);
     // Null-marked images count as annotated; un-marking resets to unannotated
     img.annotated = img.isNull ? true : false;
+  }
+  if (tags !== undefined) {
+    const arr = Array.isArray(tags)
+      ? tags
+      : String(tags || '')
+          .split(',')
+          .map(t => t.trim())
+          .filter(Boolean);
+    const seen = new Set();
+    img.tags = arr
+      .map(t => String(t).trim())
+      .filter(t => {
+        const key = t.toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 30);
   }
   writeImages(images);
   res.json(img);

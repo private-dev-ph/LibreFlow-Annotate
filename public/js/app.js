@@ -236,6 +236,8 @@
 
   // -- Load image into canvas -------------------------------------------------
   const btnMarkNull = document.getElementById('btn-mark-null');
+  const imageTagInput = document.getElementById('image-tag-input');
+  const btnSaveTag = document.getElementById('btn-save-tag');
 
   function updateNullButton(img) {
     if (!img) { btnMarkNull.classList.remove('is-null'); btnMarkNull.textContent = ''; return; }
@@ -260,6 +262,7 @@
     document.getElementById('btn-prev-img').disabled = idx === 0;
     document.getElementById('btn-next-img').disabled = idx === images.length - 1;
     updateNullButton(img);
+    if (imageTagInput) imageTagInput.value = (img.tags && img.tags[0]) ? img.tags[0] : '';
     renderImageList();
     // Populate semi-auto after image loads
     populateAutoModels();
@@ -283,6 +286,32 @@
       markingNull ? 'Image marked as null.' : 'Null mark removed.',
       markingNull ? 'success' : 'info'
     );
+  });
+
+  async function saveCurrentImageTag() {
+    if (currentIndex < 0 || !imageTagInput) return;
+    const img = images[currentIndex];
+    const tag = imageTagInput.value.trim();
+    const tags = tag ? [tag] : [];
+    const updated = await API.updateImage(img.id, { tags });
+    images[currentIndex].tags = updated.tags || tags;
+    showToast(tag ? `Tag saved: ${tag}` : 'Tag cleared.', 'info');
+  }
+
+  btnSaveTag?.addEventListener('click', async () => {
+    try { await saveCurrentImageTag(); }
+    catch (e) { showToast(e.message || 'Failed to save tag.', 'warn'); }
+  });
+
+  imageTagInput?.addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    try { await saveCurrentImageTag(); }
+    catch (err) { showToast(err.message || 'Failed to save tag.', 'warn'); }
+  });
+  imageTagInput?.addEventListener('blur', async () => {
+    try { await saveCurrentImageTag(); }
+    catch {}
   });
 
   // -- Shapes change callback -------------------------------------------------

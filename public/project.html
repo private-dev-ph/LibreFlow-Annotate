@@ -155,6 +155,23 @@
         </div>
         <div class="section-card">
           <h2>Images <span id="img-count" style="font-weight:400;font-size:14px;color:#8892a4"></span></h2>
+          <div class="images-controls">
+            <input type="text" id="image-search" placeholder='Search (e.g. name:panel tag:"component A" size:>1mb date:2026-04-30)' />
+            <select id="image-sort-by">
+              <option value="uploadedAt_desc">Newest Upload</option>
+              <option value="uploadedAt_asc">Oldest Upload</option>
+              <option value="name_asc">Name A-Z</option>
+              <option value="name_desc">Name Z-A</option>
+              <option value="size_desc">Size High-Low</option>
+              <option value="size_asc">Size Low-High</option>
+            </select>
+            <select id="image-group-by">
+              <option value="none">Group: None</option>
+              <option value="tag">Group: Tag</option>
+              <option value="date">Group: Upload Date</option>
+              <option value="size">Group: Size Range</option>
+            </select>
+          </div>
           <div id="images-grid" class="images-grid"></div>
           <div id="images-empty" class="images-empty" style="display:none">No images yet.</div>
         </div>

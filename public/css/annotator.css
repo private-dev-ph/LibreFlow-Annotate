@@ -250,6 +250,37 @@ html, body { height: 100%; overflow: hidden; }
   color: #f56450;
 }
 .btn-mark-null.is-null svg { stroke: #f56450; }
+.image-tag-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+}
+.image-tag-toolbar label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+#image-tag-input {
+  width: 160px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg3);
+  color: var(--text);
+  padding: 0 9px;
+  font-size: 12px;
+}
+.btn-tag-save {
+  height: 32px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn-tag-save:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Canvas wrapper */
 #canvas-wrapper {
