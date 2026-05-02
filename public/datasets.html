@@ -77,6 +77,12 @@
             Export ZIP
           </button>
           <label class="small-check"><input type="checkbox" id="export-include-tags" checked /> Include tags</label>
+          <select id="export-group-by" title="Group exported files into subfolders">
+            <option value="none">Group: None</option>
+            <option value="date">Group: Date</option>
+            <option value="tag">Group: Tag</option>
+            <option value="size">Group: Size</option>
+          </select>
           <button id="btn-edit-dataset" class="btn icon-btn">
             <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
             Edit

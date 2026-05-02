@@ -307,8 +307,9 @@
     const ds = selectedDataset();
     if (!ds) return Notify.warn('Select a dataset first.');
     const includeTags = document.getElementById('export-include-tags').checked;
+    const groupBy = document.getElementById('export-group-by')?.value || 'none';
     const a = document.createElement('a');
-    a.href = `/api/datasets/${ds.id}/export-zip?includeTags=${includeTags}`;
+    a.href = `/api/datasets/${ds.id}/export-zip?includeTags=${includeTags}&groupBy=${encodeURIComponent(groupBy)}`;
     a.download = '';
     a.click();
   });

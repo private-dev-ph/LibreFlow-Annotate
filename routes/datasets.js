@@ -430,15 +430,43 @@ router.get('/:id/export-zip', (req, res) => {
   if (!canAccessDataset(ds, uid)) return res.status(403).json({ error: 'Not authorized.' });
 
   const includeTags = String(req.query.includeTags || 'false') === 'true';
+  const groupBy = String(req.query.groupBy || 'none').toLowerCase();
   const zip = new AdmZip();
   const tagManifest = [];
+  const safeFolder = (s) => String(s || 'Unknown')
+    .replace(/[\\/:*?"<>|]+/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim() || 'Unknown';
+
+  function folderFor(img) {
+    if (groupBy === 'date') {
+      const d = img.uploadedAt ? new Date(img.uploadedAt) : null;
+      if (!d || Number.isNaN(d.getTime())) return 'Unknown Date';
+      return d.toISOString().slice(0, 10);
+    }
+    if (groupBy === 'tag') {
+      const firstTag = (img.tags || [])[0];
+      return firstTag ? `tag_${safeFolder(firstTag)}` : 'No Tag';
+    }
+    if (groupBy === 'size') {
+      const sz = img.size || 0;
+      if (sz < 500 * 1024) return 'size_lt_500KB';
+      if (sz < 2 * 1024 * 1024) return 'size_500KB_to_2MB';
+      if (sz < 10 * 1024 * 1024) return 'size_2MB_to_10MB';
+      return 'size_gte_10MB';
+    }
+    return '';
+  }
+
   (ds.images || []).forEach((img, idx) => {
     const fp = path.join(DATASETS_DIR, img.filename);
     if (!fs.existsSync(fp)) return;
     const ext = path.extname(img.originalName || img.filename) || '.jpg';
     const safeName = `${String(idx + 1).padStart(5, '0')}_${path.basename(img.originalName || img.filename, ext)}${ext}`;
-    zip.addFile(safeName, fs.readFileSync(fp));
-    if (includeTags) tagManifest.push({ file: safeName, tags: img.tags || [] });
+    const folder = folderFor(img);
+    const zipPath = folder ? `${folder}/${safeName}` : safeName;
+    zip.addFile(zipPath, fs.readFileSync(fp));
+    if (includeTags) tagManifest.push({ file: zipPath, tags: img.tags || [] });
   });
   if (includeTags) zip.addFile('tags.json', Buffer.from(JSON.stringify(tagManifest, null, 2)));
   zip.addFile('dataset.json', Buffer.from(JSON.stringify({
