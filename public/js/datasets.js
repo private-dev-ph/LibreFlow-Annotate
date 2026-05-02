@@ -308,10 +308,12 @@
     if (!ds) return Notify.warn('Select a dataset first.');
     const includeTags = document.getElementById('export-include-tags').checked;
     const groupBy = document.getElementById('export-group-by')?.value || 'none';
-    const a = document.createElement('a');
-    a.href = `/api/datasets/${ds.id}/export-zip?includeTags=${includeTags}&groupBy=${encodeURIComponent(groupBy)}`;
-    a.download = '';
-    a.click();
+    const url = `/api/datasets/${ds.id}/export-zip?includeTags=${includeTags}&groupBy=${encodeURIComponent(groupBy)}`;
+    Jobs.downloadFile(url, {
+      name: ds.name || 'Dataset',
+      type: 'dataset_export',
+      filename: `${(ds.name || 'dataset').replace(/[^a-z0-9-_]+/gi, '_')}.zip`,
+    });
   });
 
   document.getElementById('btn-edit-dataset').addEventListener('click', () => {

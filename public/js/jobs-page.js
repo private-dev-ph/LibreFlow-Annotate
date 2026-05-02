@@ -1,6 +1,5 @@
-// jobs-page.js  –  Jobs monitoring page
+// jobs-page.js - Jobs monitoring page
 (async () => {
-  //─── Auth guard ─────────────────────────────────────────────────────────────
   const me = await API.getMe();
   if (!me) { window.location.href = '/login'; return; }
 
@@ -13,15 +12,13 @@
     window.location.href = '/login';
   });
 
-  //─── Render ──────────────────────────────────────────────────────────────────
   function render() {
-    const jobs  = Jobs.getAll();
-    const list  = document.getElementById('jobs-list');
+    const jobs = Jobs.getAll();
+    const list = document.getElementById('jobs-list');
     const empty = document.getElementById('jobs-empty');
 
-    // Update badge
     const running = jobs.filter(j => j.status === 'running').length;
-    const badge   = document.getElementById('jobs-badge');
+    const badge = document.getElementById('jobs-badge');
     badge.textContent = running;
     badge.classList.toggle('hidden', running === 0);
 
@@ -33,11 +30,16 @@
     empty.style.display = 'none';
 
     list.innerHTML = jobs.map(j => {
-      const pct      = j.status === 'done' ? 100 : (j.progress || 0);
-      const icon     = j.type === 'model_upload' ? '🧠' : '🖼️';
+      const pct = j.status === 'done' ? 100 : (j.progress || 0);
+      const icon = j.type === 'model_upload'
+        ? '🧠'
+        : ((j.type === 'dataset_export' || j.type === 'export') ? '📦' : '🖼️');
       const badgeMap = { running: 'running', done: 'done', error: 'error' };
       const labelMap = { running: 'Running', done: 'Done', error: 'Error' };
       const timestamp = new Date(j.updatedAt || j.createdAt).toLocaleString();
+      const kindLabel = j.type === 'upload'
+        ? `${j.fileCount} file${j.fileCount !== 1 ? 's' : ''}`
+        : (j.type === 'model_upload' ? 'Model' : 'Export');
 
       return `
         <div class="job-card status-${j.status}">
@@ -45,7 +47,7 @@
             <div class="job-icon">${icon}</div>
             <div class="job-info">
               <div class="job-name">${escHtml(j.name)}</div>
-              <div class="job-meta">${j.type === 'upload' ? `${j.fileCount} file${j.fileCount !== 1 ? 's' : ''}` : 'Model'} &middot; ${timestamp}</div>
+              <div class="job-meta">${kindLabel} &middot; ${timestamp}</div>
             </div>
             <span class="job-badge badge-${badgeMap[j.status]}">${labelMap[j.status]}</span>
           </div>
@@ -66,13 +68,11 @@
   });
 
   function escHtml(s) {
-    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   render();
 
-  // Refresh running jobs every 2 seconds so progress is reflected if this page
-  // is open while an upload happens in another tab
   setInterval(() => {
     const anyRunning = Jobs.getAll().some(j => j.status === 'running');
     if (anyRunning) render();
