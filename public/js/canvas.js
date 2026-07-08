@@ -318,6 +318,46 @@ const Canvas = (() => {
     return { x, y, width, height };
   }
 
+  function bboxToXyxy(d) {
+    return [d.x, d.y, d.x + d.width, d.y + d.height];
+  }
+
+  function bboxOverlap(a, b) {
+    const [ax1, ay1, ax2, ay2] = bboxToXyxy(a);
+    const [bx1, by1, bx2, by2] = bboxToXyxy(b);
+    const ix1 = Math.max(ax1, bx1);
+    const iy1 = Math.max(ay1, by1);
+    const ix2 = Math.min(ax2, bx2);
+    const iy2 = Math.min(ay2, by2);
+    const intersection = Math.max(0, ix2 - ix1) * Math.max(0, iy2 - iy1);
+    const areaA = Math.max(0, ax2 - ax1) * Math.max(0, ay2 - ay1);
+    const areaB = Math.max(0, bx2 - bx1) * Math.max(0, by2 - by1);
+    const union = areaA + areaB - intersection;
+    const minArea = Math.min(areaA, areaB);
+    const acx = (ax1 + ax2) / 2;
+    const acy = (ay1 + ay2) / 2;
+    const bcx = (bx1 + bx2) / 2;
+    const bcy = (by1 + by2) / 2;
+    const minDiag = Math.min(Math.hypot(ax2 - ax1, ay2 - ay1), Math.hypot(bx2 - bx1, by2 - by1));
+
+    return {
+      iou: union > 0 ? intersection / union : 0,
+      containment: minArea > 0 ? intersection / minArea : 0,
+      centerRatio: minDiag > 0 ? Math.hypot(acx - bcx, acy - bcy) / minDiag : Infinity,
+    };
+  }
+
+  function isDuplicateBbox(candidate, existingShapes) {
+    if (!candidate || candidate.type !== 'bbox' || !candidate.data) return false;
+    return existingShapes.some(existing => {
+      if (existing.type !== 'bbox' || !existing.data) return false;
+      const overlap = bboxOverlap(candidate.data, existing.data);
+      if (overlap.iou >= 0.45) return true;
+      if (overlap.containment >= 0.80) return true;
+      return overlap.containment >= 0.60 && overlap.centerRatio <= 0.35;
+    });
+  }
+
   // Drag state for moving shapes
   let movingShape = null, moveStart = null, moveOrigData = null, moveDidChange = false;
 
@@ -729,8 +769,34 @@ const Canvas = (() => {
 
     // Add multiple shapes at once (e.g. from inference results)
     addShapes(newShapes) {
-      pushHistory();
+      const dedupedExisting = [];
+      const accepted = [];
+      let removedExisting = 0;
+      let skipped = 0;
+
+      shapes.forEach(s => {
+        if (isDuplicateBbox(s, dedupedExisting)) {
+          removedExisting += 1;
+          return;
+        }
+        dedupedExisting.push(s);
+      });
+
       newShapes.forEach(s => {
+        if (isDuplicateBbox(s, dedupedExisting.concat(accepted))) {
+          skipped += 1;
+          return;
+        }
+        accepted.push(s);
+      });
+
+      if (!accepted.length && !removedExisting) {
+        return { added: 0, skipped, removedExisting: 0 };
+      }
+
+      pushHistory();
+      if (removedExisting) shapes = dedupedExisting;
+      accepted.forEach(s => {
         shapes.push({
           id: genId(),
           label: s.label,
@@ -742,6 +808,7 @@ const Canvas = (() => {
       selectedId = null;
       draw();
       if (onShapesChange) onShapesChange(shapes, null, true);
+      return { added: accepted.length, skipped, removedExisting };
     },
 
     // Sync label→color map from project settings

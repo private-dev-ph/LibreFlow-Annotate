@@ -488,10 +488,23 @@
       });
       const data = await r.json();
       if (data.results && data.results.length > 0) {
-        Canvas.addShapes(data.results);
-        unsaved = true; saveIndicator.classList.add('show');
-        if (statusEl) { statusEl.textContent = `✓ ${data.results.length} annotation(s) applied. Review and save.`; statusEl.className = 'auto-status success'; }
-        showToast(`${data.results.length} auto-annotation(s) applied.`);
+        const applyResult = Canvas.addShapes(data.results);
+        const added = applyResult?.added ?? data.results.length;
+        const skipped = applyResult?.skipped ?? 0;
+        const removedExisting = applyResult?.removedExisting ?? 0;
+        if (added > 0 || removedExisting > 0) {
+          unsaved = true; saveIndicator.classList.add('show');
+          const skipText = skipped ? ` ${skipped} duplicate/overlap(s) skipped.` : '';
+          const cleanText = removedExisting ? ` ${removedExisting} existing overlap(s) removed.` : '';
+          if (statusEl) { statusEl.textContent = `✓ ${added} annotation(s) applied.${skipText}${cleanText} Review and save.`; statusEl.className = 'auto-status success'; }
+          showToast(`${added} auto-annotation(s) applied.${skipped ? ` ${skipped} skipped.` : ''}${removedExisting ? ` ${removedExisting} cleaned.` : ''}`);
+        } else {
+          const msg = skipped
+            ? `${skipped} duplicate/overlapping detection(s) skipped. Nothing new to add.`
+            : (data.message || 'No new detections to add.');
+          if (statusEl) { statusEl.textContent = msg; statusEl.className = 'auto-status warn'; }
+          showToast(msg, 'warn');
+        }
       } else {
         const msg = data.message || data.info || 'No detections returned.';
         if (statusEl) { statusEl.textContent = msg; statusEl.className = 'auto-status warn'; }

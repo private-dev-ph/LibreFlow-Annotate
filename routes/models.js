@@ -155,6 +155,54 @@ const IMAGES_FILE  = path.join(__dirname, '..', 'data', 'images.json');
 const UPLOADS_DIR  = path.join(__dirname, '..', 'uploads');
 const INFER_SERVER = process.env.INFER_SERVER_URL || 'http://127.0.0.1:7878';
 
+function bboxOverlap(a, b) {
+  const ax1 = a.x, ay1 = a.y, ax2 = a.x + a.width, ay2 = a.y + a.height;
+  const bx1 = b.x, by1 = b.y, bx2 = b.x + b.width, by2 = b.y + b.height;
+  const ix1 = Math.max(ax1, bx1);
+  const iy1 = Math.max(ay1, by1);
+  const ix2 = Math.min(ax2, bx2);
+  const iy2 = Math.min(ay2, by2);
+  const intersection = Math.max(0, ix2 - ix1) * Math.max(0, iy2 - iy1);
+  const areaA = Math.max(0, ax2 - ax1) * Math.max(0, ay2 - ay1);
+  const areaB = Math.max(0, bx2 - bx1) * Math.max(0, by2 - by1);
+  const union = areaA + areaB - intersection;
+  const minArea = Math.min(areaA, areaB);
+  const acx = (ax1 + ax2) / 2;
+  const acy = (ay1 + ay2) / 2;
+  const bcx = (bx1 + bx2) / 2;
+  const bcy = (by1 + by2) / 2;
+  const minDiag = Math.min(Math.hypot(ax2 - ax1, ay2 - ay1), Math.hypot(bx2 - bx1, by2 - by1));
+
+  return {
+    iou: union > 0 ? intersection / union : 0,
+    containment: minArea > 0 ? intersection / minArea : 0,
+    centerRatio: minDiag > 0 ? Math.hypot(acx - bcx, acy - bcy) / minDiag : Infinity,
+  };
+}
+
+function isDuplicateResult(a, b) {
+  if (a?.type !== 'bbox' || b?.type !== 'bbox' || !a.data || !b.data) return false;
+  const overlap = bboxOverlap(a.data, b.data);
+  if (overlap.iou >= 0.45) return true;
+  if (overlap.containment >= 0.80) return true;
+  return overlap.containment >= 0.60 && overlap.centerRatio <= 0.35;
+}
+
+function suppressOverlappingResults(results) {
+  const kept = [];
+  let removed = 0;
+
+  (results || []).forEach(result => {
+    if (kept.some(existing => isDuplicateResult(result, existing))) {
+      removed += 1;
+      return;
+    }
+    kept.push(result);
+  });
+
+  return { results: kept, removed };
+}
+
 // POST /:id/infer — delegates to the Python FastAPI inference server
 router.post('/:id/infer', async (req, res) => {
   const models = readModels();
@@ -200,6 +248,15 @@ router.post('/:id/infer', async (req, res) => {
       signal:  AbortSignal.timeout(180_000), // 3-min timeout for large models
     });
     const data = await inferRes.json();
+    if (Array.isArray(data.results)) {
+      const filtered = suppressOverlappingResults(data.results);
+      if (filtered.removed > 0) {
+        data.results = filtered.results;
+        data.count = filtered.results.length;
+        const suffix = ` Suppressed ${filtered.removed} overlapping duplicate(s).`;
+        data.message = data.message ? `${data.message}${suffix}` : suffix.trim();
+      }
+    }
     return res.status(inferRes.status).json(data);
   } catch (err) {
     const isRefused = err.cause?.code === 'ECONNREFUSED' || err.message?.includes('ECONNREFUSED');

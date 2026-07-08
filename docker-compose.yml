@@ -1,0 +1,49 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: libreflow-annotate-app:local
+    ports:
+      - "${PORT:-6767}:6767"
+    environment:
+      PORT: "6767"
+      SESSION_SECRET: "${SESSION_SECRET:-change-this-session-secret-for-docker}"
+      INFER_SERVER_URL: "http://inference:7878"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./models:/app/models
+      - ./datasets:/app/datasets
+    depends_on:
+      inference:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:6767/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  inference:
+    build:
+      context: .
+      dockerfile: Dockerfile.infer
+    image: libreflow-annotate-inference:local
+    environment:
+      YOLO_CONFIG_DIR: "/tmp/ultralytics"
+    ports:
+      - "${INFER_PORT:-7878}:7878"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./models:/app/models
+      - ./datasets:/app/datasets
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7878/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped

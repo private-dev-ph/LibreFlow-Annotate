@@ -66,6 +66,58 @@ def get_image_size(image_path: str) -> tuple[int, int]:
     return w, h
 
 
+def bbox_overlap(a: List[float], b: List[float]) -> Dict[str, float]:
+    """Return overlap metrics for two xyxy boxes."""
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
+    intersection = iw * ih
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    union = area_a + area_b - intersection
+    min_area = min(area_a, area_b)
+    acx, acy = (ax1 + ax2) / 2.0, (ay1 + ay2) / 2.0
+    bcx, bcy = (bx1 + bx2) / 2.0, (by1 + by2) / 2.0
+    min_diag = min(np.hypot(ax2 - ax1, ay2 - ay1), np.hypot(bx2 - bx1, by2 - by1))
+    center_distance = np.hypot(acx - bcx, acy - bcy)
+    return {
+        "iou": intersection / union if union > 0 else 0.0,
+        "containment": intersection / min_area if min_area > 0 else 0.0,
+        "center_ratio": center_distance / min_diag if min_diag > 0 else float("inf"),
+    }
+
+
+def is_duplicate_box(a: List[float], b: List[float]) -> bool:
+    """
+    Treat boxes as duplicates when they cover the same object.
+
+    IoU alone misses nested duplicates, so also check how much of the smaller
+    box is covered and whether the two centers are close.
+    """
+    overlap = bbox_overlap(a, b)
+    if overlap["iou"] >= 0.45:
+        return True
+    if overlap["containment"] >= 0.80:
+        return True
+    return overlap["containment"] >= 0.60 and overlap["center_ratio"] <= 0.35
+
+
+def suppress_overlapping_detections(
+    detections: List[Dict[str, Any]],
+) -> tuple[List[Dict[str, Any]], int]:
+    """Remove duplicate detections by keeping the highest-confidence box."""
+    kept: List[Dict[str, Any]] = []
+    removed = 0
+    for det in sorted(detections, key=lambda d: d["conf"], reverse=True):
+        if any(is_duplicate_box(det["box"], existing["box"]) for existing in kept):
+            removed += 1
+            continue
+        kept.append(det)
+    return kept, removed
+
+
 # ── NG type constants (mirrors pipeline.py) ────────────────────────────────────
 NG_TYPE_MAPPING: Dict[str, str] = {
     "burn":      "burn",
@@ -292,6 +344,11 @@ def infer(req: InferRequest):
     if not raw_detections:
         return InferResponse(results=[], count=0, message="No detections above threshold.")
 
+    raw_detection_count = len(raw_detections)
+    raw_detections, overlap_removed = suppress_overlapping_detections(raw_detections)
+    if overlap_removed:
+        log.info(f"Suppressed {overlap_removed} overlapping duplicate detection(s).")
+
     # ── Load optional classifiers ──
     cls_model       = None
     cls_fine_model  = None
@@ -359,10 +416,12 @@ def infer(req: InferRequest):
         })
 
     msg = (
-        f"{len(results)} annotation(s) generated from {len(raw_detections)} detection(s)."
+        f"{len(results)} annotation(s) generated from {raw_detection_count} detection(s)."
         if results else
         "All detections classified as GOOD — no annotations added."
     )
+    if overlap_removed:
+        msg += f" Suppressed {overlap_removed} overlapping duplicate(s)."
     return InferResponse(results=results, count=len(results), message=msg)
 
 
