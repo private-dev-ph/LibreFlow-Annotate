@@ -194,6 +194,36 @@ test('annotation provenance rejects model IDs from a different project', async (
   assert.match(result.body.error, /modelId/);
 });
 
+test('expanded annotation geometry persists through the secured save API', async () => {
+  const shapes = [
+    { id: 'rbox-1', label: 'part', type: 'rbox', data: { cx: 20, cy: 20, width: 12, height: 8, angle: 25 } },
+    { id: 'mask-1', label: 'part', type: 'mask', data: { contours: [
+      { operation: 'add', points: [{ x: 1, y: 1 }, { x: 8, y: 1 }, { x: 4, y: 9 }] },
+      { operation: 'subtract', points: [{ x: 3, y: 3 }, { x: 5, y: 3 }, { x: 4, y: 5 }] },
+    ] } },
+    { id: 'line-1', label: 'edge', type: 'line', data: { points: [{ x: 1, y: 1 }, { x: 4, y: 5 }] } },
+    { id: 'skeleton-1', label: 'pose', type: 'skeleton', data: {
+      points: [{ x: 1, y: 1, name: 'head', visible: true }, { x: 2, y: 6, name: 'body', visible: true }],
+      edges: [[0, 1]],
+    } },
+    { id: 'class-1', label: 'accepted', type: 'classification', data: { value: 'accepted' } },
+  ];
+  const saved = await request('/api/annotations', users.collaborator, {
+    method: 'POST', body: { imageId: 'img-one', shapes },
+  });
+  assert.equal(saved.status, 201);
+  assert.deepEqual(saved.body.map(shape => shape.type), shapes.map(shape => shape.type));
+  assert.deepEqual(saved.body[1].data.contours[1].operation, 'subtract');
+
+  const invalid = await request('/api/annotations', users.collaborator, {
+    method: 'POST', body: { imageId: 'img-one', shapes: [
+      { label: 'broken', type: 'line', data: { points: [{ x: 1, y: 2 }] } },
+    ] },
+  });
+  assert.equal(invalid.status, 400);
+  assert.match(invalid.body.error, /Invalid line/);
+});
+
 test('review workflow enforces reviewer assignment, decisions, issues, and audit events', async () => {
   const forbiddenAssignment = await request('/api/reviews/image/img-one', users.collaborator, {
     method: 'PATCH', body: { reviewerId: 'u-collab' },

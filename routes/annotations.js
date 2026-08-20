@@ -136,12 +136,65 @@ function normalizeShapes(shapes, existing, req, { restoring = false, defaultSour
   });
 }
 
+const SUPPORTED_ANNOTATION_TYPES = new Set([
+  'bbox', 'rbox', 'polygon', 'point', 'mask', 'line', 'skeleton', 'classification',
+]);
+
+function finiteNumber(value) {
+  return Number.isFinite(Number(value));
+}
+
+function validPoint(point) {
+  return point && finiteNumber(point.x) && finiteNumber(point.y);
+}
+
+function validPointList(points, minimum) {
+  return Array.isArray(points) && points.length >= minimum && points.length <= 100000 && points.every(validPoint);
+}
+
+function validGeometry(shape) {
+  const data = shape.data;
+  switch (shape.type) {
+    case 'bbox':
+      return data && ['x', 'y', 'width', 'height'].every(key => finiteNumber(data[key])) &&
+        Number(data.width) >= 0 && Number(data.height) >= 0;
+    case 'rbox':
+      return data && ['cx', 'cy', 'width', 'height', 'angle'].every(key => finiteNumber(data[key])) &&
+        Number(data.width) > 0 && Number(data.height) > 0;
+    case 'polygon':
+      return validPointList(data, 3);
+    case 'point':
+      return validPoint(data);
+    case 'mask': {  // Legacy masks may be stored as one polygon array.
+      const contours = Array.isArray(data) ? [{ operation: 'add', points: data }] : data?.contours;
+      return Array.isArray(contours) && contours.length > 0 && contours.length <= 10000 &&
+        contours.every(contour => ['add', 'subtract'].includes(contour?.operation || 'add') &&
+          validPointList(contour?.points, 3));
+    }
+    case 'line':
+      return validPointList(data?.points, 2);
+    case 'skeleton': {
+      if (!validPointList(data?.points, 2) || !Array.isArray(data.edges)) return false;
+      return data.edges.length <= 100000 && data.edges.every(edge =>
+        Array.isArray(edge) && edge.length === 2 && edge.every(index =>
+          Number.isInteger(index) && index >= 0 && index < data.points.length));
+    }
+    case 'classification':
+      return data && typeof data === 'object' && !Array.isArray(data);
+    default:
+      return false;
+  }
+}
+
 function validateShapes(shapes) {
   if (!Array.isArray(shapes)) return 'shapes must be an array.';
+  if (shapes.length > 100000) return 'Too many annotations in one request.';
   for (const shape of shapes) {
     if (!shape || !String(shape.label || '').trim()) return 'Every annotation requires a label.';
-    if (!['bbox', 'polygon', 'point'].includes(shape.type)) return 'Unsupported annotation type.';
+    if (String(shape.label).length > 200) return 'Annotation labels must be 200 characters or fewer.';
+    if (!SUPPORTED_ANNOTATION_TYPES.has(shape.type)) return 'Unsupported annotation type.';
     if (shape.data === undefined || shape.data === null) return 'Every annotation requires geometry data.';
+    if (!validGeometry(shape)) return `Invalid ${shape.type} annotation geometry.`;
   }
   return null;
 }
