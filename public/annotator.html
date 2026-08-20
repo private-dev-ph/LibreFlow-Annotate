@@ -92,6 +92,15 @@
             </label>
           </div>
         </div>
+        <div class="image-filter-row">
+          <select id="image-status-filter" aria-label="Filter images by annotation status">
+            <option value="all">All images</option>
+            <option value="unannotated">Unannotated</option>
+            <option value="annotated">Annotated</option>
+            <option value="null">Null / background</option>
+          </select>
+          <input id="annotator-image-search" type="search" placeholder="Search filename or tag" aria-label="Search images" />
+        </div>
         <ul id="images-list"></ul>
       </div>
 
@@ -113,11 +122,26 @@
           <button id="tool-bbox" class="tool-btn" title="Bounding Box (B)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
           </button>
+          <button id="tool-rbox" class="tool-btn" title="Rotated Box (R)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="5" width="14" height="14" rx="1" transform="rotate(18 12 12)"/></svg>
+          </button>
           <button id="tool-polygon" class="tool-btn" title="Polygon (P)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,3 21,18 3,18"/></svg>
           </button>
           <button id="tool-point" class="tool-btn" title="Point (K)">
             <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>
+          </button>
+          <button id="tool-mask" class="tool-btn" title="Freehand Mask (U). Alt-drag subtracts from the selected mask.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15c2-7 5-10 9-10 4 0 7 3 7 7s-3 7-8 7H6a2 2 0 0 1-2-4Z"/><path d="M8 16c2-1 3-4 3-7"/></svg>
+          </button>
+          <button id="tool-line" class="tool-btn" title="Polyline (L). Double-click to finish.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,17 8,8 14,14 21,5"/><circle cx="3" cy="17" r="1.5"/><circle cx="21" cy="5" r="1.5"/></svg>
+          </button>
+          <button id="tool-skeleton" class="tool-btn" title="Keypoint Skeleton (J). Double-click to finish.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="7" cy="12" r="2"/><circle cx="17" cy="12" r="2"/><circle cx="12" cy="19" r="2"/><path d="M11 7 8 10M13 7l3 3M9 13l2 4M15 13l-2 4"/></svg>
+          </button>
+          <button id="tool-smart" class="tool-btn" title="Smart Mask with SAM (S). Click foreground; Shift-click background; Ctrl-click to refine.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2Z"/><path d="m18 14 .8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8Z"/></svg>
           </button>
         </div>
         <div class="toolbar-sep"></div>
@@ -125,6 +149,9 @@
           <button id="tool-delete" class="tool-btn" title="Delete selected (Del)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
           </button>
+          <button id="tool-rotate-left" class="tool-btn" title="Rotate selected box left 5° ([)">↶</button>
+          <button id="tool-rotate-right" class="tool-btn" title="Rotate selected box right 5° (])">↷</button>
+          <button id="tool-classification" class="tool-btn" title="Add image-level classification (C)">C</button>
         </div>
         <div class="toolbar-sep"></div>
         <div class="tool-group">
@@ -152,6 +179,8 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           Save
         </button>
+        <button id="btn-save-next" class="btn-save btn-save-next" title="Save and open next image (Ctrl+Enter)">Save + Next</button>
+        <label class="autosave-toggle" title="Save changes automatically before navigation"><input id="autosave-toggle" type="checkbox" /> Auto-save</label>
         <span id="save-indicator" class="save-indicator">Unsaved</span>
         <div class="toolbar-sep"></div>
         <button id="btn-mark-null" class="btn-mark-null" title="Mark this image as intentionally empty (no objects to annotate). Will be included in exports without annotation entries.">
@@ -210,6 +239,15 @@
           <select id="auto-model-select">
             <option value="">– select model –</option>
           </select>
+
+          <div id="smart-mask-help" class="smart-mask-help hidden">
+            <strong>Smart Mask prompts</strong>
+            <span>Click foreground · Shift-click background · Ctrl-click to refine the current mask.</span>
+            <div class="smart-mask-actions">
+              <button id="btn-smart-commit" type="button">Keep mask</button>
+              <button id="btn-smart-reset" type="button">Reset prompts</button>
+            </div>
+          </div>
 
           <div class="slider-row" id="slider-row-detection" style="display:none">
             <label class="slider-label">Detection threshold: <span id="infer-conf-val">0.25</span></label>

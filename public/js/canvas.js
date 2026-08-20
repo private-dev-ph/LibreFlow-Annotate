@@ -23,10 +23,14 @@ const Canvas = (() => {
   let drawing = false;
   let startPt = null;
   let polygonPts = [];
+  let pathPts = [];
+  let freehandPts = [];
   let onShapesChange = null; // callback
   let onContextMenu  = null; // right-click label picker callback
+  let onSmartPrompt  = null; // optional async smart-segmentation prompt callback
   let hoveredId = null;      // annotation list hover highlight
   let annotationsHidden = false; // Shift-hold to temporarily hide all shapes
+  let smartShapeId = null;
   let lastCtrlMiddleDownAt = 0;
 
   // ── Undo / Redo ──────────────────────────────────────────────────────────
@@ -104,21 +108,22 @@ const Canvas = (() => {
       }
     }
 
-    // Draw in-progress polygon
-    if (tool === 'polygon' && polygonPts.length) {
+    // Draw in-progress polygon, polyline, or skeleton
+    const previewPts = tool === 'polygon' ? polygonPts : pathPts;
+    if (['polygon', 'line', 'skeleton'].includes(tool) && previewPts.length) {
       ctx.save();
       ctx.translate(offsetX, offsetY);
       ctx.scale(scale, scale);
       ctx.beginPath();
-      ctx.moveTo(polygonPts[0].x, polygonPts[0].y);
-      for (let i = 1; i < polygonPts.length; i++) ctx.lineTo(polygonPts[i].x, polygonPts[i].y);
+      ctx.moveTo(previewPts[0].x, previewPts[0].y);
+      for (let i = 1; i < previewPts.length; i++) ctx.lineTo(previewPts[i].x, previewPts[i].y);
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 1.5 / scale;
       ctx.setLineDash([4 / scale, 3 / scale]);
       ctx.stroke();
       ctx.setLineDash([]);
       // Draw dots
-      for (const p of polygonPts) {
+      for (const p of previewPts) {
         ctx.beginPath();
         ctx.arc(p.x, p.y, 4 / scale, 0, Math.PI * 2);
         ctx.fillStyle = '#fff';
@@ -127,8 +132,8 @@ const Canvas = (() => {
       ctx.restore();
     }
 
-    // Draw in-progress bbox
-    if (tool === 'bbox' && drawing && startPt) {
+    // Draw in-progress bbox / rotated bbox bounds
+    if ((tool === 'bbox' || tool === 'rbox') && drawing && startPt) {
       ctx.save();
       ctx.translate(offsetX, offsetY);
       ctx.scale(scale, scale);
@@ -141,6 +146,21 @@ const Canvas = (() => {
       ctx.restore();
     }
 
+    // Draw in-progress freehand mask contour.
+    if (tool === 'mask' && drawing && freehandPts.length > 1) {
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
+      ctx.beginPath();
+      ctx.moveTo(freehandPts[0].x, freehandPts[0].y);
+      for (let i = 1; i < freehandPts.length; i++) ctx.lineTo(freehandPts[i].x, freehandPts[i].y);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2 / scale;
+      ctx.setLineDash([5 / scale, 3 / scale]);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // Draw paste ghost
     if (pasteActive && copiedShape) {
       const imgPt = toImg(lastMouse.x, lastMouse.y);
@@ -148,18 +168,8 @@ const Canvas = (() => {
       ctx.globalAlpha = 0.55;
       ctx.translate(offsetX, offsetY);
       ctx.scale(scale, scale);
-      let ghost;
-      if (copiedShape.type === 'bbox') {
-        const { width, height } = copiedShape.data;
-        ghost = { ...copiedShape, data: { x: imgPt.x - width/2, y: imgPt.y - height/2, width, height } };
-      } else if (copiedShape.type === 'polygon') {
-        const cx = copiedShape.data.reduce((a,p)=>a+p.x,0)/copiedShape.data.length;
-        const cy = copiedShape.data.reduce((a,p)=>a+p.y,0)/copiedShape.data.length;
-        const dx = imgPt.x-cx, dy = imgPt.y-cy;
-        ghost = { ...copiedShape, data: copiedShape.data.map(p=>({x:p.x+dx,y:p.y+dy})) };
-      } else {
-        ghost = { ...copiedShape, data: imgPt };
-      }
+      const center = shapeCenter(copiedShape);
+      const ghost = { ...copiedShape, data: translateShapeData(copiedShape, copiedShape.data, imgPt.x-center.x, imgPt.y-center.y) };
       drawShape(ghost, false);
       ctx.restore();
     }
@@ -184,6 +194,25 @@ const Canvas = (() => {
       ctx.fillText(s.label, x + 3 / scale, y - 4 / scale);
 
       if (selected) drawHandles(x, y, width, height, color);
+    } else if (s.type === 'rbox') {
+      const { cx, cy, width, height, angle = 0 } = s.data;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle * Math.PI / 180);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color + '33';
+      ctx.fillRect(-width / 2, -height / 2, width, height);
+      ctx.strokeRect(-width / 2, -height / 2, width, height);
+      if (selected) {
+        ctx.fillStyle = '#fff';
+        for (const [hx, hy] of [[-width/2,-height/2],[width/2,-height/2],[width/2,height/2],[-width/2,height/2]]) {
+          ctx.beginPath(); ctx.arc(hx, hy, 4 / scale, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      ctx.restore();
+      ctx.fillStyle = color;
+      ctx.font = `${11 / scale}px sans-serif`;
+      ctx.fillText(`${s.label} ${Math.round(angle)}°`, cx - width / 2, cy - height / 2 - 4 / scale);
     } else if (s.type === 'polygon') {
       const pts = s.data;
       if (!pts || pts.length < 2) return;
@@ -198,7 +227,52 @@ const Canvas = (() => {
       ctx.fillStyle = color;
       ctx.font = `${11 / scale}px sans-serif`;
       ctx.fillText(s.label, pts[0].x + 3 / scale, pts[0].y - 4 / scale);
-    } else if (s.type === 'point') {
+    } else if (s.type === 'mask') {
+      const contours = Array.isArray(s.data) ? [{ operation: 'add', points: s.data }] : (s.data?.contours || []);
+      if (!contours.length) return;
+      ctx.beginPath();
+      for (const contour of contours) {
+        const pts = contour.points || [];
+        if (pts.length < 3) continue;
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.closePath();
+      }
+      ctx.fillStyle = color + (selected ? '66' : '44');
+      ctx.fill('evenodd');
+      ctx.strokeStyle = color;
+      ctx.stroke();
+      const anchor = contours[0]?.points?.[0];
+      if (anchor) {
+        ctx.fillStyle = color;
+        ctx.font = `${11 / scale}px sans-serif`;
+        ctx.fillText(s.label, anchor.x + 3 / scale, anchor.y - 4 / scale);
+      }
+    } else if (s.type === 'line') {
+      const pts = Array.isArray(s.data) ? s.data : (s.data?.points || []);
+      if (pts.length < 2) return;
+      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.strokeStyle = color; ctx.stroke();
+      ctx.fillStyle = color; ctx.font = `${11 / scale}px sans-serif`;
+      ctx.fillText(s.label, pts[0].x + 3 / scale, pts[0].y - 4 / scale);
+    } else if (s.type === 'skeleton') {
+      const points = s.data?.points || [];
+      const edges = s.data?.edges || points.slice(1).map((_, i) => [i, i + 1]);
+      ctx.strokeStyle = color;
+      for (const [a, b] of edges) {
+        if (!points[a] || !points[b]) continue;
+        ctx.beginPath(); ctx.moveTo(points[a].x, points[a].y); ctx.lineTo(points[b].x, points[b].y); ctx.stroke();
+      }
+      for (const p of points) {
+        ctx.beginPath(); ctx.arc(p.x, p.y, 5 / scale, 0, Math.PI * 2);
+        ctx.fillStyle = p.visible === false ? '#777' : color + 'cc'; ctx.fill();
+      }
+      if (points[0]) {
+        ctx.fillStyle = color; ctx.font = `${11 / scale}px sans-serif`;
+        ctx.fillText(s.label, points[0].x + 7 / scale, points[0].y - 5 / scale);
+      }
+    } else if (s.type === 'point' || s.type === 'keypoint') {
       const { x, y } = s.data;
       ctx.beginPath();
       ctx.arc(x, y, 6 / scale, 0, Math.PI * 2);
@@ -285,9 +359,25 @@ const Canvas = (() => {
       if (s.type === 'bbox') {
         const { x, y, width, height } = s.data;
         if (imgX >= x && imgX <= x + width && imgY >= y && imgY <= y + height) return s.id;
+      } else if (s.type === 'rbox') {
+        if (pointInPolygon(imgX, imgY, rboxCorners(s.data))) return s.id;
       } else if (s.type === 'polygon') {
         if (pointInPolygon(imgX, imgY, s.data)) return s.id;
-      } else if (s.type === 'point') {
+      } else if (s.type === 'mask') {
+        const contours = Array.isArray(s.data) ? [{ operation:'add', points:s.data }] : (s.data?.contours || []);
+        let inside = false;
+        for (const contour of contours) {
+          if (!pointInPolygon(imgX, imgY, contour.points || [])) continue;
+          inside = contour.operation !== 'subtract';
+        }
+        if (inside) return s.id;
+      } else if (s.type === 'line' || s.type === 'skeleton') {
+        const pts = shapePoints(s);
+        if (pts.some(p => Math.hypot(imgX - p.x, imgY - p.y) <= 8 / scale)) return s.id;
+        for (let p=1; p<pts.length; p++) {
+          if (pointSegmentDistance(imgX, imgY, pts[p-1], pts[p]) <= 6/scale) return s.id;
+        }
+      } else if (s.type === 'point' || s.type === 'keypoint') {
         const dist = Math.hypot(imgX - s.data.x, imgY - s.data.y);
         if (dist <= 8 / scale) return s.id;
       }
@@ -296,12 +386,67 @@ const Canvas = (() => {
   }
 
   function pointInPolygon(x, y, pts) {
+    if (!Array.isArray(pts) || pts.length < 3) return false;
     let inside = false;
     for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
       const xi = pts[i].x, yi = pts[i].y, xj = pts[j].x, yj = pts[j].y;
       if (((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)) inside = !inside;
     }
     return inside;
+  }
+
+  function pointSegmentDistance(px, py, a, b) {
+    const dx=b.x-a.x, dy=b.y-a.y;
+    if (!dx && !dy) return Math.hypot(px-a.x, py-a.y);
+    const t=Math.max(0,Math.min(1,((px-a.x)*dx+(py-a.y)*dy)/(dx*dx+dy*dy)));
+    return Math.hypot(px-(a.x+t*dx), py-(a.y+t*dy));
+  }
+
+  function rboxCorners(data) {
+    const { cx, cy, width, height, angle = 0 } = data;
+    const rad = angle * Math.PI / 180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    return [[-width/2,-height/2],[width/2,-height/2],[width/2,height/2],[-width/2,height/2]].map(([x,y]) => ({
+      x: cx + x * cos - y * sin,
+      y: cy + x * sin + y * cos,
+    }));
+  }
+
+  function shapePoints(s) {
+    if (s.type === 'polygon') return s.data || [];
+    if (s.type === 'line') return Array.isArray(s.data) ? s.data : (s.data?.points || []);
+    if (s.type === 'skeleton') return s.data?.points || [];
+    if (s.type === 'mask') {
+      const contours = Array.isArray(s.data) ? [{ points: s.data }] : (s.data?.contours || []);
+      return contours.flatMap(c => c.points || []);
+    }
+    if (s.type === 'rbox') return rboxCorners(s.data);
+    return [];
+  }
+
+  function translateShapeData(s, original, dx, dy) {
+    if (s.type === 'bbox') return clampBbox({ ...original, x: original.x + dx, y: original.y + dy });
+    if (s.type === 'rbox') return { ...original, cx: original.cx + dx, cy: original.cy + dy };
+    if (s.type === 'polygon' || (s.type === 'line' && Array.isArray(original))) {
+      return original.map(p => ({ ...p, x: p.x + dx, y: p.y + dy }));
+    }
+    if (s.type === 'line') return { ...original, points: (original.points || []).map(p => ({ ...p, x:p.x+dx, y:p.y+dy })) };
+    if (s.type === 'skeleton') return { ...original, points: (original.points || []).map(p => ({ ...p, x:p.x+dx, y:p.y+dy })) };
+    if (s.type === 'mask') {
+      if (Array.isArray(original)) return original.map(p => ({ ...p, x:p.x+dx, y:p.y+dy }));
+      return { ...original, contours: (original.contours || []).map(c => ({ ...c, points:(c.points||[]).map(p=>({ ...p, x:p.x+dx, y:p.y+dy })) })) };
+    }
+    if (s.type === 'point' || s.type === 'keypoint') return { ...original, x: original.x + dx, y: original.y + dy };
+    return original;
+  }
+
+  function shapeCenter(s) {
+    if (s.type === 'bbox') return { x:s.data.x + s.data.width/2, y:s.data.y + s.data.height/2 };
+    if (s.type === 'rbox') return { x:s.data.cx, y:s.data.cy };
+    if (s.type === 'point' || s.type === 'keypoint') return { x:s.data.x, y:s.data.y };
+    const pts = shapePoints(s);
+    if (!pts.length) return { x:0, y:0 };
+    return { x:pts.reduce((n,p)=>n+p.x,0)/pts.length, y:pts.reduce((n,p)=>n+p.y,0)/pts.length };
   }
 
   /** Clamp a bbox so it stays fully within the loaded image bounds. */
@@ -422,6 +567,7 @@ const Canvas = (() => {
       canvas.style.cursor = 'grabbing';
       return;
     }
+    if (e.button !== 0) return;
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
@@ -429,19 +575,9 @@ const Canvas = (() => {
 
     // Place a pasted copy
     if (pasteActive && copiedShape) {
-      let newData;
       pushHistory();
-      if (copiedShape.type === 'bbox') {
-        const { width, height } = copiedShape.data;
-        newData = { x: imgPt.x - width/2, y: imgPt.y - height/2, width, height };
-      } else if (copiedShape.type === 'polygon') {
-        const cx = copiedShape.data.reduce((a,p)=>a+p.x,0)/copiedShape.data.length;
-        const cy = copiedShape.data.reduce((a,p)=>a+p.y,0)/copiedShape.data.length;
-        const dx = imgPt.x-cx, dy = imgPt.y-cy;
-        newData = copiedShape.data.map(p=>({x:p.x+dx,y:p.y+dy}));
-      } else {
-        newData = { ...imgPt };
-      }
+      const center = shapeCenter(copiedShape);
+      const newData = translateShapeData(copiedShape, copiedShape.data, imgPt.x-center.x, imgPt.y-center.y);
       const placed = { ...copiedShape, id: genId(), data: newData };
       shapes.push(placed);
       selectedId = placed.id;
@@ -484,9 +620,15 @@ const Canvas = (() => {
         if (onShapesChange) onShapesChange(shapes, selectedId, false);
       }
       draw();
-    } else if (tool === 'bbox') {
+    } else if (tool === 'bbox' || tool === 'rbox') {
       drawing = true;
       startPt = imgPt;
+    } else if (tool === 'mask') {
+      drawing = true;
+      freehandPts = [imgPt];
+      canvas.style.cursor = 'crosshair';
+    } else if (tool === 'smart') {
+      if (onSmartPrompt) onSmartPrompt({ point: imgPt, positive: !e.shiftKey });
     } else if (tool === 'point') {
       App.promptLabel(label => {
         if (!label) return;
@@ -538,16 +680,15 @@ const Canvas = (() => {
       const imgPt = toImg(sx, sy);
       const dx = imgPt.x - moveStart.x;
       const dy = imgPt.y - moveStart.y;
-      if (movingShape.type === 'bbox') {
-        movingShape.data = clampBbox({ ...moveOrigData, x: moveOrigData.x + dx, y: moveOrigData.y + dy });
-      } else if (movingShape.type === 'polygon') {
-        movingShape.data = moveOrigData.map(p => ({ x: p.x + dx, y: p.y + dy }));
-      } else if (movingShape.type === 'point') {
-        movingShape.data = { x: moveOrigData.x + dx, y: moveOrigData.y + dy };
-      }
+      movingShape.data = translateShapeData(movingShape, moveOrigData, dx, dy);
       moveDidChange = true;
       draw();
-    } else if (tool === 'bbox' && drawing) {
+    } else if ((tool === 'bbox' || tool === 'rbox') && drawing) {
+      draw();
+    } else if (tool === 'mask' && drawing) {
+      const imgPt = toImg(sx, sy);
+      const last = freehandPts[freehandPts.length - 1];
+      if (!last || Math.hypot(imgPt.x-last.x, imgPt.y-last.y) >= 2/scale) freehandPts.push(imgPt);
       draw();
     } else if (tool === 'select') {
       // Update cursor to indicate resize handles or movable shapes
@@ -601,7 +742,7 @@ const Canvas = (() => {
     const sy = e.clientY - rect.top;
     const imgPt = toImg(sx, sy);
 
-    if (tool === 'bbox' && drawing) {
+    if ((tool === 'bbox' || tool === 'rbox') && drawing) {
       drawing = false;
       const w = imgPt.x - startPt.x;
       const h = imgPt.y - startPt.y;
@@ -615,9 +756,39 @@ const Canvas = (() => {
           width: Math.abs(w),
           height: Math.abs(h),
         });
-        const s = { id: genId(), label, type: 'bbox', data: bbox, color: colorFor(label) };
+        const data = tool === 'rbox'
+          ? { cx:bbox.x+bbox.width/2, cy:bbox.y+bbox.height/2, width:bbox.width, height:bbox.height, angle:0 }
+          : bbox;
+        const s = { id: genId(), label, type: tool, data, color: colorFor(label) };
         shapes.push(s);
         selectedId = s.id;
+        if (onShapesChange) onShapesChange(shapes, selectedId, true);
+        draw();
+      });
+    } else if (tool === 'mask' && drawing) {
+      drawing = false;
+      canvas.style.cursor = '';
+      if (freehandPts.length < 3) { freehandPts = []; draw(); return; }
+      const contour = [...freehandPts];
+      freehandPts = [];
+      App.promptLabel(label => {
+        if (!label) { draw(); return; }
+        pushHistory();
+        const selectedMask = e.altKey ? shapes.find(x => x.id === selectedId && x.type === 'mask') : null;
+        if (selectedMask) {
+          const existing = Array.isArray(selectedMask.data)
+            ? [{ operation:'add', points:selectedMask.data }]
+            : (selectedMask.data?.contours || []);
+          selectedMask.data = { contours:[...existing, { operation:'subtract', points:contour }] };
+          if (onShapesChange) onShapesChange(shapes, selectedId, true);
+          draw();
+          return;
+        }
+        const s = {
+          id: genId(), label, type:'mask', color:colorFor(label),
+          data:{ contours:[{ operation:'add', points:contour }] },
+        };
+        shapes.push(s); selectedId=s.id;
         if (onShapesChange) onShapesChange(shapes, selectedId, true);
         draw();
       });
@@ -625,25 +796,40 @@ const Canvas = (() => {
   }
 
   function onDblClick(e) {
-    if (tool !== 'polygon') return;
-    if (polygonPts.length < 3) { polygonPts = []; return; }
+    if (!['polygon', 'line', 'skeleton'].includes(tool)) return;
+    const pts = tool === 'polygon' ? polygonPts : pathPts;
+    while (pts.length > 1) {
+      const a = pts[pts.length - 1], b = pts[pts.length - 2];
+      if (Math.hypot(a.x-b.x, a.y-b.y) > 2/scale) break;
+      pts.pop();
+    }
+    const minimum = tool === 'polygon' ? 3 : 2;
+    if (pts.length < minimum) { polygonPts = []; pathPts = []; return; }
     App.promptLabel(label => {
-      if (!label) { polygonPts = []; return; }
+      if (!label) { polygonPts = []; pathPts = []; return; }
       pushHistory();
-      const s = { id: genId(), label, type: 'polygon', data: [...polygonPts], color: colorFor(label) };
+      let data;
+      if (tool === 'skeleton') {
+        const clean = pts.map((p, i) => ({ ...p, name:`p${i+1}`, visible:true }));
+        data = { points:clean, edges:clean.slice(1).map((_, i)=>[i,i+1]) };
+      } else if (tool === 'line') data = { points:[...pts] };
+      else data = [...pts];
+      const s = { id: genId(), label, type:tool, data, color: colorFor(label) };
       shapes.push(s);
       selectedId = s.id;
       polygonPts = [];
+      pathPts = [];
       if (onShapesChange) onShapesChange(shapes, selectedId, true);
       draw();
     });
   }
 
   function onClick(e) {
-    if (tool !== 'polygon') return;
+    if (!['polygon', 'line', 'skeleton'].includes(tool)) return;
     const rect = canvas.getBoundingClientRect();
     const imgPt = toImg(e.clientX - rect.left, e.clientY - rect.top);
-    polygonPts.push(imgPt);
+    if (tool === 'polygon') polygonPts.push(imgPt);
+    else pathPts.push(imgPt);
     draw();
   }
 
@@ -698,6 +884,7 @@ const Canvas = (() => {
       undoStack = [];
       redoStack = [];
       shapes = existingShapes.map(a => ({
+        ...a,
         id: a.id || genId(),
         label: a.label,
         type: a.type,
@@ -706,6 +893,9 @@ const Canvas = (() => {
       }));
       selectedId = null;
       polygonPts = [];
+      pathPts = [];
+      freehandPts = [];
+      smartShapeId = null;
       // Immediately update panel (before image loads)
       if (onShapesChange) onShapesChange(shapes, null, false);
       const image = new Image();
@@ -717,9 +907,12 @@ const Canvas = (() => {
       image.src = src;
     },
 
-    setTool(t) { tool = t; polygonPts = []; drawing = false; draw(); },
+    setTool(t) { tool = t; polygonPts = []; pathPts = []; freehandPts = []; drawing = false; draw(); },
     getCurrentTool() { return tool; },
     setContextMenuCallback(cb) { onContextMenu = cb; },
+    setSmartPromptCallback(cb) { onSmartPrompt = cb; },
+    getImageSize() { return img ? { width:img.width, height:img.height } : null; },
+    getSelected() { return shapes.find(s => s.id === selectedId) || null; },
 
     setSelected(id) { selectedId = id; draw(); if (onShapesChange) onShapesChange(shapes, id, false); },
 
@@ -745,10 +938,58 @@ const Canvas = (() => {
 
     getShapes() { return shapes; },
 
+    addClassification(label) {
+      if (!label) return false;
+      if (shapes.some(s => s.type === 'classification' && s.label === label)) return false;
+      pushHistory();
+      const s = { id:genId(), label, type:'classification', data:{ value:label }, color:colorFor(label) };
+      shapes.push(s); selectedId=s.id;
+      if (onShapesChange) onShapesChange(shapes, selectedId, true);
+      draw();
+      return true;
+    },
+
+    rotateSelected(deltaDegrees) {
+      const s = shapes.find(x => x.id === selectedId && x.type === 'rbox');
+      if (!s) return false;
+      pushHistory();
+      s.data.angle = ((Number(s.data.angle || 0) + deltaDegrees + 180) % 360) - 180;
+      if (onShapesChange) onShapesChange(shapes, selectedId, true);
+      draw();
+      return true;
+    },
+
+    upsertSmartMask(shape) {
+      if (!shape) return null;
+      pushHistory();
+      const existing = smartShapeId && shapes.find(s => s.id === smartShapeId);
+      if (existing) {
+        Object.assign(existing, shape, { id:existing.id, type:shape.type || 'mask' });
+        existing.color = colorFor(shape.label);
+        selectedId = existing.id;
+      } else {
+        const created = { ...shape, id:genId(), label:shape.label, type:shape.type || 'mask', data:shape.data, color:colorFor(shape.label) };
+        shapes.push(created); smartShapeId=created.id; selectedId=created.id;
+      }
+      if (onShapesChange) onShapesChange(shapes, selectedId, true);
+      draw();
+      return selectedId;
+    },
+
+    commitSmartMask() { smartShapeId = null; },
+    resetSmartMask(removePreview = true) {
+      if (removePreview && smartShapeId) {
+        const before = shapes.length;
+        shapes = shapes.filter(s => s.id !== smartShapeId);
+        if (shapes.length !== before && onShapesChange) onShapesChange(shapes, null, true);
+      }
+      smartShapeId = null; selectedId = null; draw();
+    },
+
     // Copy the selected shape
     copySelected() {
       const s = shapes.find(x => x.id === selectedId);
-      if (!s) return false;
+      if (!s || s.type === 'classification') return false;
       copiedShape = JSON.parse(JSON.stringify(s));
       return true;
     },
@@ -798,6 +1039,7 @@ const Canvas = (() => {
       if (removedExisting) shapes = dedupedExisting;
       accepted.forEach(s => {
         shapes.push({
+          ...s,
           id: genId(),
           label: s.label,
           type: s.type,
@@ -855,5 +1097,8 @@ const Canvas = (() => {
     canRedo() { return redoStack.length > 0; },
 
     colorFor,
+    _geometry: { pointInPolygon, rboxCorners, shapeCenter, translateShapeData },
   };
 })();
+
+if (typeof module !== 'undefined' && module.exports) module.exports = Canvas;

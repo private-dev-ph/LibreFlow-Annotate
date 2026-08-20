@@ -26,7 +26,7 @@ import yaml
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from ultralytics import YOLO
+from ultralytics import YOLO, SAM
 
 logging.basicConfig(level=logging.INFO, format="[INFER] %(message)s")
 log = logging.getLogger("infer")
@@ -44,6 +44,7 @@ app.add_middleware(
 
 # ── Model cache (avoid reloading on every request) ─────────────────────────────
 _model_cache: Dict[str, YOLO] = {}
+_sam_cache: Dict[str, SAM] = {}
 
 
 def load_model(model_path: str) -> YOLO:
@@ -55,6 +56,16 @@ def load_model(model_path: str) -> YOLO:
         _model_cache[model_path] = YOLO(model_path)
         log.info(f"Model loaded. Classes: {_model_cache[model_path].names}")
     return _model_cache[model_path]
+
+
+def load_sam_model(model_path: str) -> SAM:
+    """Load and cache an uploaded SAM, MobileSAM, or SAM2 checkpoint."""
+    if model_path not in _sam_cache:
+        if not Path(model_path).exists():
+            raise FileNotFoundError(f"Segmentation model file not found: {model_path}")
+        log.info(f"Loading promptable segmentation model: {model_path}")
+        _sam_cache[model_path] = SAM(model_path)
+    return _sam_cache[model_path]
 
 
 def get_image_size(image_path: str) -> tuple[int, int]:
@@ -169,6 +180,22 @@ class InferResponse(BaseModel):
     results:  List[Dict[str, Any]]
     count:    int
     message:  str
+
+
+class SegmentRequest(BaseModel):
+    """POST /segment request body for SAM-style interactive prompting."""
+    model_path: str
+    image_path: str
+    label: str = "object"
+    points: Optional[List[List[float]]] = None
+    point_labels: Optional[List[int]] = None
+    bboxes: Optional[List[List[float]]] = None
+
+
+class SegmentResponse(BaseModel):
+    results: List[Dict[str, Any]]
+    count: int
+    message: str
 
 
 # ── Classification helpers (ported from pipeline.py) ──────────────────────────
@@ -425,11 +452,68 @@ def infer(req: InferRequest):
     return InferResponse(results=results, count=len(results), message=msg)
 
 
+@app.post("/segment", response_model=SegmentResponse)
+def segment(req: SegmentRequest):
+    """Create editable mask contours from positive/negative point or box prompts."""
+    if not req.points and not req.bboxes:
+        raise HTTPException(400, "At least one point or bounding-box prompt is required.")
+    if req.points and len(req.points) != len(req.point_labels or []):
+        raise HTTPException(400, "points and point_labels must have the same length.")
+
+    try:
+        model = load_sam_model(req.model_path)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(400, str(exc))
+    if not Path(req.image_path).exists():
+        raise HTTPException(400, f"Image file not found: {req.image_path}")
+
+    kwargs: Dict[str, Any] = {"verbose": False, "save": False}
+    if req.points:
+        # A nested prompt represents one object refined by several foreground/background clicks.
+        kwargs["points"] = [req.points]
+        kwargs["labels"] = [req.point_labels]
+    if req.bboxes:
+        kwargs["bboxes"] = req.bboxes
+
+    try:
+        predictions = model(req.image_path, **kwargs)
+    except Exception as exc:
+        log.exception("Interactive segmentation failed")
+        raise HTTPException(422, f"Segmentation failed: {exc}")
+
+    output: List[Dict[str, Any]] = []
+    for prediction in predictions or []:
+        masks = getattr(prediction, "masks", None)
+        polygons = getattr(masks, "xy", None) if masks is not None else None
+        if polygons is None:
+            continue
+        for polygon in polygons:
+            points = [{"x": float(p[0]), "y": float(p[1])} for p in polygon.tolist()]
+            if len(points) < 3:
+                continue
+            output.append({
+                "label": req.label,
+                "type": "mask",
+                "data": {"contours": [{"operation": "add", "points": points}]},
+                "source": "sam",
+            })
+
+    return SegmentResponse(
+        results=output,
+        count=len(output),
+        message=f"Generated {len(output)} interactive mask(s)." if output else "No mask returned for these prompts.",
+    )
+
+
 # ── Status/health endpoints ────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "cached_models": list(_model_cache.keys())}
+    return {
+        "status": "ok",
+        "cached_models": list(_model_cache.keys()),
+        "cached_segmentation_models": list(_sam_cache.keys()),
+    }
 
 
 @app.get("/models")
@@ -445,6 +529,7 @@ def list_cached():
 @app.delete("/models/cache")
 def clear_cache():
     _model_cache.clear()
+    _sam_cache.clear()
     return {"message": "Model cache cleared."}
 
 

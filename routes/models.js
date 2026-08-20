@@ -271,4 +271,51 @@ router.post('/:id/infer', async (req, res) => {
   }
 });
 
+// POST /:id/segment — interactive SAM/SAM2 mask generation from point/box prompts
+router.post('/:id/segment', async (req, res) => {
+  const uid = req.session.userId;
+  const models = readModels();
+  const model = models.find(m => m.id === req.params.id);
+  if (!model) return res.status(404).json({ error: 'Model not found.' });
+
+  const project = readProjects().find(p => p.id === model.projectId);
+  const canAccessModel = project && (
+    project.userId === uid || (project.collaborators || []).some(c => c.userId === uid)
+  );
+  if (!canAccessModel) return res.status(403).json({ error: 'Not authorized to use this model.' });
+  if (model.type !== 'segmentation') {
+    return res.status(400).json({ error: 'Select a segmentation/SAM model for Smart Mask.' });
+  }
+
+  const { imageId, label, points, pointLabels, bboxes } = req.body;
+  const allImages = (() => { try { return JSON.parse(fs.readFileSync(IMAGES_FILE, 'utf-8')); } catch { return []; } })();
+  const img = allImages.find(i => i.id === imageId && i.projectId === model.projectId);
+  if (!img) return res.status(404).json({ error: 'Image not found in the model project.' });
+
+  const payload = {
+    model_path: path.join(MODELS_DIR, model.filename),
+    image_path: path.join(UPLOADS_DIR, img.filename),
+    label: label || 'object',
+    points: Array.isArray(points) && points.length ? points : null,
+    point_labels: Array.isArray(pointLabels) && pointLabels.length ? pointLabels : null,
+    bboxes: Array.isArray(bboxes) && bboxes.length ? bboxes : null,
+  };
+
+  try {
+    const inferRes = await fetch(`${INFER_SERVER}/segment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(180_000),
+    });
+    const data = await inferRes.json();
+    return res.status(inferRes.status).json(data);
+  } catch (err) {
+    const refused = err.cause?.code === 'ECONNREFUSED' || err.message?.includes('ECONNREFUSED');
+    return res.status(refused ? 503 : 502).json({
+      error: refused ? 'Inference server is not running.' : (err.message || String(err)),
+    });
+  }
+});
+
 module.exports = router;
