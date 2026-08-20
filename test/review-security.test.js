@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const AdmZip = require('adm-zip');
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'libreflow-review-test-'));
 const dataDir = path.join(tempRoot, 'data');
@@ -50,6 +51,7 @@ function resetData() {
       id: 'p-one', userId: 'u-owner', name: 'Accessible',
       collaborators: [{ userId: 'u-collab', username: 'annotator' }],
     },
+    { id: 'p-owner-private', userId: 'u-owner', name: 'Unrelated', collaborators: [] },
     { id: 'p-two', userId: 'u-outside', name: 'Private', collaborators: [] },
   ]);
   write('images.json', [
@@ -57,14 +59,21 @@ function resetData() {
     { id: 'img-two', projectId: 'p-two', userId: 'u-outside', filename: 'two.jpg', originalName: 'two.jpg', annotated: false },
   ]);
   write('models.json', [
-    { id: 'model-one', projectId: 'p-one', userId: 'u-owner', filename: 'one.pt', name: 'One', type: 'detection' },
-    { id: 'model-segment', projectId: 'p-one', userId: 'u-owner', filename: 'sam.pt', name: 'SAM', type: 'segmentation' },
-    { id: 'model-two', projectId: 'p-two', userId: 'u-outside', filename: 'two.pt', name: 'Two', type: 'segmentation' },
+    { id: 'model-one', projectId: 'p-one', userId: 'u-owner', filename: 'one.pt', name: 'One', type: 'detection', sharedWithCollaborators: true },
+    { id: 'model-segment', projectId: 'p-one', userId: 'u-owner', filename: 'sam.pt', name: 'SAM', type: 'segmentation', sharedWithCollaborators: true },
+    { id: 'model-private', projectId: 'p-one', userId: 'u-owner', filename: 'private.pt', name: 'Private', type: 'detection', sharedWithCollaborators: false },
+    { id: 'model-two', projectId: 'p-two', userId: 'u-outside', filename: 'two.pt', name: 'Two', type: 'segmentation', sharedWithCollaborators: false },
   ]);
-  write('datasets.json', [{
-    id: 'dataset-one', userId: 'u-owner', sharedWithCollaborators: true,
-    images: [{ id: 'dataset-image', filename: 'dataset-one.jpg' }],
-  }]);
+  write('datasets.json', [
+    {
+      id: 'dataset-one', userId: 'u-owner', sourceProjectId: 'p-one', sharedWithCollaborators: true,
+      images: [{ id: 'dataset-image', filename: 'dataset-one.jpg' }],
+    },
+    {
+      id: 'dataset-unrelated', userId: 'u-owner', sourceProjectId: 'p-owner-private', sharedWithCollaborators: true,
+      images: [{ id: 'unrelated-image', filename: 'dataset-unrelated.jpg' }],
+    },
+  ]);
   write('annotations.json', [{
     id: 'legacy-ann', imageId: 'img-one', label: 'legacy', type: 'bbox',
     data: { x: 1, y: 2, width: 3, height: 4 }, createdAt: '2025-01-01T00:00:00.000Z',
@@ -224,6 +233,39 @@ test('expanded annotation geometry persists through the secured save API', async
   assert.match(invalid.body.error, /Invalid line/);
 });
 
+test('COCO ZIP maps rich geometry and always includes a lossless LibreFlow payload', async () => {
+  const shapes = [
+    { id: 'bbox-export', label: 'part', type: 'bbox', data: { x: 1, y: 2, width: 10, height: 11 } },
+    { id: 'rbox-export', label: 'part', type: 'rbox', data: { cx: 30, cy: 30, width: 12, height: 8, angle: 30 } },
+    { id: 'mask-export', label: 'part', type: 'mask', data: { contours: [
+      { operation: 'add', points: [{ x: 1, y: 1 }, { x: 9, y: 1 }, { x: 5, y: 9 }] },
+      { operation: 'subtract', points: [{ x: 4, y: 3 }, { x: 6, y: 3 }, { x: 5, y: 5 }] },
+    ] } },
+    { id: 'line-export', label: 'edge', type: 'line', data: { points: [{ x: 2, y: 2 }, { x: 8, y: 8 }] } },
+    { id: 'class-export', label: 'accepted', type: 'classification', data: { value: 'accepted' } },
+  ];
+  assert.equal((await request('/api/annotations', users.owner, {
+    method: 'POST', body: { imageId: 'img-one', shapes },
+  })).status, 201);
+
+  const response = await fetch(`${baseUrl}/api/annotations/export-zip/p-one?format=coco`, {
+    headers: { 'x-test-user': users.owner.userId, 'x-test-username': users.owner.username },
+  });
+  assert.equal(response.status, 200);
+  const zip = new AdmZip(Buffer.from(await response.arrayBuffer()));
+  const coco = JSON.parse(zip.readAsText('annotations/instances_default.json'));
+  const lossless = JSON.parse(zip.readAsText('libreflow/annotations.json'));
+  const warnings = JSON.parse(zip.readAsText('libreflow/export-warnings.json'));
+
+  assert.deepEqual(coco.annotations.map(annotation => annotation.libreflow_type), ['bbox', 'rbox', 'mask']);
+  assert.equal(coco.annotations.find(annotation => annotation.libreflow_type === 'rbox').segmentation[0].length, 8);
+  assert.equal(coco.annotations.find(annotation => annotation.libreflow_type === 'mask').libreflow_subtract_contours.length, 1);
+  assert.equal(coco.libreflow_annotations[0].type, 'line');
+  assert.equal(coco.libreflow_image_labels[0].label, 'accepted');
+  assert.equal(lossless.annotations.length, shapes.length);
+  assert.deepEqual(warnings.nonNativeAnnotationCounts, { line: 1, classification: 1 });
+});
+
 test('review workflow enforces reviewer assignment, decisions, issues, and audit events', async () => {
   const forbiddenAssignment = await request('/api/reviews/image/img-one', users.collaborator, {
     method: 'PATCH', body: { reviewerId: 'u-collab' },
@@ -332,6 +374,10 @@ test('model listing and inference bind models to an accessible image project', a
     method: 'POST', body: { imageId: 'img-one' },
   });
   assert.equal(crossProjectModel.status, 403);
+  const unsharedModel = await request('/api/models/model-private/infer', users.collaborator, {
+    method: 'POST', body: { imageId: 'img-one' },
+  });
+  assert.equal(unsharedModel.status, 403);
   const inaccessibleImage = await request('/api/models/model-one/infer', users.collaborator, {
     method: 'POST', body: { imageId: 'img-two' },
   });
@@ -389,6 +435,7 @@ test('dataset file access follows dataset ownership and explicit collaborator sh
   assert.equal(canAccessDataset(dataset, 'u-owner'), true);
   assert.equal(canAccessDataset(dataset, 'u-collab'), true);
   assert.equal(canAccessDataset(dataset, 'u-outside'), false);
+  assert.equal(canAccessDataset(datasetForFilename('dataset-unrelated.jpg'), 'u-collab'), false);
   dataset.sharedWithCollaborators = false;
   assert.equal(canAccessDataset(dataset, 'u-collab'), false);
 });

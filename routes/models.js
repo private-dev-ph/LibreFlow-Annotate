@@ -59,7 +59,9 @@ router.get('/', (req, res) => {
     const pid = req.query.projectId;
     const project = getProject(pid);
     if (denyMissingOrForbidden(res, project, isProjectMember(project, uid), 'Project')) return;
-    return res.json(models.filter(model => model.projectId === pid));
+    return res.json(models.filter(model =>
+      model.projectId === pid && canAccessModel(model, uid, pid)
+    ));
   }
 
   // No projectId: return all own models (for the models management page)

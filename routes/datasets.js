@@ -107,19 +107,12 @@ function canAccessProject(projectId, userId) {
   return p.userId === userId || (p.collaborators || []).some(c => c.userId === userId);
 }
 
-function getCollaboratorOwnerIds(userId) {
-  const owners = new Set();
-  readProjects().forEach(p => {
-    if ((p.collaborators || []).some(c => c.userId === userId)) owners.add(p.userId);
-  });
-  return owners;
-}
-
 function canAccessDataset(dataset, userId) {
   if (!dataset) return false;
   if (dataset.userId === userId) return true;
   if (!dataset.sharedWithCollaborators) return false;
-  return getCollaboratorOwnerIds(userId).has(dataset.userId);
+  if (!dataset.sourceProjectId) return false;
+  return canAccessProject(dataset.sourceProjectId, userId);
 }
 
 function publicDataset(ds) {
@@ -306,7 +299,12 @@ router.patch('/:id', (req, res) => {
   const { name, description, sharedWithCollaborators } = req.body;
   if (name !== undefined) ds.name = String(name).trim() || ds.name;
   if (description !== undefined) ds.description = String(description || '');
-  if (sharedWithCollaborators !== undefined) ds.sharedWithCollaborators = Boolean(sharedWithCollaborators);
+  if (sharedWithCollaborators !== undefined) {
+    if (sharedWithCollaborators && !ds.sourceProjectId) {
+      return res.status(400).json({ error: 'Uploaded datasets need an explicit project before they can be shared.' });
+    }
+    ds.sharedWithCollaborators = Boolean(sharedWithCollaborators);
+  }
   writeDatasets(all);
   res.json(publicDataset(ds));
 });

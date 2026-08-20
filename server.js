@@ -13,9 +13,11 @@ const batchesRouter        = require('./routes/batches');
 const notificationsRouter  = require('./routes/notifications');
 const datasetsRouter    = require('./routes/datasets');
 const reviewsRouter     = require('./routes/reviews');
+const { requireAuth } = require('./middleware/session-auth');
 const {
   getProject,
   isProjectMember,
+  canAccessModel,
   imageForFilename,
   modelForFilename,
   datasetForFilename,
@@ -52,12 +54,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/auth', authRouter);
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
-function requireAuth(req, res, next) {
-  if (req.session && req.session.userId) return next();
-  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Not authenticated.' });
-  return res.redirect('/login');
-}
-
 function requireUploadedImageAccess(req, res, next) {
   const filename = path.basename(req.path);
   const image = imageForFilename(filename);
@@ -70,9 +66,8 @@ function requireUploadedImageAccess(req, res, next) {
 function requireModelFileAccess(req, res, next) {
   const filename = path.basename(req.path);
   const model = modelForFilename(filename);
-  const project = model ? getProject(model.projectId) : null;
   if (!model) return res.status(404).json({ error: 'Model file not found.' });
-  if (!isProjectMember(project, req.session.userId)) return res.status(403).json({ error: 'No access to this model.' });
+  if (!canAccessModel(model, req.session.userId)) return res.status(403).json({ error: 'No access to this model.' });
   next();
 }
 

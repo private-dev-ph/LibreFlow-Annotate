@@ -434,6 +434,60 @@ function bboxPixels(data, w, h) {
   return { x1, y1, x2, y2, bw: x2 - x1, bh: y2 - y1 };
 }
 
+function rotatedBoxPoints(data) {
+  const angle = Number(data.angle || 0) * Math.PI / 180;
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const hw = Number(data.width) / 2, hh = Number(data.height) / 2;
+  return [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].map(([x, y]) => ({
+    x: Number(data.cx) + x * cos - y * sin,
+    y: Number(data.cy) + x * sin + y * cos,
+  }));
+}
+
+function annotationPoints(annotation) {
+  if (!annotation?.data) return [];
+  if (annotation.type === 'bbox') {
+    const x = Number(annotation.data.x), y = Number(annotation.data.y);
+    const width = Number(annotation.data.width), height = Number(annotation.data.height);
+    return [{ x, y }, { x: x + width, y }, { x: x + width, y: y + height }, { x, y: y + height }];
+  }
+  if (annotation.type === 'rbox') return rotatedBoxPoints(annotation.data);
+  if (annotation.type === 'polygon') return annotation.data;
+  if (annotation.type === 'point') return [annotation.data];
+  if (annotation.type === 'mask') {
+    const contours = Array.isArray(annotation.data)
+      ? [{ operation: 'add', points: annotation.data }]
+      : (annotation.data.contours || []);
+    return contours.flatMap(contour => contour.points || []);
+  }
+  if (['line', 'skeleton'].includes(annotation.type)) return annotation.data.points || [];
+  return [];
+}
+
+function pointBounds(points, w = Infinity, h = Infinity) {
+  if (!points.length) return null;
+  const xs = points.map(point => Number(point.x));
+  const ys = points.map(point => Number(point.y));
+  const x1 = Math.max(0, Math.min(...xs));
+  const y1 = Math.max(0, Math.min(...ys));
+  const x2 = Math.min(w, Math.max(...xs));
+  const y2 = Math.min(h, Math.max(...ys));
+  return { x1, y1, x2, y2, bw: Math.max(0, x2 - x1), bh: Math.max(0, y2 - y1) };
+}
+
+function polygonArea(points) {
+  if (!Array.isArray(points) || points.length < 3) return 0;
+  return Math.abs(points.reduce((sum, point, index) => {
+    const next = points[(index + 1) % points.length];
+    return sum + Number(point.x) * Number(next.y) - Number(next.x) * Number(point.y);
+  }, 0)) / 2;
+}
+
+function csvCell(value) {
+  const text = value === null || value === undefined ? '' : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
 // ─── Original export (JSON) kept for backward compat ─────────────────────────
 
 // Export annotations for a project as COCO JSON
@@ -524,6 +578,15 @@ router.get('/export-zip/:projectId', (req, res) => {
   const labelIdx = Object.fromEntries(labels.map((l, i) => [l, i]));
 
   const zip = new AdmZip();
+  const exportedImageIds = new Set(projectImages.map(image => image.id));
+  const exportedAnnotations = allAnnotations.filter(annotation => exportedImageIds.has(annotation.imageId));
+  zip.addFile('libreflow/annotations.json', Buffer.from(JSON.stringify({
+    formatVersion: 1,
+    exportedAt: new Date().toISOString(),
+    project: { id: project.id, name: project.name },
+    images: projectImages,
+    annotations: exportedAnnotations,
+  }, null, 2), 'utf-8'));
 
   if (format === 'yolo') {
     // classes.txt
@@ -596,6 +659,8 @@ router.get('/export-zip/:projectId', (req, res) => {
   } else if (format === 'coco') {
     const cocoImages = [];
     const cocoAnnotations = [];
+    const cocoExtensions = [];
+    const imageLabels = [];
     let annId = 1;
 
     projectImages.forEach((img, imgIdx) => {
@@ -604,6 +669,14 @@ router.get('/export-zip/:projectId', (req, res) => {
       cocoImages.push({ id: imgIdx + 1, file_name: img.originalName, width: w, height: h });
 
       allAnnotations.filter(a => a.imageId === img.id).forEach(a => {
+        if (a.type === 'classification') {
+          imageLabels.push({ image_id: imgIdx + 1, label: a.label, annotation_id: a.id, data: a.data });
+          return;
+        }
+        if (a.type === 'line') {
+          cocoExtensions.push({ image_id: imgIdx + 1, label: a.label, annotation_id: a.id, type: a.type, data: a.data });
+          return;
+        }
         const entry = {
           id: annId++,
           image_id: imgIdx + 1,
@@ -612,6 +685,13 @@ router.get('/export-zip/:projectId', (req, res) => {
           segmentation: [],
           area: 0,
           bbox: [0, 0, 0, 0],
+          libreflow_id: a.id,
+          libreflow_type: a.type,
+          libreflow_provenance: {
+            source: a.source || 'manual',
+            modelId: a.modelId || null,
+            confidence: a.confidence ?? null,
+          },
         };
         if (a.type === 'bbox' && a.data) {
           const { x1, y1, bw, bh } = bboxPixels(a.data, w, h);
@@ -620,10 +700,48 @@ router.get('/export-zip/:projectId', (req, res) => {
         } else if (a.type === 'polygon' && Array.isArray(a.data)) {
           const flat = a.data.flatMap(pt => [pt.x, pt.y]);
           entry.segmentation = [flat];
-          const xs = a.data.map(p => p.x), ys = a.data.map(p => p.y);
-          const bx = Math.min(...xs), by = Math.min(...ys);
-          const bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by;
-          entry.bbox = [bx, by, bw, bh]; entry.area = bw * bh;
+          const bounds = pointBounds(a.data, w, h);
+          entry.bbox = [bounds.x1, bounds.y1, bounds.bw, bounds.bh];
+          entry.area = polygonArea(a.data);
+        } else if (a.type === 'rbox' && a.data) {
+          const points = rotatedBoxPoints(a.data);
+          const bounds = pointBounds(points, w, h);
+          entry.segmentation = [points.flatMap(point => [point.x, point.y])];
+          entry.bbox = [bounds.x1, bounds.y1, bounds.bw, bounds.bh];
+          entry.area = Math.abs(Number(a.data.width) * Number(a.data.height));
+          entry.libreflow_rotation = Number(a.data.angle || 0);
+        } else if (a.type === 'mask' && a.data) {
+          const contours = Array.isArray(a.data)
+            ? [{ operation: 'add', points: a.data }]
+            : (a.data.contours || []);
+          const additions = contours.filter(contour => (contour.operation || 'add') === 'add');
+          const subtractions = contours.filter(contour => contour.operation === 'subtract');
+          const points = additions.flatMap(contour => contour.points || []);
+          const bounds = pointBounds(points, w, h);
+          entry.segmentation = additions.map(contour => contour.points.flatMap(point => [point.x, point.y]));
+          if (bounds) entry.bbox = [bounds.x1, bounds.y1, bounds.bw, bounds.bh];
+          entry.area = Math.max(0,
+            additions.reduce((sum, contour) => sum + polygonArea(contour.points), 0) -
+            subtractions.reduce((sum, contour) => sum + polygonArea(contour.points), 0));
+          if (subtractions.length) {
+            entry.libreflow_subtract_contours = subtractions.map(contour =>
+              contour.points.flatMap(point => [point.x, point.y]));
+          }
+        } else if (a.type === 'point' && a.data) {
+          entry.keypoints = [Number(a.data.x), Number(a.data.y), 2];
+          entry.num_keypoints = 1;
+          entry.bbox = [Number(a.data.x), Number(a.data.y), 0, 0];
+        } else if (a.type === 'skeleton' && a.data) {
+          const points = a.data.points || [];
+          const bounds = pointBounds(points, w, h);
+          entry.keypoints = points.flatMap(point => [Number(point.x), Number(point.y), point.visible === false ? 1 : 2]);
+          entry.num_keypoints = points.filter(point => point.visible !== false).length;
+          if (bounds) entry.bbox = [bounds.x1, bounds.y1, bounds.bw, bounds.bh];
+          entry.libreflow_keypoint_names = points.map((point, index) => point.name || `p${index + 1}`);
+          entry.libreflow_skeleton = a.data.edges || [];
+        } else {
+          cocoExtensions.push({ image_id: imgIdx + 1, label: a.label, annotation_id: a.id, type: a.type, data: a.data });
+          return;
         }
         cocoAnnotations.push(entry);
       });
@@ -636,6 +754,8 @@ router.get('/export-zip/:projectId', (req, res) => {
       categories: labels.map((l, i) => ({ id: i + 1, name: l, supercategory: 'object' })),
       images: cocoImages,
       annotations: cocoAnnotations,
+      libreflow_image_labels: imageLabels,
+      libreflow_annotations: cocoExtensions,
     };
     zip.addFile('annotations/instances_default.json', Buffer.from(JSON.stringify(cocoOut, null, 2), 'utf-8'));
 
@@ -675,17 +795,19 @@ ${objects}
     });
 
   } else if (format === 'csv') {
-    const rows = ['image_file,label,type,x1,y1,x2,y2'];
+    const rows = ['image_file,label,type,x1,y1,x2,y2,source,model_id,confidence,data_json'];
     projectImages.forEach(img => {
       allAnnotations.filter(a => a.imageId === img.id).forEach(a => {
         let x1 = '', y1 = '', x2 = '', y2 = '';
-        if (a.type === 'bbox' && a.data) {
-          x1 = Math.round(a.data.x); y1 = Math.round(a.data.y);
-          x2 = Math.round(a.data.x + a.data.width); y2 = Math.round(a.data.y + a.data.height);
-        } else if (a.type === 'point' && a.data) {
-          x1 = Math.round(a.data.x); y1 = Math.round(a.data.y); x2 = x1; y2 = y1;
+        const bounds = pointBounds(annotationPoints(a));
+        if (bounds) {
+          x1 = Math.round(bounds.x1); y1 = Math.round(bounds.y1);
+          x2 = Math.round(bounds.x2); y2 = Math.round(bounds.y2);
         }
-        rows.push(`${img.originalName},${a.label},${a.type},${x1},${y1},${x2},${y2}`);
+        rows.push([
+          img.originalName, a.label, a.type, x1, y1, x2, y2,
+          a.source || 'manual', a.modelId || '', a.confidence ?? '', JSON.stringify(a.data),
+        ].map(csvCell).join(','));
       });
       if (withImgs) {
         const imgPath = path.join(UPLOADS_DIR, img.filename);
@@ -693,6 +815,30 @@ ${objects}
       }
     });
     zip.addFile('annotations.csv', Buffer.from(rows.join('\n'), 'utf-8'));
+  }
+
+  const nativeTypesByFormat = {
+    yolo: new Set(['bbox']),
+    roboflow: new Set(['bbox']),
+    voc: new Set(['bbox']),
+    coco: new Set(['bbox', 'rbox', 'polygon', 'point', 'mask', 'skeleton']),
+    csv: SUPPORTED_ANNOTATION_TYPES,
+  };
+  const nonNativeCounts = {};
+  exportedAnnotations.forEach(annotation => {
+    if (!nativeTypesByFormat[format].has(annotation.type)) {
+      nonNativeCounts[annotation.type] = (nonNativeCounts[annotation.type] || 0) + 1;
+    }
+  });
+  if (Object.keys(nonNativeCounts).length) {
+    zip.addFile('libreflow/export-warnings.json', Buffer.from(JSON.stringify({
+      format,
+      message: 'Some annotation types are not native to the requested format. Their exact geometry and provenance remain in libreflow/annotations.json.',
+      nonNativeAnnotationCounts: nonNativeCounts,
+      cocoExtensions: format === 'coco'
+        ? 'Image classifications and lines are also retained in libreflow_image_labels/libreflow_annotations inside the COCO JSON.'
+        : null,
+    }, null, 2), 'utf-8'));
   }
 
   const zipBuf = zip.toBuffer();
