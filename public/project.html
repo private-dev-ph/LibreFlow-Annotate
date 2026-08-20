@@ -106,6 +106,10 @@
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="17"/><line x1="9" y1="14.5" x2="15" y2="14.5"/></svg>
           Batches
         </button>
+        <button class="tab-btn" data-tab="review">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Review
+        </button>
         <button class="tab-btn" data-tab="collaborators">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Collaborators
@@ -276,6 +280,36 @@
         </div>
       </div>
 
+      <!-- ── REVIEW panel ── -->
+      <div class="tab-panel" id="panel-review">
+        <div class="review-overview" id="project-review-counts"></div>
+        <div class="section-card">
+          <div class="project-review-toolbar">
+            <div>
+              <h2>Quality review queue</h2>
+              <p>Assign reviewers, find open issues, and open an image at the exact point it needs attention.</p>
+            </div>
+            <div class="project-review-controls">
+              <select id="project-review-filter" aria-label="Filter by review status">
+                <option value="">All statuses</option>
+                <option value="unannotated">Unannotated</option>
+                <option value="in_progress">In progress</option>
+                <option value="submitted">Submitted</option>
+                <option value="changes_requested">Changes requested</option>
+                <option value="approved">Approved</option>
+              </select>
+              <button id="btn-refresh-reviews" class="btn-sm-ghost" type="button">Refresh</button>
+            </div>
+          </div>
+          <div id="project-review-list" class="project-review-list"></div>
+          <div id="project-review-empty" class="images-empty" style="display:none">No images match this review status.</div>
+        </div>
+        <details class="section-card project-audit-card">
+          <summary>Recent audit activity</summary>
+          <div id="project-audit-list" class="project-audit-list"></div>
+        </details>
+      </div>
+
       <!-- ── COLLABORATORS panel ── -->
       <div class="tab-panel" id="panel-collaborators">
         <div class="section-card">
@@ -333,5 +367,6 @@
   <script src="/js/nav-inbox.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/project.js"></script>
+  <script src="/js/project-review.js"></script>
 </body>
 </html>

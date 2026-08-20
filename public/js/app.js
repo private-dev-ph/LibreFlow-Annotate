@@ -196,7 +196,11 @@
       : allProjectImages;
     imageCountEl.textContent = images.filter(i => i.annotated).length + '/' + images.length;
     renderImageList();
-    if (images.length > 0) await loadImage(0);
+    if (images.length > 0) {
+      const requestedImageId = new URLSearchParams(location.search).get('imageId');
+      const requestedIndex = images.findIndex(image => image.id === requestedImageId);
+      await loadImage(requestedIndex >= 0 ? requestedIndex : 0);
+    }
     else { canvasEmpty.classList.remove('hidden'); imageNavLabel.textContent = '-- / --'; }
   }
 

@@ -229,6 +229,36 @@
         <ul id="annotation-list"></ul>
       </div>
 
+      <!-- Review workflow. Kept self-contained in review-workflow.js. -->
+      <div class="right-sub review-sub">
+        <details id="review-details">
+          <summary class="section-header review-summary">
+            <span class="section-title">Review &amp; history</span>
+            <span id="review-status-badge" class="review-status-badge">Unannotated</span>
+          </summary>
+          <div class="review-body">
+            <label class="review-field">Status
+              <select id="review-status-select"></select>
+            </label>
+            <label class="review-field">Reviewer
+              <select id="reviewer-select"></select>
+            </label>
+            <div id="review-rejection-reason" class="review-rejection hidden"></div>
+            <div class="review-history-row">
+              <select id="review-revision-select" aria-label="Annotation revision"></select>
+              <button id="btn-restore-revision" class="review-small-btn" type="button">Restore</button>
+            </div>
+            <div id="review-thread" class="review-thread"></div>
+            <textarea id="review-comment-input" rows="2" maxlength="4000" placeholder="Add a review comment or issue…"></textarea>
+            <div class="review-comment-actions">
+              <label><input id="review-comment-is-issue" type="checkbox" /> Track as issue</label>
+              <button id="btn-add-review-comment" class="review-small-btn" type="button">Add</button>
+            </div>
+            <div id="review-feedback" class="review-feedback" role="status"></div>
+          </div>
+        </details>
+      </div>
+
       <!-- Semi-automatic annotation sub-panel -->
       <div class="right-sub auto-sub">
         <div class="section-header">
@@ -321,6 +351,7 @@
   <script src="/js/nav-inbox.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/canvas.js"></script>
+  <script src="/js/review-workflow.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>
