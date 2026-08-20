@@ -48,6 +48,21 @@
   transition: opacity .2s;
 }
 .btn-open-annotator:hover { opacity: .85; }
+.project-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.btn-lifecycle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #aeb8ca;
+  background: #171b28;
+  border: 1px solid #30364b;
+  border-radius: 8px;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.btn-lifecycle:hover { color: #48e5c2; border-color: rgba(72,229,194,.5); }
 
 /* ── Rename header UI ── */
 .project-title-row {

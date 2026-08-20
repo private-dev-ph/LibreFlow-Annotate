@@ -188,6 +188,7 @@ runs/
 py_scripts/.venv
 
 datasets/
+versions/
 
 # Local linked worktrees used for parallel feature development
 .worktrees/

@@ -30,6 +30,12 @@ These folders are intentionally not baked into Docker images. Docker Compose bin
 - AI auto-annotation using detection models and optional classification models
 - Dataset creation, dataset upload, project-to-dataset export, and dataset-to-project import
 - Dataset export formats including YOLO, Roboflow YOLO, COCO JSON, Pascal VOC XML, and CSV
+- Immutable dataset versions with SHA-256 manifests and deterministic train/valid/test splits
+- Version-time resize, letterbox, grayscale, crop, tile, flip, rotation, brightness, and seeded-noise processing with annotation lineage
+- Dataset health insights for class balance, geometry, dimensions, duplicates, filename collisions, spatial bias, and split leakage
+- Dry-run annotated dataset import for YOLO, COCO, and Pascal VOC with class and duplicate conflict policies
+
+See [Dataset lifecycle API](docs/dataset-lifecycle.md) for version, processing, health, and annotated-import payloads.
 
 ## Requirements
 

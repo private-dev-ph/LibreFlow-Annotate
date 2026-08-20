@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dataset Lifecycle – LibreFlow Annotate</title>
+  <link rel="stylesheet" href="/css/nav.css" />
+  <link rel="stylesheet" href="/css/dataset-lifecycle.css" />
+  <link rel="stylesheet" href="/css/theme.css" />
+</head>
+<body>
+  <nav id="top-nav">
+    <div class="nav-left">
+      <a class="nav-logo" href="/dashboard"><span class="nav-logo-icon">■</span><span class="nav-logo-name">LibreFlow Annotate</span></a>
+      <div class="nav-links">
+        <a class="nav-link" href="/dashboard">Dashboard</a>
+        <a class="nav-link" href="/jobs">Jobs</a>
+        <a class="nav-link" href="/models">Models</a>
+        <a class="nav-link" href="/datasets">Datasets</a>
+        <span class="nav-sep"></span>
+        <span class="nav-breadcrumb" id="nav-breadcrumb">Dataset lifecycle</span>
+      </div>
+    </div>
+    <div class="nav-right">
+      <div class="nav-user"><div class="nav-avatar" id="nav-avatar">?</div><span class="nav-username" id="nav-username">Loading…</span></div>
+      <button class="btn-theme-settings" id="btn-theme-settings" type="button" aria-label="Theme settings" title="Theme settings">Theme</button>
+      <button class="btn-logout" id="btn-logout">Sign Out</button>
+    </div>
+  </nav>
+
+  <main class="lifecycle-page">
+    <header class="lifecycle-header">
+      <div>
+        <a id="back-link" class="back-link" href="/dashboard">← Back</a>
+        <p class="eyebrow" id="source-kind">PROJECT DATASET</p>
+        <h1 id="source-title">Loading…</h1>
+        <p id="source-description" class="source-description"></p>
+      </div>
+      <div class="header-proof">
+        <span>Immutable snapshots</span><span>SHA-256 manifests</span><span>Deterministic splits</span>
+      </div>
+    </header>
+
+    <div class="lifecycle-tabs" role="tablist">
+      <button class="lifecycle-tab active" data-tab="versions">Versions</button>
+      <button class="lifecycle-tab" data-tab="health">Health</button>
+      <button class="lifecycle-tab" data-tab="import" id="tab-import">Import</button>
+    </div>
+
+    <section class="lifecycle-panel active" id="panel-versions">
+      <div class="two-column">
+        <article class="card create-version-card">
+          <div class="card-heading"><div><p class="eyebrow">REPRODUCIBLE SNAPSHOT</p><h2>Create a version</h2></div></div>
+          <label>Version name<input id="version-name" type="text" placeholder="e.g. v1-baseline" maxlength="100" /></label>
+          <label>Description<textarea id="version-description" rows="2" placeholder="What changed in this version?"></textarea></label>
+          <div class="split-grid">
+            <label>Train %<input id="split-train" type="number" min="0" max="100" value="70" /></label>
+            <label>Valid %<input id="split-valid" type="number" min="0" max="100" value="20" /></label>
+            <label>Test %<input id="split-test" type="number" min="0" max="100" value="10" /></label>
+          </div>
+          <label>Split seed<input id="split-seed" type="text" value="libreflow" maxlength="100" /></label>
+          <label class="check"><input id="preserve-splits" type="checkbox" checked /> Preserve imported train/valid/test assignments</label>
+          <details class="processing-details">
+            <summary>Preprocessing and augmentation</summary>
+            <p class="help">Transforms are materialized into the snapshot with annotation geometry and lineage updated deterministically.</p>
+            <div class="check-grid">
+              <label class="check"><input id="pre-auto-orient" type="checkbox" /> Auto-orient pixels</label>
+              <label class="check"><input id="pre-grayscale" type="checkbox" /> Convert to grayscale</label>
+            </div>
+            <label class="check section-toggle"><input id="pre-resize-enabled" type="checkbox" /> Resize images</label>
+            <div class="processing-grid">
+              <label>Width<input id="pre-resize-width" type="number" min="1" max="16384" value="640" /></label>
+              <label>Height<input id="pre-resize-height" type="number" min="1" max="16384" value="640" /></label>
+              <label>Mode<select id="pre-resize-mode"><option value="letterbox">Letterbox</option><option value="fit">Fit inside</option><option value="stretch">Stretch</option></select></label>
+              <label>Padding<input id="pre-resize-bg" type="color" value="#000000" /></label>
+            </div>
+            <label class="check section-toggle"><input id="pre-crop-enabled" type="checkbox" /> Crop before resize</label>
+            <div class="processing-grid four">
+              <label>X<input id="pre-crop-x" type="number" min="0" value="0" /></label><label>Y<input id="pre-crop-y" type="number" min="0" value="0" /></label>
+              <label>Width<input id="pre-crop-width" type="number" min="1" value="640" /></label><label>Height<input id="pre-crop-height" type="number" min="1" value="640" /></label>
+            </div>
+            <label class="check section-toggle"><input id="pre-tile-enabled" type="checkbox" /> Tile after resize</label>
+            <div class="processing-grid">
+              <label>Tile width<input id="pre-tile-width" type="number" min="1" value="640" /></label>
+              <label>Tile height<input id="pre-tile-height" type="number" min="1" value="640" /></label>
+              <label>Overlap<input id="pre-tile-overlap" type="number" min="0" value="0" /></label>
+            </div>
+            <div class="processing-divider"></div>
+            <div class="processing-grid">
+              <label>Extra variants / image<input id="aug-count" type="number" min="0" max="10" value="0" /></label>
+              <label>Augmentation seed<input id="aug-seed" type="text" value="libreflow-augmentation" /></label>
+            </div>
+            <div class="processing-grid">
+              <label>Horizontal flip chance<input id="aug-hflip" type="number" min="0" max="1" step="0.05" value="0.5" /></label>
+              <label>Vertical flip chance<input id="aug-vflip" type="number" min="0" max="1" step="0.05" value="0" /></label>
+            </div>
+            <fieldset class="rotation-fieldset"><legend>Rotation choices</legend>
+              <label class="check"><input class="aug-rotate" type="checkbox" value="0" checked /> 0°</label>
+              <label class="check"><input class="aug-rotate" type="checkbox" value="90" /> 90°</label>
+              <label class="check"><input class="aug-rotate" type="checkbox" value="180" /> 180°</label>
+              <label class="check"><input class="aug-rotate" type="checkbox" value="270" /> 270°</label>
+            </fieldset>
+            <label class="check section-toggle"><input id="aug-brightness-enabled" type="checkbox" /> Random brightness</label>
+            <div class="processing-grid">
+              <label>Minimum<input id="aug-brightness-min" type="number" min="0.1" max="3" step="0.05" value="0.85" /></label>
+              <label>Maximum<input id="aug-brightness-max" type="number" min="0.1" max="3" step="0.05" value="1.15" /></label>
+            </div>
+            <label class="check section-toggle"><input id="aug-noise-enabled" type="checkbox" /> Seeded Gaussian noise</label>
+            <div class="processing-grid">
+              <label>Sigma<input id="aug-noise-sigma" type="number" min="0" max="100" step="1" value="8" /></label>
+              <label>Chance<input id="aug-noise-probability" type="number" min="0" max="1" step="0.05" value="1" /></label>
+            </div>
+          </details>
+          <details>
+            <summary>Reproducibility metadata</summary>
+            <p class="help">Optional JSON for training commit, preprocessing, augmentation, model, license, or environment details.</p>
+            <textarea id="repro-metadata" rows="6" spellcheck="false" placeholder='{"gitCommit":"abc123","preprocessing":{"resize":"640x640"}}'></textarea>
+          </details>
+          <button id="btn-create-version" class="primary-btn">Create immutable version</button>
+          <p class="help">Image bytes are copied into a content-addressed snapshot. Versions cannot be edited or deleted through the API.</p>
+        </article>
+
+        <article class="card versions-card">
+          <div class="card-heading">
+            <div><p class="eyebrow">HISTORY</p><h2>Dataset versions</h2></div>
+            <button class="ghost-btn" id="btn-refresh-versions">Refresh</button>
+          </div>
+          <div id="versions-list" class="versions-list"><div class="loading">Loading versions…</div></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="lifecycle-panel" id="panel-health">
+      <article class="card health-toolbar">
+        <div><p class="eyebrow">QUALITY GATE</p><h2>Dataset health</h2><p class="help">Analyze the live dataset or reproduce the report for an immutable version.</p></div>
+        <div class="health-actions">
+          <select id="health-version"><option value="">Live dataset</option></select>
+          <button id="btn-run-health" class="primary-btn">Run health check</button>
+        </div>
+      </article>
+      <div id="health-empty" class="card empty-state">Run a health check to inspect balance, geometry, duplicates, leakage, and spatial bias.</div>
+      <div id="health-results" class="hidden">
+        <div id="health-summary" class="metric-grid"></div>
+        <div class="health-grid">
+          <article class="card"><h2>Class balance</h2><div id="class-balance"></div></article>
+          <article class="card"><h2>Image dimensions</h2><div id="dimension-summary"></div></article>
+          <article class="card"><h2>Bounding-box sizes</h2><div id="bbox-summary"></div></article>
+          <article class="card"><h2>Annotation spatial heatmap</h2><div id="spatial-heatmap" class="heatmap" aria-label="10 by 10 annotation center heatmap"></div></article>
+        </div>
+        <article class="card issues-card"><h2>Quality findings</h2><div id="quality-findings"></div></article>
+      </div>
+    </section>
+
+    <section class="lifecycle-panel" id="panel-import">
+      <div class="two-column import-columns">
+        <article class="card">
+          <p class="eyebrow">ANNOTATED DATASET</p><h2>Validate and import</h2>
+          <label>Dataset file<input id="import-file" type="file" accept=".zip,.json" /></label>
+          <p class="help">YOLO ZIP, COCO JSON/ZIP, or Pascal VOC ZIP. Standalone COCO JSON is matched to images already in this project by filename.</p>
+          <div class="form-grid">
+            <label>Format<select id="import-format"><option value="auto">Auto-detect</option><option value="yolo">YOLO</option><option value="coco">COCO</option><option value="voc">Pascal VOC</option></select></label>
+            <label>Class conflicts<select id="class-conflict"><option value="merge">Merge same names</option><option value="rename">Rename incoming</option><option value="skip">Skip conflicting</option><option value="error">Stop on conflict</option></select></label>
+            <label>Exact duplicates<select id="duplicate-policy"><option value="skipExact">Skip exact duplicates</option><option value="keep">Keep all</option><option value="error">Stop on duplicate</option></select></label>
+            <label>Existing annotations<select id="annotation-conflict"><option value="append">Append imported</option><option value="replace">Replace per matched image</option><option value="skipExisting">Keep existing only</option></select></label>
+          </div>
+          <label>Class mapping (optional JSON)<textarea id="class-mapping" rows="5" spellcheck="false" placeholder='{"incoming_car":"vehicle","ignore_me":""}'></textarea></label>
+          <div class="button-row">
+            <button id="btn-validate-import" class="ghost-btn">Dry-run validation</button>
+            <button id="btn-commit-import" class="primary-btn" disabled>Import validated dataset</button>
+          </div>
+          <p class="help">No files, annotations, or taxonomy changes are written during validation.</p>
+        </article>
+        <article class="card import-preview-card">
+          <div class="card-heading"><div><p class="eyebrow">PREVIEW</p><h2>Import plan</h2></div><span id="import-validity" class="status-pill muted">Not validated</span></div>
+          <div id="import-preview" class="empty-state compact">Choose a file and run validation.</div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <div id="manifest-modal" class="lifecycle-modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="card-heading"><h2>Version manifest</h2><button id="btn-close-manifest" class="ghost-btn">Close</button></div>
+      <pre id="manifest-json"></pre>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="/js/api.js"></script>
+  <script src="/js/theme.js"></script>
+  <script src="/js/dataset-lifecycle.js"></script>
+</body>
+</html>
