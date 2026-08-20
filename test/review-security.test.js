@@ -57,8 +57,9 @@ function resetData() {
     { id: 'img-two', projectId: 'p-two', userId: 'u-outside', filename: 'two.jpg', originalName: 'two.jpg', annotated: false },
   ]);
   write('models.json', [
-    { id: 'model-one', projectId: 'p-one', userId: 'u-owner', filename: 'one.pt', name: 'One' },
-    { id: 'model-two', projectId: 'p-two', userId: 'u-outside', filename: 'two.pt', name: 'Two' },
+    { id: 'model-one', projectId: 'p-one', userId: 'u-owner', filename: 'one.pt', name: 'One', type: 'detection' },
+    { id: 'model-segment', projectId: 'p-one', userId: 'u-owner', filename: 'sam.pt', name: 'SAM', type: 'segmentation' },
+    { id: 'model-two', projectId: 'p-two', userId: 'u-outside', filename: 'two.pt', name: 'Two', type: 'segmentation' },
   ]);
   write('datasets.json', [{
     id: 'dataset-one', userId: 'u-owner', sharedWithCollaborators: true,
@@ -294,7 +295,7 @@ test('review transitions require submission and a reason for requested changes',
 test('model listing and inference bind models to an accessible image project', async () => {
   const listed = await request('/api/models?projectId=p-one', users.collaborator);
   assert.equal(listed.status, 200);
-  assert.deepEqual(listed.body.map(model => model.id), ['model-one']);
+  assert.deepEqual(listed.body.map(model => model.id), ['model-one', 'model-segment']);
   assert.equal((await request('/api/models?projectId=p-one', users.outsider)).status, 403);
 
   const crossProjectModel = await request('/api/models/model-two/infer', users.collaborator, {
@@ -327,6 +328,17 @@ test('model listing and inference bind models to an accessible image project', a
     assert.equal(validInference.body.results[0].source, 'model');
     assert.equal(validInference.body.results[0].modelId, 'model-one');
     assert.equal(validInference.body.results[0].confidence, 0.91);
+
+    const crossProjectSegment = await request('/api/models/model-two/segment', users.collaborator, {
+      method: 'POST', body: { imageId: 'img-one', points: [[4, 5]], pointLabels: [1] },
+    });
+    assert.equal(crossProjectSegment.status, 403);
+    const validSegment = await request('/api/models/model-segment/segment', users.collaborator, {
+      method: 'POST', body: { imageId: 'img-one', label: 'part', points: [[4, 5]], pointLabels: [1] },
+    });
+    assert.equal(validSegment.status, 200);
+    assert.equal(validSegment.body.results[0].source, 'model');
+    assert.equal(validSegment.body.results[0].modelId, 'model-segment');
   } finally {
     global.fetch = nativeFetch;
   }

@@ -313,24 +313,26 @@ router.post('/:id/infer', async (req, res) => {
 
 // POST /:id/segment — interactive SAM/SAM2 mask generation from point/box prompts
 router.post('/:id/segment', async (req, res) => {
-  const uid = req.session.userId;
   const models = readModels();
   const model = models.find(m => m.id === req.params.id);
   if (!model) return res.status(404).json({ error: 'Model not found.' });
 
-  const project = readProjects().find(p => p.id === model.projectId);
-  const canAccessModel = project && (
-    project.userId === uid || (project.collaborators || []).some(c => c.userId === uid)
-  );
-  if (!canAccessModel) return res.status(403).json({ error: 'Not authorized to use this model.' });
+  const { imageId, label, points, pointLabels, bboxes } = req.body;
+  if (!imageId) return res.status(400).json({ error: 'imageId is required.' });
+  const context = projectForImage(imageId);
+  if (denyMissingOrForbidden(
+    res,
+    context.image,
+    isProjectMember(context.project, req.session.userId),
+    'Image',
+  )) return;
+  if (!canAccessModel(model, req.session.userId, context.project.id)) {
+    return res.status(403).json({ error: 'Model and image must belong to the same accessible project.' });
+  }
   if (model.type !== 'segmentation') {
     return res.status(400).json({ error: 'Select a segmentation/SAM model for Smart Mask.' });
   }
-
-  const { imageId, label, points, pointLabels, bboxes } = req.body;
-  const allImages = (() => { try { return JSON.parse(fs.readFileSync(IMAGES_FILE, 'utf-8')); } catch { return []; } })();
-  const img = allImages.find(i => i.id === imageId && i.projectId === model.projectId);
-  if (!img) return res.status(404).json({ error: 'Image not found in the model project.' });
+  const img = context.image;
 
   const payload = {
     model_path: path.join(MODELS_DIR, model.filename),
@@ -349,6 +351,23 @@ router.post('/:id/segment', async (req, res) => {
       signal: AbortSignal.timeout(180_000),
     });
     const data = await inferRes.json();
+    if (Array.isArray(data.results)) {
+      data.results = data.results.map(result => ({
+        ...result,
+        source: 'model',
+        modelId: model.id,
+        confidence: Number.isFinite(Number(result.confidence)) ? Number(result.confidence) : null,
+      }));
+      data.count = data.results.length;
+    }
+    appendAuditEvent({
+      projectId: context.project.id,
+      imageId: img.id,
+      actorId: req.session.userId,
+      actorUsername: req.session.username || '',
+      type: 'model.segmentation_completed',
+      details: { modelId: model.id, resultCount: Array.isArray(data.results) ? data.results.length : 0 },
+    });
     return res.status(inferRes.status).json(data);
   } catch (err) {
     const refused = err.cause?.code === 'ECONNREFUSED' || err.message?.includes('ECONNREFUSED');
