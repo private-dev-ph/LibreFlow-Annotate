@@ -12,6 +12,15 @@ const modelsRouter      = require('./routes/models');
 const batchesRouter        = require('./routes/batches');
 const notificationsRouter  = require('./routes/notifications');
 const datasetsRouter    = require('./routes/datasets');
+const reviewsRouter     = require('./routes/reviews');
+const {
+  getProject,
+  isProjectMember,
+  imageForFilename,
+  modelForFilename,
+  datasetForFilename,
+  canAccessDataset,
+} = require('./lib/access-control');
 
 const app = express();
 const PORT = process.env.PORT || 6767;
@@ -34,9 +43,9 @@ app.use(session({
 }));
 
 // Static files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/models-static', express.static(path.join(__dirname, 'models')));
-app.use('/datasets-files', express.static(path.join(__dirname, 'datasets')));
+app.use('/uploads', requireAuth, requireUploadedImageAccess, express.static(path.join(__dirname, 'uploads')));
+app.use('/models-static', requireAuth, requireModelFileAccess, express.static(path.join(__dirname, 'models')));
+app.use('/datasets-files', requireAuth, requireDatasetFileAccess, express.static(path.join(__dirname, 'datasets')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Auth routes (public) ──────────────────────────────────────────────────────
@@ -47,6 +56,32 @@ function requireAuth(req, res, next) {
   if (req.session && req.session.userId) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Not authenticated.' });
   return res.redirect('/login');
+}
+
+function requireUploadedImageAccess(req, res, next) {
+  const filename = path.basename(req.path);
+  const image = imageForFilename(filename);
+  const project = image ? getProject(image.projectId) : null;
+  if (!image) return res.status(404).json({ error: 'Image not found.' });
+  if (!isProjectMember(project, req.session.userId)) return res.status(403).json({ error: 'No access to this image.' });
+  next();
+}
+
+function requireModelFileAccess(req, res, next) {
+  const filename = path.basename(req.path);
+  const model = modelForFilename(filename);
+  const project = model ? getProject(model.projectId) : null;
+  if (!model) return res.status(404).json({ error: 'Model file not found.' });
+  if (!isProjectMember(project, req.session.userId)) return res.status(403).json({ error: 'No access to this model.' });
+  next();
+}
+
+function requireDatasetFileAccess(req, res, next) {
+  const filename = path.basename(req.path);
+  const dataset = datasetForFilename(filename);
+  if (!dataset) return res.status(404).json({ error: 'Dataset file not found.' });
+  if (!canAccessDataset(dataset, req.session.userId)) return res.status(403).json({ error: 'No access to this dataset.' });
+  next();
 }
 
 // ── Page routes ───────────────────────────────────────────────────────────────
@@ -73,6 +108,7 @@ app.use('/api/models',      requireAuth, modelsRouter);
 app.use('/api/batches',        requireAuth, batchesRouter);
 app.use('/api/notifications', requireAuth, notificationsRouter);
 app.use('/api/datasets',    requireAuth, datasetsRouter);
+app.use('/api/reviews',     requireAuth, reviewsRouter);
 
 // ── 404 fallback ──────────────────────────────────────────────────────────────
 app.use((req, res) => res.redirect('/'));

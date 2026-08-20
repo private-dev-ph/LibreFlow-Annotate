@@ -3,30 +3,147 @@ const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const AdmZip = require('adm-zip');
+const { dataPath, uploadsDir, readJson, writeJson, deepClone } = require('../lib/data-store');
+const {
+  getProject,
+  projectForImage,
+  isProjectMember,
+  isProjectOwner,
+  denyMissingOrForbidden,
+} = require('../lib/access-control');
+const {
+  revisionsForImage,
+  createRevision,
+  ensureLegacyBaseline,
+  getRevision,
+  revisionSummary,
+} = require('../lib/annotation-history');
+const { appendAuditEvent } = require('../lib/audit-log');
+const { touchAfterAnnotation } = require('../lib/review-state');
 
-const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+const UPLOADS_DIR = uploadsDir();
 
 const router = express.Router();
-const DATA_FILE = path.join(__dirname, '..', 'data', 'annotations.json');
-const IMAGES_FILE = path.join(__dirname, '..', 'data', 'images.json');
+const DATA_FILE = dataPath('annotations.json');
+const IMAGES_FILE = dataPath('images.json');
 
 function readAnnotations() {
-  if (!fs.existsSync(DATA_FILE)) return [];
-  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+  return readJson(DATA_FILE);
 }
 
 function writeAnnotations(annotations) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(annotations, null, 2));
+  writeJson(DATA_FILE, annotations);
 }
 
-function markImageAnnotated(imageId) {
-  if (!fs.existsSync(IMAGES_FILE)) return;
-  const images = JSON.parse(fs.readFileSync(IMAGES_FILE, 'utf-8'));
+function markImageAnnotated(imageId, annotationCount) {
+  const images = readJson(IMAGES_FILE);
   const img = images.find(i => i.id === imageId);
   if (img) {
-    img.annotated = true;
-    fs.writeFileSync(IMAGES_FILE, JSON.stringify(images, null, 2));
+    img.annotated = annotationCount > 0 || Boolean(img.isNull);
+    writeJson(IMAGES_FILE, images);
   }
+}
+
+function actor(req) {
+  return { actorId: req.session.userId, actorUsername: req.session.username || '' };
+}
+
+function accessibleImage(req, res, imageId) {
+  const context = projectForImage(imageId);
+  if (denyMissingOrForbidden(res, context.image, isProjectMember(context.project, req.session.userId), 'Image')) {
+    return null;
+  }
+  return context;
+}
+
+function shapeFingerprint(shape) {
+  return JSON.stringify([shape.label, shape.type, shape.data]);
+}
+
+function annotationSetFingerprint(annotations) {
+  return JSON.stringify((annotations || []).map(annotation => ({
+    id: annotation.id,
+    label: annotation.label,
+    type: annotation.type,
+    data: annotation.data,
+    source: annotation.source || 'manual',
+    modelId: annotation.modelId || null,
+    confidence: annotation.confidence ?? null,
+  })).sort((a, b) => String(a.id).localeCompare(String(b.id))));
+}
+
+function validAnnotationId(id) {
+  return typeof id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(id);
+}
+
+function normalizeShapes(shapes, existing, req, { restoring = false, defaultSource = 'manual', defaultModelId = null } = {}) {
+  const existingById = new Map(existing.map(annotation => [annotation.id, annotation]));
+  const existingByFingerprint = new Map();
+  existing.forEach(annotation => {
+    const key = shapeFingerprint(annotation);
+    if (!existingByFingerprint.has(key)) existingByFingerprint.set(key, []);
+    existingByFingerprint.get(key).push(annotation);
+  });
+  const usedIds = new Set();
+  const now = new Date().toISOString();
+
+  return shapes.map(shape => {
+    const requestedId = validAnnotationId(shape.id) ? shape.id : null;
+    let previous = requestedId ? existingById.get(requestedId) : null;
+    if (!previous && !requestedId) {
+      previous = (existingByFingerprint.get(shapeFingerprint(shape)) || [])
+        .find(candidate => !usedIds.has(candidate.id));
+    }
+    let id = previous?.id || requestedId || uuidv4();
+    if (usedIds.has(id)) id = uuidv4();
+    usedIds.add(id);
+
+    const requestedSource = ['manual', 'model', 'import'].includes(shape.source)
+      ? shape.source
+      : defaultSource;
+    const source = restoring
+      ? (shape.source || previous?.source || 'manual')
+      : (previous?.source || requestedSource);
+    const modelId = restoring
+      ? (shape.modelId || previous?.modelId || null)
+      : (previous?.modelId || shape.modelId || defaultModelId || null);
+    const rawConfidence = shape.confidence ?? shape.conf ?? previous?.confidence;
+    const confidence = Number.isFinite(Number(rawConfidence))
+      ? Math.max(0, Math.min(1, Number(rawConfidence)))
+      : null;
+    const unchanged = previous && shapeFingerprint(previous) === shapeFingerprint(shape) &&
+      (previous.source || 'manual') === source && (previous.modelId || null) === modelId &&
+      (previous.confidence ?? null) === confidence;
+
+    return {
+      id,
+      imageId: shape.imageId || previous?.imageId,
+      label: String(shape.label || '').trim(),
+      type: shape.type,
+      data: deepClone(shape.data),
+      authorId: restoring ? (shape.authorId || previous?.authorId || req.session.userId) : (previous?.authorId || req.session.userId),
+      authorUsername: restoring ? (shape.authorUsername || previous?.authorUsername || req.session.username || '') : (previous?.authorUsername || req.session.username || ''),
+      source,
+      modelId,
+      confidence,
+      createdAt: restoring
+        ? (shape.createdAt || previous?.createdAt || now)
+        : (previous?.createdAt || now),
+      updatedAt: unchanged ? (previous.updatedAt || previous.createdAt || now) : now,
+      updatedBy: unchanged ? (previous.updatedBy || previous.authorId || req.session.userId) : req.session.userId,
+      updatedByUsername: unchanged ? (previous.updatedByUsername || previous.authorUsername || req.session.username || '') : (req.session.username || ''),
+    };
+  });
+}
+
+function validateShapes(shapes) {
+  if (!Array.isArray(shapes)) return 'shapes must be an array.';
+  for (const shape of shapes) {
+    if (!shape || !String(shape.label || '').trim()) return 'Every annotation requires a label.';
+    if (!['bbox', 'polygon', 'point'].includes(shape.type)) return 'Unsupported annotation type.';
+    if (shape.data === undefined || shape.data === null) return 'Every annotation requires geometry data.';
+  }
+  return null;
 }
 
 // POST bulk-rename a label across all annotations in a project
@@ -36,51 +153,195 @@ router.post('/rename-label', (req, res) => {
   if (!projectId || !oldName || !newName)
     return res.status(400).json({ error: 'projectId, oldName and newName are required.' });
 
-  const allImages = fs.existsSync(IMAGES_FILE)
-    ? JSON.parse(fs.readFileSync(IMAGES_FILE, 'utf-8'))
-    : [];
+  const project = getProject(projectId);
+  if (denyMissingOrForbidden(res, project, isProjectOwner(project, req.session.userId), 'Project')) return;
+
+  const allImages = readJson(IMAGES_FILE);
   const projectImageIds = new Set(
     allImages.filter(i => i.projectId === projectId).map(i => i.id)
   );
 
   const annotations = readAnnotations();
   let count = 0;
+  const changedImageIds = new Set();
+  const beforeByImage = new Map();
   annotations.forEach(a => {
     if (projectImageIds.has(a.imageId) && a.label === oldName) {
+      if (!beforeByImage.has(a.imageId)) {
+        beforeByImage.set(a.imageId, deepClone(annotations.filter(item => item.imageId === a.imageId)));
+      }
       a.label = newName;
+      a.updatedAt = new Date().toISOString();
+      a.updatedBy = req.session.userId;
+      a.updatedByUsername = req.session.username || '';
       count++;
+      changedImageIds.add(a.imageId);
     }
   });
   writeAnnotations(annotations);
+  changedImageIds.forEach(imageId => {
+    ensureLegacyBaseline({ imageId, projectId, annotations: beforeByImage.get(imageId), ...actor(req) });
+    const imageAnnotations = annotations.filter(item => item.imageId === imageId);
+    createRevision({
+      imageId,
+      projectId,
+      annotations: imageAnnotations,
+      ...actor(req),
+      action: 'bulk_relabel',
+    });
+    const image = allImages.find(item => item.id === imageId);
+    if (image) {
+      const reviewUpdate = touchAfterAnnotation(image, imageAnnotations.length, req.session.userId, req.session.username || '');
+      if (reviewUpdate.statusChanged) {
+        appendAuditEvent({
+          projectId,
+          imageId,
+          ...actor(req),
+          type: 'review.status_changed',
+          details: { previousStatus: reviewUpdate.previousStatus, status: reviewUpdate.review.status, reason: 'bulk_relabel' },
+        });
+      }
+    }
+  });
+  appendAuditEvent({ projectId, ...actor(req), type: 'annotations.label_renamed', details: { oldName, newName, count } });
   res.json({ updated: count });
+});
+
+router.get('/:imageId/revisions', (req, res) => {
+  const context = accessibleImage(req, res, req.params.imageId);
+  if (!context) return;
+  const current = readAnnotations().filter(annotation => annotation.imageId === context.image.id);
+  ensureLegacyBaseline({
+    imageId: context.image.id,
+    projectId: context.project.id,
+    annotations: current,
+    actorId: 'legacy',
+    actorUsername: 'Legacy data',
+  });
+  const includeAnnotations = req.query.includeAnnotations === 'true';
+  res.json(revisionsForImage(context.image.id).map(revision => revisionSummary(revision, includeAnnotations)));
+});
+
+router.post('/:imageId/revisions/:revisionId/restore', (req, res) => {
+  const context = accessibleImage(req, res, req.params.imageId);
+  if (!context) return;
+  const revision = getRevision(context.image.id, req.params.revisionId);
+  if (!revision) return res.status(404).json({ error: 'Revision not found.' });
+
+  const all = readAnnotations();
+  const current = all.filter(annotation => annotation.imageId === context.image.id);
+  ensureLegacyBaseline({ imageId: context.image.id, projectId: context.project.id, annotations: current, ...actor(req) });
+  const restored = normalizeShapes(revision.annotations || [], current, req, { restoring: true })
+    .map(annotation => ({ ...annotation, imageId: context.image.id }));
+  writeAnnotations(all.filter(annotation => annotation.imageId !== context.image.id).concat(restored));
+  markImageAnnotated(context.image.id, restored.length);
+  const newRevision = createRevision({
+    imageId: context.image.id,
+    projectId: context.project.id,
+    annotations: restored,
+    ...actor(req),
+    action: 'restore',
+    restoredFrom: revision.id,
+  });
+  const reviewUpdate = touchAfterAnnotation(
+    context.image,
+    restored.length,
+    req.session.userId,
+    req.session.username || '',
+  );
+  appendAuditEvent({
+    projectId: context.project.id,
+    imageId: context.image.id,
+    ...actor(req),
+    type: 'annotations.revision_restored',
+    details: { restoredFrom: revision.id, restoredVersion: revision.version, newRevisionId: newRevision.id },
+  });
+  if (reviewUpdate.statusChanged) {
+    appendAuditEvent({
+      projectId: context.project.id,
+      imageId: context.image.id,
+      ...actor(req),
+      type: 'review.status_changed',
+      details: { previousStatus: reviewUpdate.previousStatus, status: reviewUpdate.review.status, reason: 'revision_restore' },
+    });
+  }
+  res.json({ annotations: restored, revision: revisionSummary(newRevision, false) });
 });
 
 // GET annotations for an image
 router.get('/:imageId', (req, res) => {
-  const annotations = readAnnotations().filter(a => a.imageId === req.params.imageId);
+  const context = accessibleImage(req, res, req.params.imageId);
+  if (!context) return;
+  const annotations = readAnnotations().filter(a => a.imageId === context.image.id);
   res.json(annotations);
 });
 
 // POST save/replace annotations for an image
 // Body: { imageId, shapes: [ { label, type, points/bbox, ... } ] }
 router.post('/', (req, res) => {
-  const { imageId, shapes } = req.body;
+  const { imageId, shapes, source = 'manual', modelId = null } = req.body;
   if (!imageId) return res.status(400).json({ error: 'imageId is required.' });
+  const validationError = validateShapes(shapes || []);
+  if (validationError) return res.status(400).json({ error: validationError });
+  if (!['manual', 'model', 'import'].includes(source)) return res.status(400).json({ error: 'Invalid annotation source.' });
+  const context = accessibleImage(req, res, imageId);
+  if (!context) return;
+  const models = readJson('models.json');
+  const referencedModelIds = new Set([modelId, ...(shapes || []).map(shape => shape.modelId)].filter(Boolean));
+  for (const referencedModelId of referencedModelIds) {
+    const referencedModel = models.find(candidate => candidate.id === referencedModelId);
+    if (!referencedModel || referencedModel.projectId !== context.project.id) {
+      return res.status(400).json({ error: 'Every modelId must reference a model in this project.' });
+    }
+  }
 
-  let annotations = readAnnotations().filter(a => a.imageId !== imageId);
+  let annotations = readAnnotations();
+  const existing = annotations.filter(a => a.imageId === imageId);
+  const foreignIds = new Set(annotations.filter(annotation => annotation.imageId !== imageId).map(annotation => annotation.id));
+  if ((shapes || []).some(shape => validAnnotationId(shape.id) && foreignIds.has(shape.id))) {
+    return res.status(409).json({ error: 'An annotation ID is already used by another image.' });
+  }
+  ensureLegacyBaseline({ imageId, projectId: context.project.id, annotations: existing, ...actor(req) });
+  const newAnnotations = normalizeShapes(shapes || [], existing, req, {
+    defaultSource: source,
+    defaultModelId: modelId,
+  }).map(annotation => ({ ...annotation, imageId }));
 
-  const newAnnotations = (shapes || []).map(shape => ({
-    id: uuidv4(),
-    imageId,
-    label: shape.label,
-    type: shape.type, // 'bbox' | 'polygon' | 'point'
-    data: shape.data, // { x, y, width, height } for bbox; [{ x, y }] for polygon
-    createdAt: new Date().toISOString(),
-  }));
-
-  annotations = annotations.concat(newAnnotations);
+  annotations = annotations.filter(a => a.imageId !== imageId).concat(newAnnotations);
+  const annotationsChanged = annotationSetFingerprint(existing) !== annotationSetFingerprint(newAnnotations);
   writeAnnotations(annotations);
-  markImageAnnotated(imageId);
+  markImageAnnotated(imageId, newAnnotations.length);
+  const revision = createRevision({
+    imageId,
+    projectId: context.project.id,
+    annotations: newAnnotations,
+    ...actor(req),
+    action: 'save',
+  });
+  const reviewUpdate = annotationsChanged
+    ? touchAfterAnnotation(
+      context.image,
+      newAnnotations.length,
+      req.session.userId,
+      req.session.username || '',
+    )
+    : null;
+  appendAuditEvent({
+    projectId: context.project.id,
+    imageId,
+    ...actor(req),
+    type: 'annotations.saved',
+    details: { annotationCount: newAnnotations.length, revisionId: revision.id, version: revision.version, changed: annotationsChanged },
+  });
+  if (reviewUpdate?.statusChanged) {
+    appendAuditEvent({
+      projectId: context.project.id,
+      imageId,
+      ...actor(req),
+      type: 'review.status_changed',
+      details: { previousStatus: reviewUpdate.previousStatus, status: reviewUpdate.review.status, reason: 'annotation_edit' },
+    });
+  }
 
   res.status(201).json(newAnnotations);
 });
@@ -124,10 +385,10 @@ function bboxPixels(data, w, h) {
 
 // Export annotations for a project as COCO JSON
 router.get('/export/:projectId', (req, res) => {
+  const project = getProject(req.params.projectId);
+  if (denyMissingOrForbidden(res, project, isProjectMember(project, req.session.userId), 'Project')) return;
   const annotations = readAnnotations();
-  const imagesData = fs.existsSync(IMAGES_FILE)
-    ? JSON.parse(fs.readFileSync(IMAGES_FILE, 'utf-8'))
-    : [];
+  const imagesData = readJson(IMAGES_FILE);
 
   const projectImages = imagesData.filter(img => img.projectId === req.params.projectId);
   const projectImageIds = new Set(projectImages.map(img => img.id));
@@ -150,25 +411,27 @@ router.get('/export/:projectId', (req, res) => {
 
 // ─── ZIP export ───────────────────────────────────────────────────────────────
 
-const BATCHES_FILE = path.join(__dirname, '..', 'data', 'batches.json');
+const BATCHES_FILE = dataPath('batches.json');
 
 router.get('/export-zip/:projectId', (req, res) => {
   const { projectId } = req.params;
+  const project = getProject(projectId);
+  if (denyMissingOrForbidden(res, project, isProjectMember(project, req.session.userId), 'Project')) return;
   const format   = (req.query.format || 'yolo').toLowerCase();
   const withImgs = req.query.images === 'true';
+  if (!['yolo', 'roboflow', 'coco', 'voc', 'csv'].includes(format)) {
+    return res.status(400).json({ error: 'Unsupported export format.' });
+  }
 
   const allAnnotations = readAnnotations();
-  const allImages = fs.existsSync(IMAGES_FILE)
-    ? JSON.parse(fs.readFileSync(IMAGES_FILE, 'utf-8'))
-    : [];
+  const allImages = readJson(IMAGES_FILE);
 
   // Optional: filter to a specific batch or sub-batch
   let allowedImageIds = null; // null = all project images
   if (req.query.batchId) {
-    const batches = fs.existsSync(BATCHES_FILE)
-      ? JSON.parse(fs.readFileSync(BATCHES_FILE, 'utf-8'))
-      : [];
-    const batch = batches.find(b => b.id === req.query.batchId);
+    const batches = readJson(BATCHES_FILE);
+    const batch = batches.find(b => b.id === req.query.batchId && b.projectId === projectId);
+    if (!batch) return res.status(404).json({ error: 'Batch not found in this project.' });
     if (batch) {
       if (req.query.subBatchId) {
         const sb = (batch.subBatches || []).find(s => s.id === req.query.subBatchId);

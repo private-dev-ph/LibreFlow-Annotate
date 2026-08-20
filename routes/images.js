@@ -5,11 +5,14 @@ const fs      = require('fs');
 const AdmZip  = require('adm-zip');
 const { v4: uuidv4 } = require('uuid');
 const sharp   = require('sharp');
+const { touchAfterAnnotation } = require('../lib/review-state');
+const { appendAuditEvent } = require('../lib/audit-log');
+const { dataPath, uploadsDir, readJson: readDataJson } = require('../lib/data-store');
 
 const router = express.Router();
-const DATA_FILE    = path.join(__dirname, '..', 'data', 'images.json');
-const BATCHES_FILE = path.join(__dirname, '..', 'data', 'batches.json');
-const UPLOADS_DIR  = path.join(__dirname, '..', 'uploads');
+const DATA_FILE    = dataPath('images.json');
+const BATCHES_FILE = dataPath('batches.json');
+const UPLOADS_DIR  = uploadsDir();
 
 // Ensure uploads dir exists
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -51,9 +54,7 @@ function writeBatches(d)     { fs.writeFileSync(BATCHES_FILE, JSON.stringify(d, 
 // Returns true if userId is the owner or collaborator of the project
 function canAccessProject(projectId, userId) {
   try {
-    const projects = JSON.parse(fs.readFileSync(
-      path.join(__dirname, '..', 'data', 'projects.json'), 'utf-8'
-    ));
+    const projects = readDataJson('projects.json');
     const p = projects.find(pr => pr.id === projectId);
     if (!p) return false;
     return p.userId === userId || (p.collaborators || []).some(c => c.userId === userId);
@@ -276,10 +277,14 @@ router.patch('/:id', (req, res) => {
     return res.status(403).json({ error: 'Not authorized.' });
 
   const { isNull, tags } = req.body;
+  const previousNull = Boolean(img.isNull);
+  const annotationCount = isNull === undefined
+    ? 0
+    : readDataJson('annotations.json').filter(annotation => annotation.imageId === img.id).length;
   if (isNull !== undefined) {
     img.isNull    = Boolean(isNull);
-    // Null-marked images count as annotated; un-marking resets to unannotated
-    img.annotated = img.isNull ? true : false;
+    // Null-marked images count as annotated; otherwise retain real annotation state.
+    img.annotated = img.isNull || annotationCount > 0;
   }
   if (tags !== undefined) {
     const arr = Array.isArray(tags)
@@ -300,6 +305,27 @@ router.patch('/:id', (req, res) => {
       .slice(0, 30);
   }
   writeImages(images);
+  if (isNull !== undefined && previousNull !== img.isNull) {
+    const reviewUpdate = touchAfterAnnotation(img, annotationCount, uid, req.session.username || '');
+    img.reviewStatus = reviewUpdate.review.status;
+    img.reviewerId = reviewUpdate.review.reviewerId || null;
+    img.reviewerUsername = reviewUpdate.review.reviewerUsername || null;
+    img.reviewUpdatedAt = reviewUpdate.review.updatedAt;
+    if (reviewUpdate.statusChanged) {
+      appendAuditEvent({
+        projectId: img.projectId,
+        imageId: img.id,
+        actorId: uid,
+        actorUsername: req.session.username || '',
+        type: 'review.status_changed',
+        details: {
+          previousStatus: reviewUpdate.previousStatus,
+          status: reviewUpdate.review.status,
+          reason: img.isNull ? 'marked_null' : 'unmarked_null',
+        },
+      });
+    }
+  }
   res.json(img);
 });
 

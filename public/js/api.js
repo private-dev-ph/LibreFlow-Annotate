@@ -72,14 +72,30 @@ const API = {
     const r = await fetch(`/api/annotations/${imageId}`, { credentials: 'include' });
     return r.json();
   },
-  async saveAnnotations(imageId, shapes) {
+  async saveAnnotations(imageId, shapes, metadata = {}) {
     const r = await fetch('/api/annotations', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageId, shapes }),
+      body: JSON.stringify({ imageId, shapes, ...metadata }),
     });
-    return r.json();
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to save annotations.');
+    return data;
+  },
+  async getAnnotationRevisions(imageId, includeAnnotations = false) {
+    const r = await fetch(`/api/annotations/${imageId}/revisions?includeAnnotations=${includeAnnotations}`, { credentials: 'include' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to load annotation history.');
+    return data;
+  },
+  async restoreAnnotationRevision(imageId, revisionId) {
+    const r = await fetch(`/api/annotations/${imageId}/revisions/${revisionId}/restore`, {
+      method: 'POST', credentials: 'include',
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to restore revision.');
+    return data;
   },
   async relabelAnnotations(projectId, oldName, newName) {
     const r = await fetch('/api/annotations/rename-label', {
@@ -92,6 +108,57 @@ const API = {
   },
   exportUrl(projectId) {
     return `/api/annotations/export/${projectId}`;
+  },
+
+  // Review workflow
+  async getImageReview(imageId) {
+    const r = await fetch(`/api/reviews/image/${imageId}`, { credentials: 'include' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to load review.');
+    return data;
+  },
+  async updateImageReview(imageId, changes) {
+    const r = await fetch(`/api/reviews/image/${imageId}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(changes),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to update review.');
+    return data;
+  },
+  async addReviewComment(imageId, message, kind = 'comment', annotationId = null) {
+    const r = await fetch(`/api/reviews/image/${imageId}/comments`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, kind, annotationId }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to add review note.');
+    return data;
+  },
+  async resolveReviewIssue(imageId, issueId, resolved = true) {
+    const r = await fetch(`/api/reviews/image/${imageId}/issues/${issueId}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resolved }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to update issue.');
+    return data;
+  },
+  async getProjectReviews(projectId, status = '') {
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    const r = await fetch(`/api/reviews/project/${projectId}${query}`, { credentials: 'include' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to load project reviews.');
+    return data;
+  },
+  async getProjectAudit(projectId, limit = 200) {
+    const r = await fetch(`/api/reviews/project/${projectId}/audit?limit=${limit}`, { credentials: 'include' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to load audit history.');
+    return data;
   },
 
   // ── Models ───────────────────────────────────────────────────────────────

@@ -698,6 +698,7 @@ const Canvas = (() => {
       undoStack = [];
       redoStack = [];
       shapes = existingShapes.map(a => ({
+        ...a,
         id: a.id || genId(),
         label: a.label,
         type: a.type,
@@ -798,6 +799,7 @@ const Canvas = (() => {
       if (removedExisting) shapes = dedupedExisting;
       accepted.forEach(s => {
         shapes.push({
+          ...s,
           id: genId(),
           label: s.label,
           type: s.type,

@@ -3,11 +3,19 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const { dataPath, modelsDir, uploadsDir, readJson, writeJson } = require('../lib/data-store');
+const {
+  getProject,
+  isProjectMember,
+  canAccessModel,
+  projectForImage,
+  denyMissingOrForbidden,
+} = require('../lib/access-control');
+const { appendAuditEvent } = require('../lib/audit-log');
 
 const router = express.Router();
-const DATA_FILE    = path.join(__dirname, '..', 'data', 'models.json');
-const PROJECTS_FILE= path.join(__dirname, '..', 'data', 'projects.json');
-const MODELS_DIR   = path.join(__dirname, '..', 'models');
+const DATA_FILE    = dataPath('models.json');
+const MODELS_DIR   = modelsDir();
 
 if (!fs.existsSync(MODELS_DIR)) fs.mkdirSync(MODELS_DIR, { recursive: true });
 
@@ -37,16 +45,8 @@ const modelFields = modelUpload.fields([
   { name: 'yaml',  maxCount: 1 },
 ]);
 
-function readModels()   { try { return JSON.parse(fs.readFileSync(DATA_FILE,    'utf-8')); } catch { return []; } }
-function writeModels(d) { fs.writeFileSync(DATA_FILE, JSON.stringify(d, null, 2)); }
-function readProjects() { try { return JSON.parse(fs.readFileSync(PROJECTS_FILE, 'utf-8')); } catch { return []; } }
-
-// Helper: get all project IDs where this user is a collaborator
-function collaboratorProjectIds(userId) {
-  return readProjects()
-    .filter(p => (p.collaborators || []).some(c => c.userId === userId))
-    .map(p => p.id);
-}
+function readModels()   { return readJson(DATA_FILE); }
+function writeModels(d) { writeJson(DATA_FILE, d); }
 
 // ── GET /api/models?projectId=  ───────────────────────────────────────────────
 // Returns owner's models (optionally filtered by project) PLUS models shared with
@@ -57,20 +57,9 @@ router.get('/', (req, res) => {
 
   if (req.query.projectId) {
     const pid = req.query.projectId;
-    // Own models for this project
-    const ownModels    = models.filter(m => m.userId === uid && m.projectId === pid);
-    // Shared models: any model in this project visible to collaborators of this project
-    const collabPids = collaboratorProjectIds(uid);
-    const sharedModels = models.filter(m =>
-      m.userId !== uid &&
-      m.projectId === pid &&
-      collabPids.includes(pid)
-    );
-    const seen = new Set();
-    return res.json([...ownModels, ...sharedModels].filter(m => {
-      if (seen.has(m.id)) return false;
-      seen.add(m.id); return true;
-    }));
+    const project = getProject(pid);
+    if (denyMissingOrForbidden(res, project, isProjectMember(project, uid), 'Project')) return;
+    return res.json(models.filter(model => model.projectId === pid));
   }
 
   // No projectId: return all own models (for the models management page)
@@ -88,10 +77,25 @@ router.post('/upload', (req, res) => {
     const modelFile = (req.files?.model || [])[0];
     const yamlFile  = (req.files?.yaml  || [])[0];
 
-    if (!modelFile) return res.status(400).json({ error: 'No model file received.' });
+    const cleanupUploads = () => [modelFile, yamlFile].filter(Boolean).forEach(file => {
+      try { if (fs.existsSync(file.path)) fs.unlinkSync(file.path); } catch {}
+    });
+
+    if (!modelFile) {
+      cleanupUploads();
+      return res.status(400).json({ error: 'No model file received.' });
+    }
 
     const { projectId, name, type, description } = req.body;
-    if (!projectId) return res.status(400).json({ error: 'projectId is required.' });
+    if (!projectId) {
+      cleanupUploads();
+      return res.status(400).json({ error: 'projectId is required.' });
+    }
+    const project = getProject(projectId);
+    if (!project || !isProjectMember(project, req.session.userId)) {
+      cleanupUploads();
+      return res.status(project ? 403 : 404).json({ error: project ? 'No access to this project.' : 'Project not found.' });
+    }
 
     const ext = path.extname(modelFile.originalname).toLowerCase().replace('.', '');
     const model = {
@@ -114,6 +118,13 @@ router.post('/upload', (req, res) => {
     const models = readModels();
     models.push(model);
     writeModels(models);
+    appendAuditEvent({
+      projectId,
+      actorId: req.session.userId,
+      actorUsername: req.session.username || '',
+      type: 'model.uploaded',
+      details: { modelId: model.id, name: model.name, format: model.format },
+    });
     res.status(201).json(model);
   });
 });
@@ -151,8 +162,7 @@ router.delete('/:id', (req, res) => {
   res.json({ message: 'Model deleted.' });
 });
 
-const IMAGES_FILE  = path.join(__dirname, '..', 'data', 'images.json');
-const UPLOADS_DIR  = path.join(__dirname, '..', 'uploads');
+const UPLOADS_DIR  = uploadsDir();
 const INFER_SERVER = process.env.INFER_SERVER_URL || 'http://127.0.0.1:7878';
 
 function bboxOverlap(a, b) {
@@ -213,19 +223,34 @@ router.post('/:id/infer', async (req, res) => {
           clsModelId, clsFineModelId, clsCombinedModelId } = req.body;
   if (!imageId) return res.status(400).json({ error: 'imageId is required.' });
 
-  let allImages = [];
-  try { allImages = JSON.parse(fs.readFileSync(IMAGES_FILE, 'utf-8')); } catch {}
-  const img = allImages.find(i => i.id === imageId);
-  if (!img) return res.status(404).json({ error: 'Image not found.' });
+  const context = projectForImage(imageId);
+  if (denyMissingOrForbidden(res, context.image, isProjectMember(context.project, req.session.userId), 'Image')) return;
+  const img = context.image;
+  if (!canAccessModel(model, req.session.userId, context.project.id)) {
+    return res.status(403).json({ error: 'Model and image must belong to the same accessible project.' });
+  }
 
   const modelPath = path.join(MODELS_DIR, model.filename);
   const imagePath = path.join(UPLOADS_DIR, img.filename);
   const yamlPath  = model.yamlFilename ? path.join(MODELS_DIR, model.yamlFilename) : null;
 
-  function modelPathById(id) {
+  function modelById(id) {
     if (!id) return null;
-    const m = models.find(m => m.id === id);
-    return m ? path.join(MODELS_DIR, m.filename) : null;
+    return models.find(candidate => candidate.id === id) || null;
+  }
+
+  const auxiliaryIds = [clsModelId, clsFineModelId, clsCombinedModelId].filter(Boolean);
+  const invalidAuxiliary = auxiliaryIds.find(id => {
+    const auxiliary = modelById(id);
+    return !auxiliary || !canAccessModel(auxiliary, req.session.userId, context.project.id);
+  });
+  if (invalidAuxiliary) {
+    return res.status(400).json({ error: 'All auxiliary models must belong to the image project.' });
+  }
+
+  function modelPathById(id) {
+    const auxiliary = modelById(id);
+    return auxiliary ? path.join(MODELS_DIR, auxiliary.filename) : null;
   }
 
   const payload = {
@@ -250,13 +275,28 @@ router.post('/:id/infer', async (req, res) => {
     const data = await inferRes.json();
     if (Array.isArray(data.results)) {
       const filtered = suppressOverlappingResults(data.results);
+      filtered.results = filtered.results.map(result => {
+        const rawConfidence = result.confidence ?? result.conf;
+        const confidence = Number.isFinite(Number(rawConfidence)) ? Number(rawConfidence) : null;
+        return { ...result, source: 'model', modelId: model.id, confidence };
+      });
       if (filtered.removed > 0) {
         data.results = filtered.results;
         data.count = filtered.results.length;
         const suffix = ` Suppressed ${filtered.removed} overlapping duplicate(s).`;
         data.message = data.message ? `${data.message}${suffix}` : suffix.trim();
       }
+      data.results = filtered.results;
+      data.count = filtered.results.length;
     }
+    appendAuditEvent({
+      projectId: context.project.id,
+      imageId: img.id,
+      actorId: req.session.userId,
+      actorUsername: req.session.username || '',
+      type: 'model.inference_completed',
+      details: { modelId: model.id, resultCount: Array.isArray(data.results) ? data.results.length : 0 },
+    });
     return res.status(inferRes.status).json(data);
   } catch (err) {
     const isRefused = err.cause?.code === 'ECONNREFUSED' || err.message?.includes('ECONNREFUSED');
