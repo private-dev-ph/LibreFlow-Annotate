@@ -15,6 +15,7 @@ services:
       - ./uploads:/app/uploads
       - ./models:/app/models
       - ./datasets:/app/datasets
+      - ./versions:/app/versions
     depends_on:
       inference:
         condition: service_healthy
