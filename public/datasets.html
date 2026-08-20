@@ -132,7 +132,9 @@
       <h3>Edit Dataset</h3>
       <input type="text" id="edit-dataset-name" placeholder="Dataset name" />
       <input type="text" id="edit-dataset-desc" placeholder="Description" />
-      <label><input type="checkbox" id="edit-dataset-shared" /> Share with collaborators</label>
+      <label><input type="checkbox" id="edit-dataset-shared" /> Share with project collaborators</label>
+      <select id="edit-dataset-share-project" aria-label="Dataset sharing project"></select>
+      <p id="edit-dataset-share-help" class="modal-help">Choose exactly which project's collaborators receive access.</p>
       <div class="modal-row">
         <button id="btn-save-edit-dataset" class="btn primary">Save</button>
         <button id="btn-cancel-edit-dataset" class="btn">Cancel</button>

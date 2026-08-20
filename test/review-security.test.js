@@ -73,6 +73,10 @@ function resetData() {
       id: 'dataset-unrelated', userId: 'u-owner', sourceProjectId: 'p-owner-private', sharedWithCollaborators: true,
       images: [{ id: 'unrelated-image', filename: 'dataset-unrelated.jpg' }],
     },
+    {
+      id: 'dataset-uploaded', userId: 'u-owner', sourceProjectId: null, shareProjectId: 'p-one', sharedWithCollaborators: true,
+      images: [{ id: 'uploaded-image', filename: 'dataset-uploaded.jpg' }],
+    },
   ]);
   write('annotations.json', [{
     id: 'legacy-ann', imageId: 'img-one', label: 'legacy', type: 'bbox',
@@ -438,6 +442,7 @@ test('dataset file access follows dataset ownership and explicit collaborator sh
   assert.equal(canAccessDataset(dataset, 'u-collab'), true);
   assert.equal(canAccessDataset(dataset, 'u-outside'), false);
   assert.equal(canAccessDataset(datasetForFilename('dataset-unrelated.jpg'), 'u-collab'), false);
+  assert.equal(canAccessDataset(datasetForFilename('dataset-uploaded.jpg'), 'u-collab'), true);
   dataset.sharedWithCollaborators = false;
   assert.equal(canAccessDataset(dataset, 'u-collab'), false);
 });

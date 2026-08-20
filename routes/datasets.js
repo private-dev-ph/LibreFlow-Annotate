@@ -111,8 +111,9 @@ function canAccessDataset(dataset, userId) {
   if (!dataset) return false;
   if (dataset.userId === userId) return true;
   if (!dataset.sharedWithCollaborators) return false;
-  if (!dataset.sourceProjectId) return false;
-  return canAccessProject(dataset.sourceProjectId, userId);
+  const shareProjectId = dataset.sourceProjectId || dataset.shareProjectId;
+  if (!shareProjectId) return false;
+  return canAccessProject(shareProjectId, userId);
 }
 
 function publicDataset(ds) {
@@ -296,14 +297,24 @@ router.patch('/:id', (req, res) => {
   const all = readDatasets();
   const ds = all.find(d => d.id === req.params.id && d.userId === uid);
   if (!ds) return res.status(404).json({ error: 'Dataset not found or not owner.' });
-  const { name, description, sharedWithCollaborators } = req.body;
+  const { name, description, sharedWithCollaborators, shareProjectId } = req.body;
   if (name !== undefined) ds.name = String(name).trim() || ds.name;
   if (description !== undefined) ds.description = String(description || '');
+  if (!ds.sourceProjectId && shareProjectId !== undefined) {
+    const requestedProjectId = String(shareProjectId || '').trim() || null;
+    if (requestedProjectId && !canAccessProject(requestedProjectId, uid)) {
+      return res.status(403).json({ error: 'Choose a project you can access as the dataset sharing scope.' });
+    }
+    ds.shareProjectId = requestedProjectId;
+  }
   if (sharedWithCollaborators !== undefined) {
-    if (sharedWithCollaborators && !ds.sourceProjectId) {
-      return res.status(400).json({ error: 'Uploaded datasets need an explicit project before they can be shared.' });
+    if (sharedWithCollaborators && !(ds.sourceProjectId || ds.shareProjectId)) {
+      return res.status(400).json({ error: 'Choose a project whose collaborators can access this dataset.' });
     }
     ds.sharedWithCollaborators = Boolean(sharedWithCollaborators);
+  }
+  if (ds.sharedWithCollaborators && !(ds.sourceProjectId || ds.shareProjectId)) {
+    return res.status(400).json({ error: 'A shared dataset must have a project access scope.' });
   }
   writeDatasets(all);
   res.json(publicDataset(ds));

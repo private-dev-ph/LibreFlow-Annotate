@@ -1,6 +1,8 @@
 (async () => {
   const me = await API.getMe();
   if (!me) { window.location.href = '/login'; return; }
+  const projectResponse = await API.getProjects();
+  const projects = Array.isArray(projectResponse) ? projectResponse : [];
 
   document.getElementById('nav-avatar').textContent = me.username.slice(0, 2).toUpperCase();
   document.getElementById('nav-username').textContent = me.username;
@@ -328,6 +330,15 @@
     document.getElementById('edit-dataset-name').value = ds.name || '';
     document.getElementById('edit-dataset-desc').value = ds.description || '';
     document.getElementById('edit-dataset-shared').checked = Boolean(ds.sharedWithCollaborators);
+    const projectSelect = document.getElementById('edit-dataset-share-project');
+    const scopeId = ds.sourceProjectId || ds.shareProjectId || '';
+    projectSelect.innerHTML = `<option value="">Choose sharing project…</option>${projects.map(project =>
+      `<option value="${esc(project.id)}">${esc(project.name)}</option>`).join('')}`;
+    projectSelect.value = scopeId;
+    projectSelect.disabled = Boolean(ds.sourceProjectId);
+    document.getElementById('edit-dataset-share-help').textContent = ds.sourceProjectId
+      ? 'This dataset stays scoped to the project it was exported from.'
+      : 'Choose exactly which project\'s collaborators receive access.';
     document.getElementById('edit-modal').classList.remove('hidden');
   });
   document.getElementById('btn-cancel-edit-dataset').addEventListener('click', () => {
@@ -340,6 +351,7 @@
       name: document.getElementById('edit-dataset-name').value.trim(),
       description: document.getElementById('edit-dataset-desc').value.trim(),
       sharedWithCollaborators: document.getElementById('edit-dataset-shared').checked,
+      shareProjectId: document.getElementById('edit-dataset-share-project').value || null,
     });
     if (r.error) return Notify.error('Failed to update dataset', r.error);
     document.getElementById('edit-modal').classList.add('hidden');
