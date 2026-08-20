@@ -316,6 +316,12 @@
     });
   });
 
+  document.getElementById('btn-dataset-lifecycle').addEventListener('click', () => {
+    const ds = selectedDataset();
+    if (!ds) return Notify.warn('Select a dataset first.');
+    window.location.href = `/dataset-lifecycle?sourceType=dataset&sourceId=${encodeURIComponent(ds.id)}`;
+  });
+
   document.getElementById('btn-edit-dataset').addEventListener('click', () => {
     const ds = selectedDataset();
     if (!ds) return Notify.warn('Select a dataset first.');

@@ -21,6 +21,7 @@
 
   // Set annotator link
   document.getElementById('btn-annotator').href = `/annotator?projectId=${projectId}`;
+  document.getElementById('btn-dataset-lifecycle').href = `/dataset-lifecycle?sourceType=project&sourceId=${encodeURIComponent(projectId)}`;
 
   //─── Load project ──────────────────────────────────────────────────────────
   let project = null;
