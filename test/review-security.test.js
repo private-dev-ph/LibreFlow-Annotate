@@ -182,6 +182,8 @@ test('annotation saves preserve IDs/provenance and revisions can be restored', a
   assert.equal(history.status, 200);
   assert.deepEqual(history.body.map(item => item.version), [3, 2, 1]);
   assert.equal(history.body[2].action, 'baseline');
+  assert.equal(history.body[2].actorId, 'legacy');
+  assert.equal(history.body[2].actorUsername, 'Legacy data');
   assert.equal(history.body[2].annotations[0].id, 'legacy-ann');
 
   const restored = await request(`/api/annotations/img-one/revisions/${history.body[2].id}/restore`, users.collaborator, { method: 'POST' });

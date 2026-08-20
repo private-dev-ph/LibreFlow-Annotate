@@ -21,20 +21,25 @@ const {
   buildImportPlan,
   publicImportPreview,
 } = require('../lib/dataset-import');
+const { getProject, isProjectMember, canAccessDataset } = require('../lib/access-control');
+const { dataDir, dataPath, uploadsDir } = require('../lib/data-store');
+const { ensureLegacyBaseline, createRevision } = require('../lib/annotation-history');
+const { touchAfterAnnotation } = require('../lib/review-state');
+const { appendAuditEvent } = require('../lib/audit-log');
 
 const router = express.Router();
 const ROOT = path.join(__dirname, '..');
-const DATA_DIR = path.join(ROOT, 'data');
-const PROJECTS_FILE = path.join(DATA_DIR, 'projects.json');
-const DATASETS_FILE = path.join(DATA_DIR, 'datasets.json');
-const IMAGES_FILE = path.join(DATA_DIR, 'images.json');
-const ANNOTATIONS_FILE = path.join(DATA_DIR, 'annotations.json');
-const BATCHES_FILE = path.join(DATA_DIR, 'batches.json');
-const HASH_CACHE_FILE = path.join(DATA_DIR, 'content_hash_cache.json');
-const VERSION_INDEX_FILE = path.join(DATA_DIR, 'dataset_versions.json');
-const VERSIONS_ROOT = path.join(ROOT, 'versions');
-const UPLOADS_DIR = path.join(ROOT, 'uploads');
-const DATASETS_DIR = path.join(ROOT, 'datasets');
+const DATA_DIR = dataDir();
+const PROJECTS_FILE = dataPath('projects.json');
+const DATASETS_FILE = dataPath('datasets.json');
+const IMAGES_FILE = dataPath('images.json');
+const ANNOTATIONS_FILE = dataPath('annotations.json');
+const BATCHES_FILE = dataPath('batches.json');
+const HASH_CACHE_FILE = dataPath('content_hash_cache.json');
+const VERSION_INDEX_FILE = dataPath('dataset_versions.json');
+const VERSIONS_ROOT = process.env.LIBREFLOW_VERSIONS_DIR || path.join(ROOT, 'versions');
+const UPLOADS_DIR = uploadsDir();
+const DATASETS_DIR = process.env.LIBREFLOW_DATASETS_DIR || path.join(ROOT, 'datasets');
 const IMPORT_TMP = path.join(DATA_DIR, 'import-tmp');
 const PACKAGE = require('../package.json');
 
@@ -51,23 +56,17 @@ function readJson(file, fallback = []) {
 }
 
 function projectAccess(project, userId) {
-  return project && (project.userId === userId || (project.collaborators || []).some(member => member.userId === userId));
+  return isProjectMember(project, userId);
 }
 
-function collaboratorOwnerIds(userId, projects) {
-  return new Set(projects.filter(project => (project.collaborators || []).some(member => member.userId === userId)).map(project => project.userId));
-}
-
-function datasetAccess(dataset, userId, projects) {
-  if (!dataset) return false;
-  if (dataset.userId === userId) return true;
-  return Boolean(dataset.sharedWithCollaborators && collaboratorOwnerIds(userId, projects).has(dataset.userId));
+function datasetAccess(dataset, userId) {
+  return canAccessDataset(dataset, userId);
 }
 
 function resolveSource(sourceType, sourceId, userId) {
   const projects = readJson(PROJECTS_FILE, []);
   if (sourceType === 'project') {
-    const source = projects.find(project => project.id === sourceId);
+    const source = getProject(sourceId) || projects.find(project => project.id === sourceId);
     if (!source) return { status: 404, error: 'Project not found.' };
     if (!projectAccess(source, userId)) return { status: 403, error: 'No access to this project.' };
     const images = readJson(IMAGES_FILE, []).filter(image => image.projectId === sourceId)
@@ -79,7 +78,7 @@ function resolveSource(sourceType, sourceId, userId) {
   if (sourceType === 'dataset') {
     const source = readJson(DATASETS_FILE, []).find(dataset => dataset.id === sourceId);
     if (!source) return { status: 404, error: 'Dataset not found.' };
-    if (!datasetAccess(source, userId, projects)) return { status: 403, error: 'No access to this dataset.' };
+    if (!datasetAccess(source, userId)) return { status: 403, error: 'No access to this dataset.' };
     const images = (source.images || []).map(image => ({ ...image, sourcePath: path.join(DATASETS_DIR, image.filename) }));
     const annotations = (source.annotations || []).map(annotation => ({ ...annotation }));
     return { source, images, annotations };
@@ -160,7 +159,15 @@ function parseImportFile(filePath, originalName, projectImages) {
 }
 
 function importIntoProject(parsed, plan, projectId, userId, originalName, options = {}) {
-  const transactionFiles = [PROJECTS_FILE, IMAGES_FILE, ANNOTATIONS_FILE, BATCHES_FILE];
+  const transactionFiles = [
+    PROJECTS_FILE,
+    IMAGES_FILE,
+    ANNOTATIONS_FILE,
+    BATCHES_FILE,
+    dataPath('annotation-revisions.json'),
+    dataPath('reviews.json'),
+    dataPath('audit-events.json'),
+  ];
   const backups = new Map(transactionFiles.map(file => [file, fs.existsSync(file) ? fs.readFileSync(file) : null]));
   const currentProjects = readJson(PROJECTS_FILE, []);
   const project = currentProjects.find(item => item.id === projectId);
@@ -174,6 +181,7 @@ function importIntoProject(parsed, plan, projectId, userId, originalName, option
   const staging = path.join(IMPORT_TMP, `.staging-${uuidv4()}`);
   fs.mkdirSync(staging, { recursive: true });
   const importedAt = new Date().toISOString();
+  const actorUsername = String(options.actorUsername || '');
   const annotationConflict = ['append', 'replace', 'skipExisting'].includes(options.annotationConflict)
     ? options.annotationConflict : 'append';
   let batch = null;
@@ -230,6 +238,10 @@ function importIntoProject(parsed, plan, projectId, userId, originalName, option
     const attachedWithIncomingAnnotations = new Set(plan.annotations
       .map(annotation => targetImageIds.get(String(annotation.imageKey)))
       .filter(imageId => attachedIds.has(imageId)));
+    const originalAnnotationsByImage = new Map([...attachedWithIncomingAnnotations].map(imageId => [
+      imageId,
+      allAnnotations.filter(annotation => annotation.imageId === imageId),
+    ]));
     if (annotationConflict === 'replace') allAnnotations = allAnnotations.filter(annotation => !attachedWithIncomingAnnotations.has(annotation.imageId));
     const existingAnnotatedIds = new Set(allAnnotations.map(annotation => annotation.imageId));
     const createdAnnotations = [];
@@ -243,11 +255,24 @@ function importIntoProject(parsed, plan, projectId, userId, originalName, option
         label: source.label,
         type: source.type,
         data: source.data,
+        authorId: userId,
+        authorUsername: actorUsername,
         createdAt: importedAt,
         createdBy: userId,
-        source: 'dataset-import',
+        updatedAt: importedAt,
+        updatedBy: userId,
+        updatedByUsername: actorUsername,
+        source: 'import',
+        modelId: null,
+        confidence: null,
         import: { format: parsed.format, sourceFile: originalName, sourceId: source.sourceId, sourcePart: source.sourcePart },
       });
+    });
+    const affectedImageIds = new Set(createdAnnotations.map(annotation => annotation.imageId));
+    originalAnnotationsByImage.forEach((annotations, imageId) => {
+      if (affectedImageIds.has(imageId)) {
+        ensureLegacyBaseline({ imageId, projectId, annotations, actorId: 'legacy', actorUsername: 'Legacy data' });
+      }
     });
     const annotatedIds = new Set(createdAnnotations.map(annotation => annotation.imageId));
     importedImages.forEach(image => { image.annotated = annotatedIds.has(image.id); });
@@ -277,6 +302,52 @@ function importIntoProject(parsed, plan, projectId, userId, originalName, option
     writeJsonAtomic(ANNOTATIONS_FILE, allAnnotations);
     if (batch) writeJsonAtomic(BATCHES_FILE, allBatches);
     writeJsonAtomic(PROJECTS_FILE, currentProjects);
+
+    affectedImageIds.forEach(imageId => {
+      const image = allImages.find(candidate => candidate.id === imageId);
+      if (!image) return;
+      const finalAnnotations = allAnnotations.filter(annotation => annotation.imageId === imageId);
+      const importedCount = createdAnnotations.filter(annotation => annotation.imageId === imageId).length;
+      const revision = createRevision({
+        imageId,
+        projectId,
+        annotations: finalAnnotations,
+        actorId: userId,
+        actorUsername,
+        action: 'import',
+      });
+      const reviewUpdate = touchAfterAnnotation(image, finalAnnotations.length, userId, actorUsername);
+      appendAuditEvent({
+        projectId,
+        imageId,
+        actorId: userId,
+        actorUsername,
+        type: 'annotations.imported',
+        details: {
+          format: parsed.format,
+          sourceFile: originalName,
+          importedCount,
+          annotationCount: finalAnnotations.length,
+          annotationConflict,
+          revisionId: revision.id,
+          version: revision.version,
+        },
+      });
+      if (reviewUpdate.statusChanged) {
+        appendAuditEvent({
+          projectId,
+          imageId,
+          actorId: userId,
+          actorUsername,
+          type: 'review.status_changed',
+          details: {
+            previousStatus: reviewUpdate.previousStatus,
+            status: reviewUpdate.review.status,
+            reason: 'dataset_import',
+          },
+        });
+      }
+    });
 
     return {
       format: parsed.format,
@@ -342,6 +413,7 @@ router.post('/projects/:projectId/import', (req, res) => {
       }
       const result = importIntoProject(parsed, plan, req.params.projectId, req.session.userId, req.file.originalname, {
         annotationConflict: req.body.annotationConflict,
+        actorUsername: req.session.username || '',
       });
       return res.status(201).json({ ...result, warnings: parsed.warnings, projectId: req.params.projectId });
     } catch (err) {

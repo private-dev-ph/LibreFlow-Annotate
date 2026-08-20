@@ -48,6 +48,10 @@ function actor(req) {
   return { actorId: req.session.userId, actorUsername: req.session.username || '' };
 }
 
+function legacyActor() {
+  return { actorId: 'legacy', actorUsername: 'Legacy data' };
+}
+
 function accessibleImage(req, res, imageId) {
   const context = projectForImage(imageId);
   if (denyMissingOrForbidden(res, context.image, isProjectMember(context.project, req.session.userId), 'Image')) {
@@ -233,7 +237,7 @@ router.post('/rename-label', (req, res) => {
   });
   writeAnnotations(annotations);
   changedImageIds.forEach(imageId => {
-    ensureLegacyBaseline({ imageId, projectId, annotations: beforeByImage.get(imageId), ...actor(req) });
+    ensureLegacyBaseline({ imageId, projectId, annotations: beforeByImage.get(imageId), ...legacyActor() });
     const imageAnnotations = annotations.filter(item => item.imageId === imageId);
     createRevision({
       imageId,
@@ -283,7 +287,7 @@ router.post('/:imageId/revisions/:revisionId/restore', (req, res) => {
 
   const all = readAnnotations();
   const current = all.filter(annotation => annotation.imageId === context.image.id);
-  ensureLegacyBaseline({ imageId: context.image.id, projectId: context.project.id, annotations: current, ...actor(req) });
+  ensureLegacyBaseline({ imageId: context.image.id, projectId: context.project.id, annotations: current, ...legacyActor() });
   const restored = normalizeShapes(revision.annotations || [], current, req, { restoring: true })
     .map(annotation => ({ ...annotation, imageId: context.image.id }));
   writeAnnotations(all.filter(annotation => annotation.imageId !== context.image.id).concat(restored));
@@ -354,7 +358,7 @@ router.post('/', (req, res) => {
   if ((shapes || []).some(shape => validAnnotationId(shape.id) && foreignIds.has(shape.id))) {
     return res.status(409).json({ error: 'An annotation ID is already used by another image.' });
   }
-  ensureLegacyBaseline({ imageId, projectId: context.project.id, annotations: existing, ...actor(req) });
+  ensureLegacyBaseline({ imageId, projectId: context.project.id, annotations: existing, ...legacyActor() });
   const newAnnotations = normalizeShapes(shapes || [], existing, req, {
     defaultSource: source,
     defaultModelId: modelId,
