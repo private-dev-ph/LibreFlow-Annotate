@@ -23,6 +23,7 @@ const PALETTE = [
 ];
 
 const { pushNotification } = require('./notifications');
+const { emitWebhookEvent } = require('../lib/webhooks');
 
 const router = express.Router();
 const DATA_FILE = path.join(__dirname, '..', 'data', 'projects.json');
@@ -68,6 +69,7 @@ router.post('/', (req, res) => {
   };
   projects.push(project);
   writeProjects(projects);
+  emitWebhookEvent('project.created', { project }, { userId: req.session.userId, projectId: project.id });
   res.status(201).json(project);
 });
 
@@ -92,6 +94,7 @@ router.patch('/:id', (req, res) => {
   if (description !== undefined) project.description = description;
   if (labelClasses !== undefined) project.labelClasses = labelClasses;
   writeProjects(projects);
+  emitWebhookEvent('project.updated', { project }, { userId: req.session.userId, projectId: project.id });
   res.json(project);
 });
 
@@ -199,8 +202,13 @@ router.delete('/:id', (req, res) => {
   let projects = readProjects();
   const index = projects.findIndex(p => p.id === req.params.id && p.userId === req.session.userId);
   if (index === -1) return res.status(404).json({ error: 'Project not found.' });
-  projects.splice(index, 1);
+  const [project] = projects.splice(index, 1);
   writeProjects(projects);
+  emitWebhookEvent('project.deleted', {
+    projectId: project.id,
+    name: project.name,
+    deletedAt: new Date().toISOString(),
+  }, { userId: req.session.userId, projectId: project.id });
   res.json({ message: 'Project deleted.' });
 });
 

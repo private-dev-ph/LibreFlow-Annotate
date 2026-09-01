@@ -20,6 +20,7 @@ const {
 } = require('../lib/annotation-history');
 const { appendAuditEvent } = require('../lib/audit-log');
 const { touchAfterAnnotation } = require('../lib/review-state');
+const { emitWebhookEvent } = require('../lib/webhooks');
 
 const UPLOADS_DIR = uploadsDir();
 
@@ -398,6 +399,20 @@ router.post('/', (req, res) => {
       type: 'review.status_changed',
       details: { previousStatus: reviewUpdate.previousStatus, status: reviewUpdate.review.status, reason: 'annotation_edit' },
     });
+  }
+
+  try {
+    const image = fs.existsSync(IMAGES_FILE)
+      ? JSON.parse(fs.readFileSync(IMAGES_FILE, 'utf-8')).find(item => item.id === imageId)
+      : null;
+    if (image) emitWebhookEvent('annotation.saved', {
+      imageId,
+      projectId: image.projectId,
+      annotationCount: newAnnotations.length,
+      actorId: req.session.userId,
+    }, { userId: req.session.userId, projectId: image.projectId });
+  } catch (error) {
+    console.error('Failed to enqueue annotation webhook:', error.message);
   }
 
   res.status(201).json(newAnnotations);

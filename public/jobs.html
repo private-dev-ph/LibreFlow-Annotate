@@ -60,20 +60,136 @@
   <!-- ── Page Body ── -->
   <div class="jobs-body">
     <div class="jobs-container">
-
       <div class="jobs-header">
-        <h1>Jobs</h1>
-        <button class="btn-clear" id="btn-clear">Clear Completed</button>
+        <div>
+          <h1>Automation</h1>
+          <p>Persistent jobs, ingestion, webhooks, and API access.</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn-clear" id="btn-refresh" type="button">Refresh</button>
+          <button class="btn-clear" id="btn-clear" type="button">Clear Completed</button>
+        </div>
       </div>
 
-      <div id="jobs-list" class="jobs-list"></div>
-
-      <div id="jobs-empty" class="jobs-empty" style="display:none">
-        <div class="jobs-empty-icon">🕒</div>
-        <h2>No jobs yet</h2>
-        <p>Upload images or models to a project to see jobs here.</p>
+      <div class="automation-tabs" role="tablist">
+        <button class="automation-tab active" data-tab="jobs" type="button">Jobs</button>
+        <button class="automation-tab" data-tab="run" type="button">Run automation</button>
+        <button class="automation-tab" data-tab="integrations" type="button">Integrations</button>
+        <button class="automation-tab" data-tab="api-keys" type="button">API keys</button>
       </div>
 
+      <section class="automation-panel active" data-panel="jobs">
+        <div id="jobs-list" class="jobs-list"></div>
+        <div id="jobs-empty" class="jobs-empty" style="display:none">
+          <div class="jobs-empty-icon">&#9716;</div>
+          <h2>No jobs yet</h2>
+          <p>Run batch inference or ingest images to create a persistent server job.</p>
+        </div>
+      </section>
+
+      <section class="automation-panel" data-panel="run">
+        <div class="automation-grid two-columns">
+          <form class="automation-card" id="inference-form">
+            <div class="card-heading">
+              <div><h2>Batch auto-annotation</h2><p>Run a model across selected or unannotated images.</p></div>
+              <span class="feature-chip">Resumable</span>
+            </div>
+            <label>Project<select id="inference-project" class="project-select" required></select></label>
+            <label>Model<select id="inference-model" required><option value="">Select a project first</option></select></label>
+            <div class="form-row">
+              <label>Images<select id="inference-selection"><option value="unannotated">Unannotated only</option><option value="all">All images</option><option value="review_queue">Review queue</option></select></label>
+              <label>Confidence<input id="inference-confidence" type="number" min="0.01" max="1" step="0.01" value="0.25" /></label>
+            </div>
+            <label>Specific image IDs <span class="label-help">optional, comma-separated</span><textarea id="inference-image-ids" rows="2" placeholder="image-id-1, image-id-2"></textarea></label>
+            <label class="check-row"><input id="inference-replace" type="checkbox" /> Replace existing annotations on selected images</label>
+            <button class="primary-action" type="submit">Queue inference</button>
+          </form>
+
+          <form class="automation-card" id="url-ingest-form">
+            <div class="card-heading">
+              <div><h2>Import image URLs</h2><p>Downloads are validated and processed in the background.</p></div>
+              <span class="feature-chip">HTTP(S)</span>
+            </div>
+            <label>Project<select id="url-project" class="project-select" required></select></label>
+            <label>Batch name<input id="url-batch-name" value="URL import" maxlength="120" /></label>
+            <label>Image URLs <span class="label-help">one per line, up to 500</span><textarea id="url-list" rows="8" required placeholder="https://example.com/image-01.jpg"></textarea></label>
+            <button class="primary-action" type="submit">Queue URL import</button>
+          </form>
+        </div>
+
+        <div class="automation-card review-card">
+          <div class="card-heading">
+            <div><h2>Auto-annotation review queue</h2><p>Approve model-generated annotations or request specific changes.</p></div>
+            <select id="review-project" class="project-select compact-select"></select>
+          </div>
+          <div id="review-list" class="compact-list"><p class="muted">Choose a project to load its queue.</p></div>
+        </div>
+      </section>
+
+      <section class="automation-panel" data-panel="integrations">
+        <div class="automation-card status-card" id="ingestion-status">Loading ingestion policy…</div>
+        <div class="automation-grid two-columns">
+          <form class="automation-card" id="folder-form">
+            <div class="card-heading"><div><h2>Watched folder</h2><p>Poll a mounted, allowlisted folder for new images.</p></div></div>
+            <label>Project<select id="folder-project" class="project-select" required></select></label>
+            <label>Name<input id="folder-name" value="Production drop folder" maxlength="120" required /></label>
+            <label>Mounted path<input id="folder-path" placeholder="/imports/camera-1" required /></label>
+            <div class="form-row"><label>Interval (seconds)<input id="folder-interval" type="number" min="30" value="300" /></label><label class="check-row lower"><input id="folder-recursive" type="checkbox" checked /> Include subfolders</label></div>
+            <button class="primary-action" type="submit">Add folder watch</button>
+          </form>
+
+          <form class="automation-card" id="s3-form">
+            <div class="card-heading"><div><h2>S3-compatible connector</h2><p>Sync MinIO or S3 objects through a resumable import job.</p></div><span class="feature-chip neutral">Sync</span></div>
+            <label>Project<select id="s3-project" class="project-select" required></select></label>
+            <div class="form-row"><label>Name<input id="s3-name" value="Object storage" /></label><label>Region<input id="s3-region" value="us-east-1" /></label></div>
+            <label>Endpoint<input id="s3-endpoint" type="url" placeholder="https://s3.example.com" /></label>
+            <div class="form-row"><label>Bucket<input id="s3-bucket" required /></label><label>Prefix<input id="s3-prefix" placeholder="incoming/" /></label></div>
+            <label>Credentials<select id="s3-credential-mode"><option value="environment">Environment variables</option><option value="static">Stored static credentials</option></select></label>
+            <div id="s3-static-fields" class="hidden"><div class="form-row"><label>Access key<input id="s3-access-key" autocomplete="off" /></label><label>Secret key<input id="s3-secret-key" type="password" autocomplete="new-password" /></label></div></div>
+            <button class="primary-action" type="submit">Save S3 contract</button>
+          </form>
+        </div>
+
+        <div class="automation-card">
+          <div class="card-heading"><div><h2>Storage connectors</h2><p>Folder watches can be scanned immediately; S3 entries expose readiness status.</p></div></div>
+          <div id="connectors-list" class="compact-list"></div>
+        </div>
+
+        <div class="automation-grid two-columns">
+          <form class="automation-card" id="webhook-form">
+            <div class="card-heading"><div><h2>Signed webhook</h2><p>Receive selected project and job events with an HMAC signature.</p></div></div>
+            <label>Project<select id="webhook-project" class="project-select"><option value="">All my projects</option></select></label>
+            <label>Name<input id="webhook-name" value="Automation webhook" maxlength="120" /></label>
+            <label>Endpoint URL<input id="webhook-url" type="url" required placeholder="https://example.com/libreflow-events" /></label>
+            <div><span class="field-label">Events</span><div id="webhook-events" class="checkbox-grid"></div></div>
+            <button class="primary-action" type="submit">Create webhook</button>
+            <div id="webhook-secret" class="one-time-secret hidden"></div>
+          </form>
+          <div class="automation-card">
+            <div class="card-heading"><div><h2>Webhooks & deliveries</h2><p>Failed deliveries can be retried without recreating events.</p></div></div>
+            <div id="webhooks-list" class="compact-list"></div>
+            <h3 class="subheading">Recent deliveries</h3>
+            <div id="deliveries-list" class="compact-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="automation-panel" data-panel="api-keys">
+        <div class="automation-grid api-layout">
+          <form class="automation-card" id="api-key-form">
+            <div class="card-heading"><div><h2>Create scoped API key</h2><p>The token is displayed once. Store it in a secret manager.</p></div></div>
+            <label>Name<input id="api-key-name" value="CI automation" maxlength="120" required /></label>
+            <label>Restrict to projects <span class="label-help">optional</span><select id="api-key-projects" multiple size="4"></select></label>
+            <div><span class="field-label">Scopes</span><div id="api-key-scopes" class="checkbox-grid"></div></div>
+            <button class="primary-action" type="submit">Create API key</button>
+            <div id="api-key-token" class="one-time-secret hidden"></div>
+          </form>
+          <div class="automation-card">
+            <div class="card-heading"><div><h2>Active keys</h2><p>Revoke keys immediately when no longer needed.</p></div><a class="docs-link" href="/docs/automation-api.md" target="_blank">API docs</a></div>
+            <div id="api-keys-list" class="compact-list"></div>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 

@@ -434,6 +434,8 @@ def infer(req: InferRequest):
         results.append({
             "label": label,
             "type":  "bbox",
+            "confidence": det["conf"],
+            "class_id": det["cls_id"],
             "data": {
                 "x":      x1,
                 "y":      y1,
