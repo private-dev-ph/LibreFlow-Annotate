@@ -29,6 +29,10 @@ function authenticateAutomation(req, res, next) {
 
 function requireScopes(...required) {
   return (req, res, next) => {
+    // Routers can also be mounted directly by browser-only callers/tests. A
+    // session is equivalent to the existing fully privileged browser path;
+    // API keys still have to carry each declared scope.
+    if (req.authContext?.type === 'session' || (!req.authContext && req.session?.userId)) return next();
     const granted = req.authContext?.scopes || [];
     if (granted.includes('*') || required.every(scope => granted.includes(scope))) return next();
     return res.status(403).json({ error: `Missing API scope: ${required.filter(scope => !granted.includes(scope)).join(', ')}` });
@@ -36,7 +40,7 @@ function requireScopes(...required) {
 }
 
 function requireSession(req, res, next) {
-  if (req.authContext?.type === 'session') return next();
+  if (req.authContext?.type === 'session' || (!req.authContext && req.session?.userId)) return next();
   return res.status(403).json({ error: 'This operation requires an interactive session.' });
 }
 

@@ -19,10 +19,31 @@ Keys can be restricted to selected project IDs and one or more scopes:
 | `projects:read` | List accessible projects/images and review queues |
 | `annotations:write` | Run batch inference and change review status |
 | `ingest:write` | Upload images or ingest URLs/mounted folders |
+| `versions:read` | List, inspect, download, and run health checks for dataset versions |
+| `versions:write` | Create immutable dataset versions |
 | `integrations:read` | Read connectors, webhooks, deliveries, and policy status |
 | `integrations:write` | Configure connectors/webhooks and retry deliveries |
 
 Key creation and revocation require an interactive browser session. A key cannot mint another key.
+
+### Dataset versions
+
+The version read and create endpoints accept either a browser session or a Bearer
+API key. API keys need `versions:read` for list/detail/download/health requests
+and `versions:write` to create a version. A key's configured project allowlist is
+enforced in addition to the current user's project or dataset membership; an
+unrestricted key may access any project the key owner can currently access.
+
+```http
+GET  /api/dataset-lifecycle/:sourceType/:sourceId/versions
+GET  /api/dataset-lifecycle/:sourceType/:sourceId/versions/:versionId
+GET  /api/dataset-lifecycle/:sourceType/:sourceId/versions/:versionId/download
+GET  /api/dataset-lifecycle/:sourceType/:sourceId/health
+POST /api/dataset-lifecycle/:sourceType/:sourceId/versions
+```
+
+`sourceType` is `project` or `dataset`. Annotated imports remain restricted to
+interactive browser sessions.
 
 ## Persistent jobs
 
