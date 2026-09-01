@@ -91,7 +91,7 @@ router.get('/image/:imageId', (req, res) => {
     ...review,
     statuses: REVIEW_STATUSES,
     allowedStatuses: [...(STATUS_TRANSITIONS[review.status] || new Set([review.status]))]
-      .filter(status => reviewerCanDecide || !['approved', 'changes_requested'].includes(status)),
+      .filter(status => status === review.status || reviewerCanDecide || !['approved', 'changes_requested'].includes(status)),
     members: projectMembers(context.project),
     canManageReviewers: isProjectOwner(context.project, req.session.userId),
     canReview: reviewerCanDecide,
@@ -228,10 +228,18 @@ router.patch('/image/:imageId/issues/:issueId', (req, res) => {
   const issue = review.issues.find(candidate => candidate.id === req.params.issueId);
   if (!issue) return res.status(404).json({ error: 'Issue not found.' });
   const resolved = req.body?.resolved !== false;
+  if (!resolved && !canReview(review, context.project, req.session.userId)) {
+    return res.status(403).json({ error: 'Only the assigned reviewer or project owner can reopen an issue.' });
+  }
+  const previousStatus = review.status;
   issue.resolved = resolved;
   issue.resolvedAt = resolved ? new Date().toISOString() : null;
   issue.resolvedBy = resolved ? req.session.userId : null;
   issue.resolvedByUsername = resolved ? (req.session.username || '') : null;
+  if (!resolved && review.status === 'approved') {
+    review.status = 'changes_requested';
+    review.rejectionReason = issue.message;
+  }
   const saved = saveReview(review);
   appendAuditEvent({
     projectId: context.project.id,
@@ -240,6 +248,15 @@ router.patch('/image/:imageId/issues/:issueId', (req, res) => {
     type: resolved ? 'review.issue_resolved' : 'review.issue_reopened',
     details: { issueId: issue.id },
   });
+  if (previousStatus !== saved.status) {
+    appendAuditEvent({
+      projectId: context.project.id,
+      imageId: context.image.id,
+      ...actor(req),
+      type: 'review.status_changed',
+      details: { previousStatus, status: saved.status, reason: 'issue_reopened', issueId: issue.id },
+    });
+  }
   res.json(saved);
 });
 

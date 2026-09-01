@@ -29,6 +29,7 @@ let baseUrl;
 const users = {
   owner: { userId: 'u-owner', username: 'owner' },
   collaborator: { userId: 'u-collab', username: 'annotator' },
+  viewer: { userId: 'u-viewer', username: 'viewer' },
   outsider: { userId: 'u-outside', username: 'outsider' },
 };
 
@@ -44,12 +45,16 @@ function resetData() {
   write('users.json', [
     { id: 'u-owner', username: 'owner' },
     { id: 'u-collab', username: 'annotator' },
+    { id: 'u-viewer', username: 'viewer' },
     { id: 'u-outside', username: 'outsider' },
   ]);
   write('projects.json', [
     {
       id: 'p-one', userId: 'u-owner', name: 'Accessible',
-      collaborators: [{ userId: 'u-collab', username: 'annotator' }],
+      collaborators: [
+        { userId: 'u-collab', username: 'annotator' },
+        { userId: 'u-viewer', username: 'viewer' },
+      ],
     },
     { id: 'p-owner-private', userId: 'u-owner', name: 'Unrelated', collaborators: [] },
     { id: 'p-two', userId: 'u-outside', name: 'Private', collaborators: [] },
@@ -291,9 +296,10 @@ test('review workflow enforces reviewer assignment, decisions, issues, and audit
   assert.equal(submitted.body.status, 'submitted');
 
   const issue = await request('/api/reviews/image/img-one/comments', users.collaborator, {
-    method: 'POST', body: { kind: 'issue', message: 'Bounding box is too loose.' },
+    method: 'POST', body: { kind: 'issue', message: 'Bounding box is too loose.', annotationId: 'legacy-ann' },
   });
   assert.equal(issue.status, 201);
+  assert.equal(issue.body.issues[0].annotationId, 'legacy-ann');
   const issueId = issue.body.issues[0].id;
 
   const blockedApproval = await request('/api/reviews/image/img-one', users.owner, {
@@ -368,6 +374,42 @@ test('review transitions require submission and a reason for requested changes',
   });
   assert.equal(submittedEmpty.status, 409);
   assert.match(submittedEmpty.body.error, /unannotated image/);
+});
+
+test('reopening an approved linked issue requires a reviewer and requests changes', async () => {
+  write('reviews.json', [{
+    id: 'approved-review', imageId: 'img-one', projectId: 'p-one', status: 'approved',
+    reviewerId: 'u-collab', reviewerUsername: 'annotator', comments: [],
+    issues: [{
+      id: 'resolved-issue', message: 'Tighten this box.', annotationId: 'legacy-ann', resolved: true,
+      createdBy: 'u-collab', createdByUsername: 'annotator', createdAt: '2026-01-01T00:00:00.000Z',
+    }],
+    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+  }]);
+  const forbidden = await request('/api/reviews/image/img-one/issues/resolved-issue', users.viewer, {
+    method: 'PATCH', body: { resolved: false },
+  });
+  assert.equal(forbidden.status, 403);
+  const reopened = await request('/api/reviews/image/img-one/issues/resolved-issue', users.collaborator, {
+    method: 'PATCH', body: { resolved: false },
+  });
+  assert.equal(reopened.status, 200);
+  assert.equal(reopened.body.issues[0].resolved, false);
+  assert.equal(reopened.body.status, 'changes_requested');
+  assert.equal(reopened.body.rejectionReason, 'Tighten this box.');
+});
+
+test('non-reviewers still see the current decision state in allowed statuses', async () => {
+  write('reviews.json', [{
+    id: 'approved-review', imageId: 'img-one', projectId: 'p-one', status: 'approved',
+    reviewerId: 'u-collab', reviewerUsername: 'annotator', comments: [], issues: [],
+    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+  }]);
+  const response = await request('/api/reviews/image/img-one', users.viewer);
+  assert.equal(response.status, 200);
+  assert.equal(response.body.canReview, false);
+  assert.ok(response.body.allowedStatuses.includes('approved'));
+  assert.ok(!response.body.allowedStatuses.includes('changes_requested'));
 });
 
 test('model listing and inference bind models to an accessible image project', async () => {

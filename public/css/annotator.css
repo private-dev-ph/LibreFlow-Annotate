@@ -619,6 +619,8 @@ html, body { height: 100%; overflow: hidden; }
 .review-entry.resolved { opacity: .55; border-left-color: #48e5c2; }
 .review-entry-meta { color: var(--text-muted); font-size: 9px; margin-bottom: 2px; }
 .review-resolve-btn { float: right; border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: 9px; }
+.review-annotation-link { margin-top: 3px; border: 0; padding: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: 9px; text-decoration: underline; }
+.review-link-row { display: flex; align-items: center; gap: 5px; color: var(--text-muted); font-size: 9px; }
 .review-comment-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--text-muted); font-size: 9px; }
 .review-rejection { color: #e05c5c; background: rgba(224,92,92,.08); border-radius: 4px; padding: 5px 6px; font-size: 10px; }
 .review-feedback { min-height: 12px; color: var(--text-muted); font-size: 9px; }

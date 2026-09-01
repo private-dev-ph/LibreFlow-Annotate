@@ -36,7 +36,7 @@ test('annotator exposes every expanded tool and workflow control', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'annotator.html'), 'utf8');
   for (const id of [
     'tool-rbox', 'tool-mask', 'tool-line', 'tool-skeleton', 'tool-smart',
-    'tool-classification', 'btn-save-next', 'autosave-toggle', 'image-status-filter',
+    'tool-classification', 'btn-save-next', 'autosave-toggle', 'image-status-filter', 'review-link-selected',
   ]) assert.match(html, new RegExp(`id=["']${id}["']`), `missing #${id}`);
 });
 

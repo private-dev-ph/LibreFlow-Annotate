@@ -13,6 +13,7 @@
   const thread = document.getElementById('review-thread');
   const commentInput = document.getElementById('review-comment-input');
   const issueCheckbox = document.getElementById('review-comment-is-issue');
+  const linkSelectedCheckbox = document.getElementById('review-link-selected');
   const addCommentButton = document.getElementById('btn-add-review-comment');
   const feedback = document.getElementById('review-feedback');
   let currentImageId = null;
@@ -54,22 +55,34 @@
     }
     thread.innerHTML = entries.map(entry => `
       <div class="review-entry ${entry.kind === 'issue' ? 'issue' : ''} ${entry.resolved ? 'resolved' : ''}">
-        ${entry.kind === 'issue' && !entry.resolved
-          ? `<button class="review-resolve-btn" data-issue-id="${escapeHtml(entry.id)}">Resolve</button>` : ''}
+        ${entry.kind === 'issue' && (!entry.resolved || review.canReview)
+          ? `<button class="review-resolve-btn" data-issue-id="${escapeHtml(entry.id)}" data-next-resolved="${entry.resolved ? 'false' : 'true'}">${entry.resolved ? 'Reopen' : 'Resolve'}</button>` : ''}
         <div class="review-entry-meta">${entry.kind === 'issue' ? (entry.resolved ? 'Resolved issue' : 'Open issue') : 'Comment'} · ${escapeHtml(entry.createdByUsername || 'Member')} · ${escapeHtml(formatDate(entry.createdAt))}</div>
         <div>${escapeHtml(entry.message)}</div>
+        ${entry.annotationId ? `<button class="review-annotation-link" data-annotation-id="${escapeHtml(entry.annotationId)}" type="button">Linked annotation</button>` : ''}
       </div>
     `).join('');
     thread.querySelectorAll('.review-resolve-btn').forEach(button => {
       button.addEventListener('click', async () => {
         try {
           button.disabled = true;
-          await API.resolveReviewIssue(currentImageId, button.dataset.issueId, true);
+          const resolved = button.dataset.nextResolved === 'true';
+          await API.resolveReviewIssue(currentImageId, button.dataset.issueId, resolved);
           await refresh(currentImageId);
-          setFeedback('Issue resolved.');
+          setFeedback(resolved ? 'Issue resolved.' : 'Issue reopened.');
         } catch (error) {
           setFeedback(error.message, true);
         }
+      });
+    });
+    thread.querySelectorAll('.review-annotation-link').forEach(button => {
+      button.addEventListener('click', () => {
+        const annotation = typeof Canvas !== 'undefined'
+          ? Canvas.getShapes().find(shape => shape.id === button.dataset.annotationId)
+          : null;
+        if (!annotation) return setFeedback('That annotation is not present in the current revision.', true);
+        Canvas.setSelected(annotation.id);
+        setFeedback(`Selected ${annotation.label || 'linked annotation'}.`);
       });
     });
   }
@@ -172,9 +185,19 @@
     if (!currentImageId || !message) return;
     try {
       addCommentButton.disabled = true;
-      await API.addReviewComment(currentImageId, message, issueCheckbox.checked ? 'issue' : 'comment');
+      const selected = linkSelectedCheckbox?.checked && typeof Canvas !== 'undefined' ? Canvas.getSelected() : null;
+      if (linkSelectedCheckbox?.checked && !selected) {
+        throw new Error('Select an annotation before linking this review note.');
+      }
+      await API.addReviewComment(
+        currentImageId,
+        message,
+        issueCheckbox.checked ? 'issue' : 'comment',
+        selected?.id || null,
+      );
       commentInput.value = '';
       issueCheckbox.checked = false;
+      if (linkSelectedCheckbox) linkSelectedCheckbox.checked = false;
       await refresh(currentImageId);
       setFeedback('Review note added.');
     } catch (error) {
