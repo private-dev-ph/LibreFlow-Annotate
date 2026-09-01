@@ -22,6 +22,8 @@ const {
   publicImportPreview,
 } = require('../lib/dataset-import');
 const { getProject, isProjectMember, canAccessDataset } = require('../lib/access-control');
+const { apiKeyAllowsProject } = require('../lib/project-access');
+const { requireScopes, requireSession } = require('../middleware/automation-auth');
 const { dataDir, dataPath, uploadsDir } = require('../lib/data-store');
 const { ensureLegacyBaseline, createRevision } = require('../lib/annotation-history');
 const { touchAfterAnnotation } = require('../lib/review-state');
@@ -64,12 +66,21 @@ function datasetAccess(dataset, userId) {
   return canAccessDataset(dataset, userId);
 }
 
-function resolveSource(sourceType, sourceId, userId) {
+function apiKeySourceProjectId(sourceType, source) {
+  return sourceType === 'project'
+    ? source?.id
+    : (source?.sourceProjectId || source?.shareProjectId || null);
+}
+
+function resolveSource(sourceType, sourceId, userId, authContext) {
   const projects = readJson(PROJECTS_FILE, []);
   if (sourceType === 'project') {
     const source = getProject(sourceId) || projects.find(project => project.id === sourceId);
     if (!source) return { status: 404, error: 'Project not found.' };
     if (!projectAccess(source, userId)) return { status: 403, error: 'No access to this project.' };
+    if (!apiKeyAllowsProject(authContext, apiKeySourceProjectId(sourceType, source))) {
+      return { status: 403, error: 'This API key is not scoped to the project.' };
+    }
     const images = readJson(IMAGES_FILE, []).filter(image => image.projectId === sourceId)
       .map(image => ({ ...image, sourcePath: path.join(UPLOADS_DIR, image.filename) }));
     const imageIds = new Set(images.map(image => image.id));
@@ -80,6 +91,9 @@ function resolveSource(sourceType, sourceId, userId) {
     const source = readJson(DATASETS_FILE, []).find(dataset => dataset.id === sourceId);
     if (!source) return { status: 404, error: 'Dataset not found.' };
     if (!datasetAccess(source, userId)) return { status: 403, error: 'No access to this dataset.' };
+    if (!apiKeyAllowsProject(authContext, apiKeySourceProjectId(sourceType, source))) {
+      return { status: 403, error: 'This API key is not scoped to the dataset project.' };
+    }
     const images = (source.images || []).map(image => ({ ...image, sourcePath: path.join(DATASETS_DIR, image.filename) }));
     const annotations = (source.annotations || []).map(annotation => ({ ...annotation }));
     return { source, images, annotations };
@@ -127,6 +141,21 @@ function publicManifest(manifest, includeAnnotations) {
   if (includeAnnotations) return manifest;
   const { annotations, ...rest } = manifest;
   return { ...rest, annotationsIncluded: false, annotationCount: annotations.length };
+}
+
+function requestActor(req) {
+  const userId = req.authContext?.userId || req.session?.userId;
+  const username = req.authContext?.username || req.session?.username ||
+    readJson(dataPath('users.json'), []).find(user => user.id === userId)?.username || '';
+  return { userId, username };
+}
+
+function resolveRequestSource(req) {
+  const actor = requestActor(req);
+  return {
+    actor,
+    resolved: resolveSource(req.params.sourceType, req.params.sourceId, actor.userId, req.authContext),
+  };
 }
 
 const importStorage = multer.diskStorage({
@@ -381,7 +410,7 @@ function importIntoProject(parsed, plan, projectId, userId, originalName, option
 
 // Dry-run and commit share the exact same parser and planning path. A COCO JSON
 // may reference images already uploaded to the project; ZIP imports carry images.
-router.post('/projects/:projectId/import', (req, res) => {
+router.post('/projects/:projectId/import', requireSession, (req, res) => {
   importUpload.single('dataset')(req, res, async error => {
     if (error) {
       const status = error.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
@@ -389,7 +418,8 @@ router.post('/projects/:projectId/import', (req, res) => {
     }
     if (!req.file) return res.status(400).json({ error: 'A dataset .zip or COCO .json file is required.' });
     try {
-      const resolved = resolveSource('project', req.params.projectId, req.session.userId);
+      const actor = requestActor(req);
+      const resolved = resolveSource('project', req.params.projectId, actor.userId, req.authContext);
       if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
       const requestedFormat = String(req.body.format || 'auto').toLowerCase();
       if (requestedFormat !== 'auto' && !['yolo', 'coco', 'voc'].includes(requestedFormat)) {
@@ -412,9 +442,9 @@ router.post('/projects/:projectId/import', (req, res) => {
       if (!plan.imageActions.some(action => action.action === 'import' || action.action === 'attach')) {
         return res.status(422).json({ error: 'No images remain after applying import policies.', ...preview });
       }
-      const result = importIntoProject(parsed, plan, req.params.projectId, req.session.userId, req.file.originalname, {
+      const result = importIntoProject(parsed, plan, req.params.projectId, actor.userId, req.file.originalname, {
         annotationConflict: req.body.annotationConflict,
-        actorUsername: req.session.username || '',
+        actorUsername: actor.username,
       });
       return res.status(201).json({ ...result, warnings: parsed.warnings, projectId: req.params.projectId });
     } catch (err) {
@@ -426,14 +456,14 @@ router.post('/projects/:projectId/import', (req, res) => {
   });
 });
 
-router.get('/:sourceType/:sourceId/versions', (req, res) => {
-  const resolved = resolveSource(req.params.sourceType, req.params.sourceId, req.session.userId);
+router.get('/:sourceType/:sourceId/versions', requireScopes('versions:read'), (req, res) => {
+  const { resolved } = resolveRequestSource(req);
   if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
   res.json(listVersions(VERSION_INDEX_FILE, req.params.sourceType, req.params.sourceId));
 });
 
-router.post('/:sourceType/:sourceId/versions', async (req, res) => {
-  const resolved = resolveSource(req.params.sourceType, req.params.sourceId, req.session.userId);
+router.post('/:sourceType/:sourceId/versions', requireScopes('versions:write'), async (req, res) => {
+  const { actor, resolved } = resolveRequestSource(req);
   if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
   if (!resolved.images.length) return res.status(400).json({ error: 'Cannot create a version without images.' });
   try {
@@ -445,7 +475,7 @@ router.post('/:sourceType/:sourceId/versions', async (req, res) => {
       source: resolved.source,
       images: enrichImages(resolved.images),
       annotations: resolved.annotations,
-      createdBy: req.session.userId,
+      createdBy: actor.userId,
       name: req.body.name,
       description: req.body.description,
       splitConfig: {
@@ -465,8 +495,8 @@ router.post('/:sourceType/:sourceId/versions', async (req, res) => {
   }
 });
 
-router.get('/:sourceType/:sourceId/versions/:versionId', (req, res) => {
-  const resolved = resolveSource(req.params.sourceType, req.params.sourceId, req.session.userId);
+router.get('/:sourceType/:sourceId/versions/:versionId', requireScopes('versions:read'), (req, res) => {
+  const { resolved } = resolveRequestSource(req);
   if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
   const manifest = readVersionManifest(VERSIONS_ROOT, req.params.versionId);
   if (!manifest || manifest.source?.type !== req.params.sourceType || manifest.source?.id !== req.params.sourceId) {
@@ -475,8 +505,8 @@ router.get('/:sourceType/:sourceId/versions/:versionId', (req, res) => {
   res.json(publicManifest(manifest, String(req.query.includeAnnotations || 'true') !== 'false'));
 });
 
-router.get('/:sourceType/:sourceId/versions/:versionId/download', (req, res) => {
-  const resolved = resolveSource(req.params.sourceType, req.params.sourceId, req.session.userId);
+router.get('/:sourceType/:sourceId/versions/:versionId/download', requireScopes('versions:read'), (req, res) => {
+  const { resolved } = resolveRequestSource(req);
   if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
   const manifest = readVersionManifest(VERSIONS_ROOT, req.params.versionId);
   if (!manifest || manifest.source?.type !== req.params.sourceType || manifest.source?.id !== req.params.sourceId) {
@@ -564,8 +594,8 @@ router.get('/:sourceType/:sourceId/versions/:versionId/download', (req, res) => 
   res.end(data);
 });
 
-router.get('/:sourceType/:sourceId/health', (req, res) => {
-  const resolved = resolveSource(req.params.sourceType, req.params.sourceId, req.session.userId);
+router.get('/:sourceType/:sourceId/health', requireScopes('versions:read'), (req, res) => {
+  const { resolved } = resolveRequestSource(req);
   if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
   let images;
   let annotations;

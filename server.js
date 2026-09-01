@@ -15,6 +15,7 @@ const datasetsRouter    = require('./routes/datasets');
 const reviewsRouter     = require('./routes/reviews');
 const datasetLifecycleRouter = require('./routes/dataset-lifecycle');
 const { requireAuth } = require('./middleware/session-auth');
+const { authenticateAutomation } = require('./middleware/automation-auth');
 const {
   getProject,
   isProjectMember,
@@ -113,7 +114,9 @@ app.use('/api/batches',        requireAuth, batchesRouter);
 app.use('/api/notifications', requireAuth, notificationsRouter);
 app.use('/api/datasets',    requireAuth, datasetsRouter);
 app.use('/api/reviews',     requireAuth, reviewsRouter);
-app.use('/api/dataset-lifecycle', requireAuth, datasetLifecycleRouter);
+// Lifecycle reads/creates accept either the existing browser session or a
+// scoped Bearer key. Annotated imports remain session-only in the router.
+app.use('/api/dataset-lifecycle', authenticateAutomation, datasetLifecycleRouter);
 
 try { startJobRuntime(); }
 catch (error) { console.error('Automation job recovery failed:', error.message); }
