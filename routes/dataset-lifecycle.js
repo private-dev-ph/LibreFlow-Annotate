@@ -26,6 +26,7 @@ const { dataDir, dataPath, uploadsDir } = require('../lib/data-store');
 const { ensureLegacyBaseline, createRevision } = require('../lib/annotation-history');
 const { touchAfterAnnotation } = require('../lib/review-state');
 const { appendAuditEvent } = require('../lib/audit-log');
+const { createCocoDocument, appendCocoAnnotation } = require('../lib/coco-export');
 
 const router = express.Router();
 const ROOT = path.join(__dirname, '..');
@@ -491,7 +492,7 @@ router.get('/:sourceType/:sourceId/versions/:versionId/download', (req, res) => 
     if (!annotationsByImage.has(annotation.imageId)) annotationsByImage.set(annotation.imageId, []);
     annotationsByImage.get(annotation.imageId).push(annotation);
   });
-  const coco = { info: { description: manifest.name, version: String(manifest.sequence), date_created: manifest.createdAt }, images: [], annotations: [], categories: manifest.classes.map((label, index) => ({ id: index + 1, name: label.name, supercategory: 'object' })) };
+  const coco = createCocoDocument(manifest);
   let corruptAsset = null;
   manifest.images.forEach((image, imageIndex) => {
     const source = path.resolve(versionDir, image.path);
@@ -531,28 +532,12 @@ router.get('/:sourceType/:sourceId/versions/:versionId/download', (req, res) => 
     coco.images.push({ id: imageIndex + 1, file_name: exportImage, width: image.width, height: image.height, split: image.split, libreflow_image_id: image.id });
     imageAnnotations.forEach(annotation => {
       const category = classIndex.get(annotation.label);
-      if (category === undefined) return;
-      const record = { id: coco.annotations.length + 1, image_id: imageIndex + 1, category_id: category + 1, iscrowd: 0, libreflow_annotation_id: annotation.id };
-      if (annotation.type === 'bbox') {
-        const data = annotation.data || {};
-        record.bbox = [Number(data.x), Number(data.y), Number(data.width), Number(data.height)];
-        record.area = Math.max(0, Number(data.width) * Number(data.height));
-        record.segmentation = [];
-      } else if (annotation.type === 'polygon') {
-        const points = Array.isArray(annotation.data) ? annotation.data : annotation.data?.points || [];
-        const xs = points.map(point => Number(point.x)), ys = points.map(point => Number(point.y));
-        record.segmentation = [points.flatMap(point => [Number(point.x), Number(point.y)])];
-        record.bbox = points.length ? [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)] : [0, 0, 0, 0];
-        record.area = record.bbox[2] * record.bbox[3];
-      } else if (annotation.type === 'point') {
-        const point = Array.isArray(annotation.data) ? annotation.data[0] : annotation.data;
-        record.keypoints = [Number(point?.x || 0), Number(point?.y || 0), 2];
-        record.num_keypoints = 1;
-        record.bbox = [Number(point?.x || 0), Number(point?.y || 0), 0, 0];
-        record.area = 0;
-        record.segmentation = [];
-      }
-      coco.annotations.push(record);
+      appendCocoAnnotation(coco, annotation, {
+        imageId: imageIndex + 1,
+        categoryId: category === undefined ? null : category + 1,
+        width: image.width,
+        height: image.height,
+      });
     });
   });
   if (corruptAsset) return res.status(409).json({ error: 'Version image integrity check failed.', path: corruptAsset });
