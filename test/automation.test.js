@@ -302,13 +302,15 @@ test('automation routes accept scoped Bearer keys and reject missing scopes', as
     });
     assert.equal(connectorResponse.status, 201);
     const connector = await connectorResponse.json();
-    setS3DriverForTests(null);
+    setS3DriverForTests(false);
     const missingS3Driver = await fetch(`${base}/api/automation/connectors/${connector.id}/scan`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${automationKey.token}` },
     });
     assert.equal(missingS3Driver.status, 501);
+    setS3DriverForTests(null);
   } finally {
+    setS3DriverForTests(null);
     await new Promise(resolve => server.close(resolve));
   }
 });

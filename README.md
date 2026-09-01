@@ -44,7 +44,7 @@ See [Dataset lifecycle API](docs/dataset-lifecycle.md) for version, processing, 
 
 ### Local Run
 
-- Node.js 18 or newer
+- Node.js 20.9 or newer
 - Python 3.10 or newer
 - npm
 - Git
