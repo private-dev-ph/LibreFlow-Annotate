@@ -12,6 +12,9 @@ const modelsRouter      = require('./routes/models');
 const batchesRouter        = require('./routes/batches');
 const notificationsRouter  = require('./routes/notifications');
 const datasetsRouter    = require('./routes/datasets');
+const automationRouter  = require('./routes/automation');
+const { startJobRuntime } = require('./lib/job-runner');
+const { resumeWebhookDeliveries } = require('./lib/webhooks');
 
 const app = express();
 const PORT = process.env.PORT || 6767;
@@ -37,10 +40,14 @@ app.use(session({
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/models-static', express.static(path.join(__dirname, 'models')));
 app.use('/datasets-files', express.static(path.join(__dirname, 'datasets')));
+app.use('/docs', express.static(path.join(__dirname, 'docs')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Auth routes (public) ──────────────────────────────────────────────────────
 app.use('/api/auth', authRouter);
+// Automation endpoints accept either the existing browser session or scoped
+// Bearer API keys. Their router owns its hybrid authentication policy.
+app.use('/api/automation', automationRouter);
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
 function requireAuth(req, res, next) {
@@ -73,6 +80,11 @@ app.use('/api/models',      requireAuth, modelsRouter);
 app.use('/api/batches',        requireAuth, batchesRouter);
 app.use('/api/notifications', requireAuth, notificationsRouter);
 app.use('/api/datasets',    requireAuth, datasetsRouter);
+
+try { startJobRuntime(); }
+catch (error) { console.error('Automation job recovery failed:', error.message); }
+try { resumeWebhookDeliveries(); }
+catch (error) { console.error('Webhook delivery recovery failed:', error.message); }
 
 // ── 404 fallback ──────────────────────────────────────────────────────────────
 app.use((req, res) => res.redirect('/'));

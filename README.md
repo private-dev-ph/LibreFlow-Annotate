@@ -30,6 +30,9 @@ These folders are intentionally not baked into Docker images. Docker Compose bin
 - AI auto-annotation using detection models and optional classification models
 - Dataset creation, dataset upload, project-to-dataset export, and dataset-to-project import
 - Dataset export formats including YOLO, Roboflow YOLO, COCO JSON, Pascal VOC XML, and CSV
+- Persistent, resumable batch inference jobs with cancel/retry and annotation provenance
+- Scoped API keys, a dependency-free CLI, signed webhooks, and delivery history
+- HTTP(S) image ingestion, strictly allowlisted mounted-folder watches, and optional operational S3-compatible sync
 
 ## Requirements
 
@@ -190,6 +193,24 @@ To move the app to another machine, restore those folders before starting the ap
 | `INFER_SERVER_URL` | `http://127.0.0.1:7878` | Node app | URL of the Python inference service. Compose sets this to `http://inference:7878`. |
 | `INFER_PORT` | `7878` | Docker Compose | Host port for the inference service, mainly for debugging. |
 | `YOLO_CONFIG_DIR` | unset locally | Docker inference | Set to `/tmp/ultralytics` in Docker so Ultralytics can write config files. |
+| `AUTOMATION_SECRET_KEY` | `SESSION_SECRET` | Node app | Encrypts webhook and connector secrets. Keep stable across restarts. |
+| `AUTOMATION_JOB_CONCURRENCY` | `1` | Node app | Number of persistent automation jobs processed concurrently (1–8). |
+| `INGEST_ALLOWED_ROOTS` | empty | Node app | Path-delimited or JSON-array allowlist for mounted-folder ingestion. |
+| `INGEST_ALLOW_PRIVATE_URLS` | `0` | Node app | Set to `1` only when URL ingestion must reach trusted private hosts. |
+| `INGEST_MAX_BYTES` | 50 MB | Node app | Maximum size of each remotely ingested or API-uploaded image. |
+| `WEBHOOK_ALLOWED_PORTS` | `80,443` | Node app | Comma-separated destination ports allowed for webhook delivery. |
+| `WEBHOOK_ALLOW_PRIVATE_URLS` | `0` | Node app | Emergency opt-in for trusted private webhook receivers; keep disabled for shared deployments. |
+
+## Automation API and CLI
+
+Open **Jobs → Automation** to run persistent batch inference, manage review queues, configure storage connectors/webhooks, and create scoped API keys. Full REST, signature, ingestion-policy, and CLI documentation is in [docs/automation-api.md](docs/automation-api.md).
+
+```powershell
+$env:LIBREFLOW_URL = "http://localhost:6767"
+$env:LIBREFLOW_API_KEY = "lfk_..."
+npm run cli -- projects list
+npm run cli -- jobs list
+```
 
 ## Model Upload and Inference
 

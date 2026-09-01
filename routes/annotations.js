@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const AdmZip = require('adm-zip');
+const { emitWebhookEvent } = require('../lib/webhooks');
 
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 
@@ -81,6 +82,20 @@ router.post('/', (req, res) => {
   annotations = annotations.concat(newAnnotations);
   writeAnnotations(annotations);
   markImageAnnotated(imageId);
+
+  try {
+    const image = fs.existsSync(IMAGES_FILE)
+      ? JSON.parse(fs.readFileSync(IMAGES_FILE, 'utf-8')).find(item => item.id === imageId)
+      : null;
+    if (image) emitWebhookEvent('annotation.saved', {
+      imageId,
+      projectId: image.projectId,
+      annotationCount: newAnnotations.length,
+      actorId: req.session.userId,
+    }, { userId: req.session.userId, projectId: image.projectId });
+  } catch (error) {
+    console.error('Failed to enqueue annotation webhook:', error.message);
+  }
 
   res.status(201).json(newAnnotations);
 });
