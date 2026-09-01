@@ -13,6 +13,7 @@ Runtime files are stored in these project folders:
 - `uploads/` - uploaded project images
 - `models/` - uploaded YOLO model files and optional YAML files
 - `datasets/` - standalone dataset images and dataset exports/imports
+- `versions/` - immutable, content-addressed dataset version snapshots
 
 These folders are intentionally not baked into Docker images. Docker Compose bind-mounts them so local and Docker runs can use the same data.
 
@@ -23,8 +24,11 @@ These folders are intentionally not baked into Docker images. Docker Compose bin
 - Image upload from individual files or ZIP archives
 - Automatic image compression for common image formats
 - Batch and sub-batch organization
-- Canvas annotation with bounding boxes, polygons, and points
+- Canvas annotation with boxes, rotated boxes, polygons, masks, lines, points, skeletons, and image classifications
 - Annotation editing, relabeling, undo, redo, copy, paste, and keyboard shortcuts
+- Smart Mask point prompting through an uploaded SAM model
+- Stable annotation IDs, author/model provenance, immutable revisions, and non-destructive restore
+- Reviewer assignment, submission/approval states, annotation-linked issues, comments, and project audit queues
 - Label management with colors
 - YOLO model upload with optional YAML class map
 - AI auto-annotation using detection models and optional classification models
@@ -38,7 +42,7 @@ These folders are intentionally not baked into Docker images. Docker Compose bin
 - Scoped API keys, a dependency-free CLI, signed webhooks, and delivery history
 - HTTP(S) image ingestion, strictly allowlisted mounted-folder watches, and optional operational S3-compatible sync
 
-See [Dataset lifecycle API](docs/dataset-lifecycle.md) for version, processing, health, and annotated-import payloads, and [Automation API](docs/automation-api.md) for API keys, jobs, ingestion, CLI, and webhooks.
+See [Review and quality workflows](docs/review-and-quality.md), [Dataset lifecycle API](docs/dataset-lifecycle.md), and [Automation API](docs/automation-api.md) for the new review, versioning, health, import, API-key, job, ingestion, CLI, and webhook capabilities.
 
 ## Requirements
 
@@ -164,7 +168,7 @@ The Compose file starts two services:
 - `app` - Node.js web app
 - `inference` - FastAPI YOLO inference service
 
-Both services mount the same host folders into `/app/data`, `/app/uploads`, `/app/models`, and `/app/datasets`. This is required because the web app sends model and image file paths to the inference service.
+Both services mount the same host folders into `/app/data`, `/app/uploads`, `/app/models`, and `/app/datasets`. The web app additionally mounts `/app/versions` for immutable snapshots. Shared image/model paths are required because the web app sends them to the inference service.
 
 ## Docker Data and File Persistence
 
@@ -175,6 +179,7 @@ The following bind mounts keep uploads and model files working across container 
 ./uploads:/app/uploads
 ./models:/app/models
 ./datasets:/app/datasets
+./versions:/app/versions
 ```
 
 Do not remove these mounts unless you also replace the file-path contract between the Node app and the Python inference service.
@@ -186,6 +191,7 @@ data/
 uploads/
 models/
 datasets/
+versions/
 ```
 
 To move the app to another machine, restore those folders before starting the app.
@@ -253,7 +259,7 @@ Large uploads are limited to 500 MB per file by the server.
 3. Add labels on the project page.
 4. Upload images or a ZIP archive.
 5. Open an image in the annotator.
-6. Draw boxes, polygons, or points.
+6. Draw boxes, rotated boxes, polygons, masks, lines, points, skeletons, or classifications.
 7. Save annotations.
 8. Export from the annotator or project batch controls.
 
@@ -377,13 +383,17 @@ docker compose up --build
 ```text
 LibreFlow-Annotate/
   data/                 JSON runtime database, gitignored
+  bin/                  dependency-free automation CLI
   datasets/             dataset image storage, gitignored
   docs/                 additional documentation
+  lib/                  shared access, review, history, lifecycle, and automation services
+  middleware/           session and hybrid API-key authentication
   models/               uploaded model files, gitignored
   public/               frontend HTML, CSS, and JavaScript
   py_scripts/           Python inference server and pipeline code
   routes/               Express API route handlers
   uploads/              uploaded project images, gitignored
+  versions/             immutable dataset snapshots, gitignored
   Dockerfile            Node.js web app image
   Dockerfile.infer      Python inference image
   docker-compose.yml    two-service local Docker stack

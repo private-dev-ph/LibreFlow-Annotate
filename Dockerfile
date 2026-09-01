@@ -10,10 +10,13 @@ RUN npm ci --omit=dev
 
 COPY server.js ./
 COPY routes ./routes
+COPY lib ./lib
+COPY middleware ./middleware
+COPY bin ./bin
 COPY public ./public
 COPY docs ./docs
 
-RUN mkdir -p data uploads models datasets
+RUN mkdir -p data uploads models datasets versions
 
 EXPOSE 6767
 
