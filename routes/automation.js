@@ -6,6 +6,19 @@ const { ALL_SCOPES, createApiKey, listApiKeys, revokeApiKey } = require('../lib/
 const { authenticateAutomation, requireScopes, requireSession } = require('../middleware/automation-auth');
 const { canAccessProject, apiKeyAllowsProject } = require('../lib/project-access');
 const { ROOT_DIR, dataFile, readJson, writeJson } = require('../lib/json-store');
+const {
+  getProject,
+  isProjectOwner,
+  projectMember,
+} = require('../lib/access-control');
+const { appendAuditEvent } = require('../lib/audit-log');
+const {
+  REVIEW_STATUSES,
+  getReview,
+  saveReview,
+  projectReviewRows,
+} = require('../lib/review-state');
+const { readJson: readDataJson } = require('../lib/data-store');
 const { parseAllowedRoots, MAX_REMOTE_BYTES, ensureBatch, persistImageBuffer } = require('../lib/ingestion');
 const { safeStoredPath } = require('../lib/inference-client');
 const {
@@ -59,6 +72,50 @@ const apiUpload = multer({
 router.use(authenticateAutomation);
 
 function userId(req) { return req.authContext.userId; }
+
+function actor(req) {
+  return {
+    actorId: userId(req),
+    actorUsername: req.authContext.username || req.session?.username || '',
+  };
+}
+
+const STATUS_TRANSITIONS = Object.freeze({
+  unannotated: new Set(['unannotated', 'in_progress']),
+  in_progress: new Set(['in_progress', 'unannotated', 'submitted']),
+  submitted: new Set(['submitted', 'in_progress', 'changes_requested', 'approved']),
+  changes_requested: new Set(['changes_requested', 'in_progress', 'submitted']),
+  approved: new Set(['approved', 'in_progress']),
+});
+
+function canReview(review, project, reviewerId) {
+  return isProjectOwner(project, reviewerId) || Boolean(review.reviewerId && review.reviewerId === reviewerId);
+}
+
+function automationReviewRow(image, review) {
+  const reviewedBy = review.status === 'approved'
+    ? review.approvedBy
+    : review.status === 'submitted'
+      ? review.submittedBy
+      : null;
+  return {
+    ...review,
+    // Keep the image id at the historic top-level `id` for automation clients.
+    id: image.id,
+    imageId: image.id,
+    reviewId: review.id,
+    projectId: image.projectId,
+    originalName: image.originalName,
+    filename: image.filename,
+    url: image.url,
+    autoAnnotation: image.autoAnnotation || null,
+    reviewStatus: review.status,
+    reviewedAt: reviewedBy ? (review.approvedAt || review.submittedAt || review.updatedAt || null) : (review.updatedAt || null),
+    reviewedBy: reviewedBy || null,
+    reviewComment: review.rejectionReason || '',
+    openIssueCount: review.issues.filter(issue => !issue.resolved).length,
+  };
+}
 
 function authorizeProject(req, res, projectId) {
   if (!projectId) {
@@ -280,47 +337,116 @@ router.get('/review-queue', requireScopes('projects:read'), (req, res) => {
   const projectId = req.query.projectId;
   if (!authorizeProject(req, res, projectId)) return;
   const status = req.query.status || 'submitted';
-  const images = readJson(dataFile('images.json'), [])
-    .filter(image => image.projectId === projectId && (!status || image.reviewStatus === status))
-    .map(image => ({
-      id: image.id,
-      projectId: image.projectId,
-      originalName: image.originalName,
-      url: image.url,
-      reviewStatus: image.reviewStatus || null,
-      autoAnnotation: image.autoAnnotation || null,
-      reviewedAt: image.reviewedAt || null,
-      reviewedBy: image.reviewedBy || null,
-      reviewComment: image.reviewComment || '',
-    }));
-  res.json(images);
+  if (status && !REVIEW_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid review status.' });
+  const rows = projectReviewRows(projectId)
+    .filter(({ review }) => !status || review.status === status)
+    .map(({ image, review }) => automationReviewRow(image, review));
+  res.json(rows);
 });
 
 router.patch('/review-queue/:imageId', requireScopes('annotations:write'), (req, res) => {
-  const allowed = new Set(['unannotated', 'in_progress', 'submitted', 'changes_requested', 'approved']);
-  if (!allowed.has(req.body.status)) return res.status(400).json({ error: 'Unsupported canonical review status.' });
-  if (req.body.status === 'changes_requested' && !String(req.body.comment || '').trim()) {
-    return res.status(400).json({ error: 'A reason is required when requesting changes.' });
-  }
-  const imagesFile = dataFile('images.json');
-  const images = readJson(imagesFile, []);
+  const images = readJson(dataFile('images.json'), []);
   const image = images.find(item => item.id === req.params.imageId);
   if (!image) return res.status(404).json({ error: 'Image not found.' });
   if (!authorizeProject(req, res, image.projectId)) return;
-  image.reviewStatus = req.body.status;
-  image.reviewComment = String(req.body.comment || '').trim().slice(0, 2000);
-  image.reviewedBy = userId(req);
-  image.reviewedAt = new Date().toISOString();
-  writeJson(imagesFile, images);
-  emitWebhookEvent('review.status_changed', {
+  const project = getProject(image.projectId);
+  let review = getReview(image);
+  const now = new Date().toISOString();
+  const { status, reviewerId } = req.body || {};
+  const rejectionReason = req.body?.rejectionReason !== undefined
+    ? req.body.rejectionReason
+    : req.body?.comment;
+  const pendingAuditEvents = [];
+  const previousStatus = review.status;
+  let statusChanged = false;
+
+  if (reviewerId !== undefined) {
+    if (!isProjectOwner(project, userId(req))) {
+      return res.status(403).json({ error: 'Only the project owner can assign a reviewer.' });
+    }
+    let reviewer = null;
+    if (reviewerId) {
+      reviewer = projectMember(project, reviewerId);
+      if (!reviewer) return res.status(400).json({ error: 'Reviewer must be a project member.' });
+    }
+    const previousReviewerId = review.reviewerId || null;
+    review.reviewerId = reviewer?.userId || null;
+    review.reviewerUsername = reviewer?.username || null;
+    if (previousReviewerId !== review.reviewerId) {
+      pendingAuditEvents.push({
+        type: 'review.reviewer_assigned',
+        details: { previousReviewerId, reviewerId: review.reviewerId, reviewerUsername: review.reviewerUsername },
+      });
+    }
+  }
+
+  if (status !== undefined) {
+    if (!REVIEW_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid review status.' });
+    if (!STATUS_TRANSITIONS[previousStatus]?.has(status)) {
+      return res.status(409).json({ error: `Cannot move review from ${previousStatus} to ${status}.` });
+    }
+    const decisions = new Set(['approved', 'changes_requested']);
+    if (decisions.has(status) && !canReview(review, project, userId(req))) {
+      return res.status(403).json({ error: 'Only the assigned reviewer or project owner can make review decisions.' });
+    }
+    const hasAnnotations = readDataJson('annotations.json').some(annotation => annotation.imageId === image.id);
+    const hasCompletedWork = hasAnnotations || Boolean(image.isNull);
+    if (status === 'submitted' && !hasCompletedWork) {
+      return res.status(409).json({ error: 'An unannotated image cannot be submitted.' });
+    }
+    if (status === 'unannotated' && hasCompletedWork) {
+      return res.status(409).json({ error: 'Remove annotations or the null mark before returning to unannotated.' });
+    }
+    if (status === 'approved' && review.issues.some(issue => !issue.resolved)) {
+      return res.status(409).json({ error: 'Resolve all open issues before approval.' });
+    }
+    if (status === 'changes_requested' && !String(rejectionReason || '').trim()) {
+      return res.status(400).json({ error: 'A rejection reason is required when requesting changes.' });
+    }
+
+    review.status = status;
+    review.rejectionReason = status === 'changes_requested'
+      ? String(rejectionReason).trim().slice(0, 2000)
+      : null;
+    if (status === 'submitted') {
+      review.submittedAt = now;
+      review.submittedBy = userId(req);
+      review.submittedByUsername = req.authContext.username || req.session?.username || '';
+    }
+    if (status === 'approved') {
+      review.approvedAt = now;
+      review.approvedBy = userId(req);
+      review.approvedByUsername = req.authContext.username || req.session?.username || '';
+    }
+    if (previousStatus !== status) {
+      statusChanged = true;
+      pendingAuditEvents.push({
+        type: 'review.status_changed',
+        details: { previousStatus, status, rejectionReason: review.rejectionReason },
+      });
+    }
+  }
+
+  review = saveReview(review);
+  pendingAuditEvents.forEach(event => appendAuditEvent({
+    projectId: project.id,
     imageId: image.id,
-    projectId: image.projectId,
-    status: image.reviewStatus,
-    comment: image.reviewComment,
-    reviewedBy: image.reviewedBy,
-    reviewedAt: image.reviewedAt,
-  }, { userId: userId(req), projectId: image.projectId });
-  res.json(image);
+    ...actor(req),
+    ...event,
+  }));
+  if (statusChanged) {
+    emitWebhookEvent('review.status_changed', {
+      imageId: image.id,
+      projectId: image.projectId,
+      status: review.status,
+      reviewStatus: review.status,
+      comment: review.rejectionReason || '',
+      rejectionReason: review.rejectionReason,
+      reviewedBy: userId(req),
+      reviewedAt: review.updatedAt,
+    }, { userId: userId(req), projectId: image.projectId });
+  }
+  res.json(automationReviewRow(image, review));
 });
 
 router.get('/connectors', requireScopes('integrations:read'), (req, res) => {
