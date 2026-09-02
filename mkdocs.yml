@@ -1,8 +1,8 @@
 site_name: LibreFlow Annotate
 site_description: Local-first image annotation, review, dataset lifecycle, and automation workspace for computer vision teams.
-site_url: https://github.com/your-org/LibreFlow-Annotate
+site_url: https://github.com/private-dev-ph/LibreFlow-Annotate
 repo_name: LibreFlow-Annotate
-repo_url: https://github.com/your-org/LibreFlow-Annotate
+repo_url: https://github.com/private-dev-ph/LibreFlow-Annotate
 theme:
   name: material
   language: en
