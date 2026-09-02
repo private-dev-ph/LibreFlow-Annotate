@@ -46,7 +46,7 @@ body {
   font-size: 15px;
   letter-spacing: .3px;
 }
-.logo-icon { color: var(--accent); font-size: 18px; }
+.logo-icon { width: 32px; height: 32px; object-fit: contain; display: block; }
 
 .panel-header {
   display: flex;
@@ -91,7 +91,7 @@ body {
 }
 #projects-list li:hover, #images-list li:hover { background: var(--bg3); }
 #projects-list li.active, #images-list li.active { background: var(--accent); color: #fff; }
-#images-list li.annotated::after { content: '✓'; float: right; color: var(--accent2); }
+#images-list li.annotated::after { content: none; }
 
 /* Labels */
 .label-section { padding: 10px 14px; border-bottom: 1px solid var(--border); }

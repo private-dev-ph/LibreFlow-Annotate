@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="/js/theme-init.js"></script>
   <title>Annotate – LibreFlow</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/nav.css" />
   <link rel="stylesheet" href="/css/annotator.css" />
+  <link rel="stylesheet" href="/css/theme.css" />
 </head>
 <body>
 
@@ -13,7 +16,7 @@
   <nav id="top-nav">
     <div class="nav-left">
       <a class="nav-logo" href="/dashboard">
-        <span class="nav-logo-icon">■</span>
+        <img class="nav-logo-icon" src="/assets/libreflow-logo.svg" alt="" />
         <span class="nav-logo-name">LibreFlow</span>
       </a>
       <div class="nav-links">
@@ -29,6 +32,10 @@
         <a class="nav-link" href="/models">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
           Models
+        </a>
+        <a class="nav-link" href="/datasets">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="7.5 4.2 12 6.8 16.5 4.2"/><polyline points="7.5 19.8 7.5 12.6 3 10"/><polyline points="16.5 19.8 16.5 12.6 21 10"/></svg>
+          Datasets
         </a>
       </div>
       <span class="nav-sep">/</span>
@@ -46,6 +53,10 @@
         <div class="nav-avatar" id="nav-avatar">?</div>
         <span class="nav-username" id="nav-username">…</span>
       </div>
+      <button class="btn-theme-settings" id="btn-theme-settings" type="button" aria-label="Theme settings" aria-expanded="false" title="Theme settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.64 5.64l1.41 1.41M16.95 16.95l1.41 1.41M5.64 18.36l1.41-1.41M16.95 7.05l1.41-1.41"/><circle cx="12" cy="12" r="3.5"/><path d="M19 4.5l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5.5-1.5Z"/></svg>
+        <span class="btn-theme-label">Theme</span>
+      </button>
       <button class="btn-logout" id="btn-logout">Sign Out</button>
     </div>
   </nav>
@@ -83,6 +94,15 @@
             </label>
           </div>
         </div>
+        <div class="image-filter-row">
+          <select id="image-status-filter" aria-label="Filter images by annotation status">
+            <option value="all">All images</option>
+            <option value="unannotated">Unannotated</option>
+            <option value="annotated">Annotated</option>
+            <option value="null">Null / background</option>
+          </select>
+          <input id="annotator-image-search" type="search" placeholder="Search filename or tag" aria-label="Search images" />
+        </div>
         <ul id="images-list"></ul>
       </div>
 
@@ -104,11 +124,26 @@
           <button id="tool-bbox" class="tool-btn" title="Bounding Box (B)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
           </button>
+          <button id="tool-rbox" class="tool-btn" title="Rotated Box (R)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="5" width="14" height="14" rx="1" transform="rotate(18 12 12)"/></svg>
+          </button>
           <button id="tool-polygon" class="tool-btn" title="Polygon (P)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,3 21,18 3,18"/></svg>
           </button>
           <button id="tool-point" class="tool-btn" title="Point (K)">
             <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>
+          </button>
+          <button id="tool-mask" class="tool-btn" title="Freehand Mask (U). Alt-drag subtracts from the selected mask.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15c2-7 5-10 9-10 4 0 7 3 7 7s-3 7-8 7H6a2 2 0 0 1-2-4Z"/><path d="M8 16c2-1 3-4 3-7"/></svg>
+          </button>
+          <button id="tool-line" class="tool-btn" title="Polyline (L). Double-click to finish.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,17 8,8 14,14 21,5"/><circle cx="3" cy="17" r="1.5"/><circle cx="21" cy="5" r="1.5"/></svg>
+          </button>
+          <button id="tool-skeleton" class="tool-btn" title="Keypoint Skeleton (J). Double-click to finish.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="7" cy="12" r="2"/><circle cx="17" cy="12" r="2"/><circle cx="12" cy="19" r="2"/><path d="M11 7 8 10M13 7l3 3M9 13l2 4M15 13l-2 4"/></svg>
+          </button>
+          <button id="tool-smart" class="tool-btn" title="Smart Mask with SAM (S). Click foreground; Shift-click background; Ctrl-click to refine.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2Z"/><path d="m18 14 .8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8Z"/></svg>
           </button>
         </div>
         <div class="toolbar-sep"></div>
@@ -116,6 +151,9 @@
           <button id="tool-delete" class="tool-btn" title="Delete selected (Del)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
           </button>
+          <button id="tool-rotate-left" class="tool-btn" title="Rotate selected box left 5° ([)">↶</button>
+          <button id="tool-rotate-right" class="tool-btn" title="Rotate selected box right 5° (])">↷</button>
+          <button id="tool-classification" class="tool-btn" title="Add image-level classification (C)">C</button>
         </div>
         <div class="toolbar-sep"></div>
         <div class="tool-group">
@@ -143,12 +181,19 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           Save
         </button>
+        <button id="btn-save-next" class="btn-save btn-save-next" title="Save and open next image (Ctrl+Enter)">Save + Next</button>
+        <label class="autosave-toggle" title="Save changes automatically before navigation"><input id="autosave-toggle" type="checkbox" /> Auto-save</label>
         <span id="save-indicator" class="save-indicator">Unsaved</span>
         <div class="toolbar-sep"></div>
         <button id="btn-mark-null" class="btn-mark-null" title="Mark this image as intentionally empty (no objects to annotate). Will be included in exports without annotation entries.">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="9"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
           Mark as Null
         </button>
+        <div class="image-tag-toolbar">
+          <label for="image-tag-input">Tag</label>
+          <input id="image-tag-input" type="text" placeholder="e.g. component A" />
+          <button id="btn-save-tag" class="btn-tag-save" title="Save image tag">Save</button>
+        </div>
       </div>
 
       <!-- Canvas -->
@@ -186,6 +231,37 @@
         <ul id="annotation-list"></ul>
       </div>
 
+      <!-- Review workflow. Kept self-contained in review-workflow.js. -->
+      <div class="right-sub review-sub">
+        <details id="review-details">
+          <summary class="section-header review-summary">
+            <span class="section-title">Review &amp; history</span>
+            <span id="review-status-badge" class="review-status-badge">Unannotated</span>
+          </summary>
+          <div class="review-body">
+            <label class="review-field">Status
+              <select id="review-status-select"></select>
+            </label>
+            <label class="review-field">Reviewer
+              <select id="reviewer-select"></select>
+            </label>
+            <div id="review-rejection-reason" class="review-rejection hidden"></div>
+            <div class="review-history-row">
+              <select id="review-revision-select" aria-label="Annotation revision"></select>
+              <button id="btn-restore-revision" class="review-small-btn" type="button">Restore</button>
+            </div>
+            <div id="review-thread" class="review-thread"></div>
+            <textarea id="review-comment-input" rows="2" maxlength="4000" placeholder="Add a review comment or issue…"></textarea>
+            <label class="review-link-row"><input id="review-link-selected" type="checkbox" /> Link to selected annotation</label>
+            <div class="review-comment-actions">
+              <label><input id="review-comment-is-issue" type="checkbox" /> Track as issue</label>
+              <button id="btn-add-review-comment" class="review-small-btn" type="button">Add</button>
+            </div>
+            <div id="review-feedback" class="review-feedback" role="status"></div>
+          </div>
+        </details>
+      </div>
+
       <!-- Semi-automatic annotation sub-panel -->
       <div class="right-sub auto-sub">
         <div class="section-header">
@@ -196,6 +272,15 @@
           <select id="auto-model-select">
             <option value="">– select model –</option>
           </select>
+
+          <div id="smart-mask-help" class="smart-mask-help hidden">
+            <strong>Smart Mask prompts</strong>
+            <span>Click foreground · Shift-click background · Ctrl-click to refine the current mask.</span>
+            <div class="smart-mask-actions">
+              <button id="btn-smart-commit" type="button">Keep mask</button>
+              <button id="btn-smart-reset" type="button">Reset prompts</button>
+            </div>
+          </div>
 
           <div class="slider-row" id="slider-row-detection" style="display:none">
             <label class="slider-label">Detection threshold: <span id="infer-conf-val">0.25</span></label>
@@ -264,10 +349,13 @@
   <div id="toast" class="toast-msg"></div>
 
   <script src="/js/api.js"></script>
+  <script src="/js/icons.js"></script>
   <script src="/js/notifications.js"></script>
   <script src="/js/jobs.js"></script>
   <script src="/js/nav-inbox.js"></script>
+  <script src="/js/theme.js"></script>
   <script src="/js/canvas.js"></script>
+  <script src="/js/review-workflow.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

@@ -1,0 +1,26 @@
+.git
+.agents
+.codex
+node_modules
+npm-debug.log*
+.env
+.env.*
+
+# Local runtime state is mounted into containers, not baked into images.
+data
+uploads
+models
+datasets
+
+# Python local environment and caches
+py_scripts/.venv
+py_scripts/__pycache__
+__pycache__
+*.pyc
+.pytest_cache
+runs
+*.cache
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

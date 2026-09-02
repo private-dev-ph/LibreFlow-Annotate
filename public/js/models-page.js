@@ -63,6 +63,103 @@
     });
   }
 
+  // ── Upload modal ──────────────────────────────────────────────────────────
+  const allowedFormats = new Set(['onnx', 'tflite', 'pt', 'pth', 'bin', 'weights', 'pb']);
+  const uploadModal = document.getElementById('modal-upload-model');
+  const uploadForm = document.getElementById('upload-model-form');
+  const uploadProject = document.getElementById('upload-model-project');
+  const uploadName = document.getElementById('upload-model-name');
+  const uploadFormat = document.getElementById('upload-model-format');
+  const uploadFile = document.getElementById('upload-model-file');
+  const uploadYaml = document.getElementById('upload-model-yaml');
+  const uploadError = document.getElementById('upload-model-error');
+  const uploadSubmit = document.getElementById('btn-submit-upload-model');
+
+  function setUploadError(message = '') {
+    uploadError.textContent = message;
+    uploadError.classList.toggle('hidden', !message);
+  }
+
+  function populateUploadProjects() {
+    uploadProject.innerHTML = '<option value="">Select a project</option>';
+    allProjects.forEach(project => {
+      const option = document.createElement('option');
+      option.value = project.id;
+      option.textContent = project.name;
+      uploadProject.appendChild(option);
+    });
+  }
+
+  function openUploadModal() {
+    populateUploadProjects();
+    setUploadError();
+    uploadModal.classList.remove('hidden');
+    uploadProject.focus();
+  }
+
+  function closeUploadModal() {
+    uploadModal.classList.add('hidden');
+    uploadForm.reset();
+    setUploadError();
+  }
+
+  document.getElementById('btn-open-upload-model').addEventListener('click', openUploadModal);
+  document.getElementById('btn-close-upload-model').addEventListener('click', closeUploadModal);
+  document.getElementById('btn-cancel-upload-model').addEventListener('click', closeUploadModal);
+
+  uploadFile.addEventListener('change', () => {
+    const file = uploadFile.files[0];
+    if (!file) return;
+    const extension = file.name.split('.').pop().toLowerCase();
+    if (allowedFormats.has(extension)) uploadFormat.value = extension;
+    if (!uploadName.value.trim()) uploadName.value = file.name.replace(/\.[^.]+$/, '');
+    setUploadError();
+  });
+
+  uploadForm.addEventListener('submit', event => {
+    event.preventDefault();
+    const file = uploadFile.files[0];
+    const name = uploadName.value.trim();
+    const format = uploadFormat.value;
+    const projectId = uploadProject.value;
+    const extension = file?.name.split('.').pop().toLowerCase();
+    if (!projectId) return setUploadError('Select the project that should contain this model.');
+    if (!name) return setUploadError('Enter a name for this model.');
+    if (!format) return setUploadError('Select the model file format.');
+    if (!file) return setUploadError('Choose a model file to upload.');
+    if (!allowedFormats.has(extension)) return setUploadError('Choose a supported model file.');
+    if (format !== extension) return setUploadError(`The selected format must match the .${extension} file.`);
+    if (file.size > 500 * 1024 * 1024) return setUploadError('Model files must be 500 MB or smaller.');
+    if (uploadYaml.files[0] && !/\.ya?ml$/i.test(uploadYaml.files[0].name)) return setUploadError('Configuration files must use .yaml or .yml.');
+
+    setUploadError();
+    const formData = new FormData();
+    formData.append('projectId', projectId);
+    formData.append('name', name);
+    formData.append('type', document.getElementById('upload-model-type').value);
+    formData.append('format', format);
+    formData.append('description', document.getElementById('upload-model-desc').value.trim());
+    formData.append('model', file);
+    if (uploadYaml.files[0]) formData.append('yaml', uploadYaml.files[0]);
+
+    uploadSubmit.disabled = true;
+    Jobs.uploadModel(projectId, formData, {
+      name,
+      onDone: model => {
+        if (model?.id) allModels.unshift(model);
+        populateProjectFilter();
+        renderModels();
+        uploadSubmit.disabled = false;
+        closeUploadModal();
+        Notify.success(`Model "${name}" uploaded`);
+      },
+      onError: message => {
+        uploadSubmit.disabled = false;
+        setUploadError(message || 'The model could not be uploaded.');
+      },
+    });
+  });
+
   // ── Render ──────────────────────────────────────────────────────────────────
   function renderModels() {
     const q        = document.getElementById('search-models').value.toLowerCase();
@@ -92,7 +189,7 @@
       const isOwner  = m.userId === me.id;
       return `
         <div class="model-row" data-id="${esc(m.id)}">
-          <div class="model-row-icon">🧠</div>
+          <div class="model-row-icon">${LibreFlowIcons.icon('brain', 'Model')}</div>
           <div class="model-row-body">
             <div class="model-row-top">
               <span class="model-row-name">${esc(m.name)}</span>
@@ -101,9 +198,9 @@
               <span class="model-row-size">${fmtBytes(m.size)}</span>
             </div>
             <div class="model-row-meta">
-              <span class="model-project-chip">📁 <a href="/project?projectId=${esc(m.projectId)}">${esc(projName)}</a></span>
+              <span class="model-project-chip">${LibreFlowIcons.icon('folder')} <a href="/project?projectId=${esc(m.projectId)}">${esc(projName)}</a></span>
               ${m.description ? `<span class="model-row-desc">${esc(m.description)}</span>` : ''}
-              ${m.yamlOriginalName ? `<span class="model-yaml-chip">📄 ${esc(m.yamlOriginalName)}</span>` : ''}
+              ${m.yamlOriginalName ? `<span class="model-yaml-chip">${LibreFlowIcons.icon('file')} ${esc(m.yamlOriginalName)}</span>` : ''}
               <span class="model-uploaded">Uploaded ${new Date(m.uploadedAt).toLocaleDateString()}</span>
             </div>
           </div>

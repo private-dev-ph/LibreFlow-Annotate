@@ -1,0 +1,255 @@
+.page-body {
+  padding-top: 56px;
+  height: 100vh;
+  background: radial-gradient(circle at 10% 10%, #1a2238 0%, #0f1117 46%);
+  color: #e2e8f0;
+  box-sizing: border-box;
+}
+
+.datasets-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+  gap: 14px;
+  padding: 18px;
+  height: calc(100vh - 56px);
+  box-sizing: border-box;
+  min-height: 0;
+  min-width: 0;
+}
+
+.datasets-list-card,
+.dataset-main-card {
+  background: linear-gradient(180deg, rgba(32,38,57,.94), rgba(21,25,39,.92));
+  border: 1px solid #2a314a;
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.26);
+  min-height: 0;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.datasets-list-card { display: flex; flex-direction: column; }
+.dataset-main-card {
+  display: flex;
+  flex-direction: column;
+  /* Keep the only vertical scrollbar inside the image region. */
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.row-actions { display: flex; gap: 8px; }
+
+h2 { margin: 0; font-size: 20px; }
+h3 { margin: 0; font-size: 18px; }
+
+input, select {
+  background: #0f1320;
+  border: 1px solid #303b5a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+input:focus, select:focus { outline: none; border-color: #6c63ff; }
+
+.btn {
+  border: 1px solid #38405c;
+  background: #111524;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 11px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.btn:hover { border-color: #6c63ff; color: #6c63ff; transform: translateY(-1px); }
+.btn.primary {
+  background: linear-gradient(135deg, #6c63ff, #38c6c5);
+  border-color: transparent;
+  color: #fff;
+}
+.btn.primary:hover { color: #fff; opacity: .9; }
+.btn.danger:hover { border-color: #e05c5c; color: #e05c5c; }
+
+.icon-btn { display: inline-flex; align-items: center; gap: 6px; }
+.icon-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+#dataset-search { width: 100%; margin-top: 10px; }
+#datasets-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+.dataset-item {
+  border: 1px solid #2e3752;
+  border-radius: 9px;
+  padding: 9px;
+  cursor: pointer;
+  background: rgba(15,19,32,.5);
+}
+.dataset-item.active {
+  border-color: #6c63ff;
+  background: rgba(108,99,255,.16);
+}
+.dataset-meta { font-size: 12px; color: #9aa6bd; margin-top: 3px; }
+
+#dataset-sub { margin-top: 6px; color: #9aa6bd; font-size: 13px; }
+.toolbar, .images-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.small-check {
+  font-size: 12px;
+  color: #9aa6bd;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.images-tools input { min-width: 360px; flex: 1; }
+
+.dataset-images-scroll {
+  margin-top: 12px;
+  border: 1px solid #2a314a;
+  border-radius: 10px;
+  /* `min-height: 0` lets this flex item yield space to the fixed controls
+     instead of overflowing its bounded card on short viewports. */
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 10px;
+  background: rgba(10,13,22,.65);
+}
+
+.dataset-images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.group-title {
+  grid-column: 1 / -1;
+  margin-top: 3px;
+  font-size: 12px;
+  color: #9aa6bd;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.img-card {
+  position: relative;
+  border: 1px solid #2d3550;
+  border-radius: 9px;
+  overflow: hidden;
+  background: #0f1320;
+}
+.img-card img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+}
+.img-name {
+  font-size: 12px;
+  padding: 6px 8px 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.img-meta {
+  font-size: 10px;
+  color: #9aa6bd;
+  padding: 0 8px 6px;
+}
+.img-actions {
+  display: flex;
+  gap: 5px;
+  padding: 0 8px 8px;
+}
+.img-tag-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  padding: 4px 6px;
+}
+.img-tag-chip {
+  font-size: 10px;
+  background: #1d2539;
+  border: 1px solid #36405e;
+  border-radius: 9px;
+  padding: 1px 6px;
+  margin: 0 2px 5px 8px;
+  display: inline-block;
+}
+.btn-del-img {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(12,15,24,.78);
+  border: 1px solid rgba(255,255,255,.22);
+  color: #d3dae8;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .14s;
+}
+.img-card:hover .btn-del-img {
+  opacity: 1;
+  pointer-events: auto;
+}
+.btn-del-img:hover { color: #e05c5c; border-color: #e05c5c; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal.hidden { display: none; }
+.modal-box {
+  width: 410px;
+  background: #171c2b;
+  border: 1px solid #323a56;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.modal-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.modal-help { font-size: 12px; color: #9aa6bd; margin: 0; }
+
+/* Dataset export checkmark follows the active theme in both light and dark mode. */
+.small-check { color: var(--text-dim); }
+.small-check input[type="checkbox"] { accent-color: var(--accent); inline-size: 16px; block-size: 16px; }
+.small-check:focus-within { color: var(--accent-strong); }

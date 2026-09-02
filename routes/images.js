@@ -4,11 +4,15 @@ const path    = require('path');
 const fs      = require('fs');
 const AdmZip  = require('adm-zip');
 const { v4: uuidv4 } = require('uuid');
+const sharp   = require('sharp');
+const { touchAfterAnnotation } = require('../lib/review-state');
+const { appendAuditEvent } = require('../lib/audit-log');
+const { dataPath, uploadsDir, readJson: readDataJson } = require('../lib/data-store');
 
 const router = express.Router();
-const DATA_FILE    = path.join(__dirname, '..', 'data', 'images.json');
-const BATCHES_FILE = path.join(__dirname, '..', 'data', 'batches.json');
-const UPLOADS_DIR  = path.join(__dirname, '..', 'uploads');
+const DATA_FILE    = dataPath('images.json');
+const BATCHES_FILE = dataPath('batches.json');
+const UPLOADS_DIR  = uploadsDir();
 
 // Ensure uploads dir exists
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -50,17 +54,45 @@ function writeBatches(d)     { fs.writeFileSync(BATCHES_FILE, JSON.stringify(d, 
 // Returns true if userId is the owner or collaborator of the project
 function canAccessProject(projectId, userId) {
   try {
-    const projects = JSON.parse(fs.readFileSync(
-      path.join(__dirname, '..', 'data', 'projects.json'), 'utf-8'
-    ));
+    const projects = readDataJson('projects.json');
     const p = projects.find(pr => pr.id === projectId);
     if (!p) return false;
     return p.userId === userId || (p.collaborators || []).some(c => c.userId === userId);
   } catch { return false; }
 }
 
+function clampCompressionQuality(raw) {
+  const q = Number(raw);
+  if (!Number.isFinite(q)) return 70;
+  return Math.max(10, Math.min(100, Math.round(q)));
+}
+
+async function compressImageInPlace(filePath, quality) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.svg' || ext === '.gif') return;
+  if (!['.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff'].includes(ext)) return;
+
+  const original = fs.readFileSync(filePath);
+  let pipeline = sharp(original, { failOnError: false, limitInputPixels: false }).rotate();
+
+  if (ext === '.jpg' || ext === '.jpeg') {
+    pipeline = pipeline.jpeg({ quality, mozjpeg: true });
+  } else if (ext === '.png') {
+    pipeline = pipeline.png({ quality, compressionLevel: 9, effort: 10, palette: true });
+  } else if (ext === '.webp') {
+    pipeline = pipeline.webp({ quality, effort: 6 });
+  } else {
+    pipeline = pipeline.tiff({ quality, compression: 'lzw' });
+  }
+
+  const out = await pipeline.toBuffer();
+  if (out.length > 0 && out.length < original.length) {
+    fs.writeFileSync(filePath, out);
+  }
+}
+
 // Extract images from a ZIP, save to UPLOADS_DIR, return [{filename, originalName, size}]
-function extractZip(zipFilePath) {
+async function extractZip(zipFilePath, quality) {
   const zip     = new AdmZip(zipFilePath);
   const entries = zip.getEntries();
   const results = [];
@@ -72,6 +104,7 @@ function extractZip(zipFilePath) {
     const newName = uuidv4() + ext;
     const dest    = path.join(UPLOADS_DIR, newName);
     fs.writeFileSync(dest, entry.getData());
+    try { await compressImageInPlace(dest, quality); } catch {}
     results.push({ filename: newName, originalName: name, size: fs.statSync(dest).size });
   }
   return results;
@@ -103,12 +136,14 @@ router.get('/', (req, res) => {
 //  chunks end up in the same batch.
 router.post('/upload', (req, res) => {
   upload.array('images', 2000)(req, res, (err) => {
+    (async () => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 500 MB per file).' });
       return res.status(400).json({ error: err.message || 'Upload failed.' });
     }
 
     const { projectId, batchId: incomingBatchId, batchName } = req.body;
+    const compressionQuality = clampCompressionQuality(req.body.compressionQuality);
     if (!projectId) return res.status(400).json({ error: 'projectId is required.' });
 
     const uid = req.session.userId;
@@ -122,14 +157,21 @@ router.post('/upload', (req, res) => {
     const regularFiles = files.filter(f => !ALLOWED_ZIP_EXT.test(path.extname(f.originalname)));
     const zipFiles     = files.filter(f =>  ALLOWED_ZIP_EXT.test(path.extname(f.originalname)));
 
-    const toSave = regularFiles.map(f => ({
-      filename: f.filename, originalName: f.originalname, size: f.size,
-    }));
+    const toSave = [];
+    for (const f of regularFiles) {
+      const fp = path.join(UPLOADS_DIR, f.filename);
+      try { await compressImageInPlace(fp, compressionQuality); } catch {}
+      toSave.push({
+        filename: f.filename,
+        originalName: f.originalname,
+        size: fs.statSync(fp).size,
+      });
+    }
 
     // Extract each ZIP
     for (const zf of zipFiles) {
       const zipPath = path.join(UPLOADS_DIR, zf.filename);
-      try   { toSave.push(...extractZip(zipPath)); }
+      try   { toSave.push(...await extractZip(zipPath, compressionQuality)); }
       catch (e) { console.error(`ZIP extraction failed for ${zf.originalname}:`, e.message); }
       finally   { try { fs.unlinkSync(zipPath); } catch {} }
     }
@@ -172,6 +214,7 @@ router.post('/upload', (req, res) => {
         originalName: f.originalName,
         url:          `/uploads/${f.filename}`,
         size:         f.size,
+        tags:         [],
         annotated:    false,
         uploadedAt:   new Date().toISOString(),
       };
@@ -184,6 +227,10 @@ router.post('/upload', (req, res) => {
     writeBatches(batches);
 
     res.status(201).json({ images: uploaded, batchId: batch.id, isNewBatch });
+    })().catch((e) => {
+      console.error('Upload pipeline failed:', e);
+      res.status(500).json({ error: 'Upload processing failed.' });
+    });
   });
 });
 
@@ -220,7 +267,7 @@ router.delete('/:id', (req, res) => {
 });
 
 // ── PATCH /api/images/:id ─────────────────────────────────────────────────────
-// Accepts: { isNull: boolean }
+// Accepts: { isNull?: boolean, tags?: string[]|string }
 router.patch('/:id', (req, res) => {
   const images = readImages();
   const uid    = req.session.userId;
@@ -229,13 +276,56 @@ router.patch('/:id', (req, res) => {
   if (!canAccessProject(img.projectId, uid))
     return res.status(403).json({ error: 'Not authorized.' });
 
-  const { isNull } = req.body;
+  const { isNull, tags } = req.body;
+  const previousNull = Boolean(img.isNull);
+  const annotationCount = isNull === undefined
+    ? 0
+    : readDataJson('annotations.json').filter(annotation => annotation.imageId === img.id).length;
   if (isNull !== undefined) {
     img.isNull    = Boolean(isNull);
-    // Null-marked images count as annotated; un-marking resets to unannotated
-    img.annotated = img.isNull ? true : false;
+    // Null-marked images count as annotated; otherwise retain real annotation state.
+    img.annotated = img.isNull || annotationCount > 0;
+  }
+  if (tags !== undefined) {
+    const arr = Array.isArray(tags)
+      ? tags
+      : String(tags || '')
+          .split(',')
+          .map(t => t.trim())
+          .filter(Boolean);
+    const seen = new Set();
+    img.tags = arr
+      .map(t => String(t).trim())
+      .filter(t => {
+        const key = t.toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 30);
   }
   writeImages(images);
+  if (isNull !== undefined && previousNull !== img.isNull) {
+    const reviewUpdate = touchAfterAnnotation(img, annotationCount, uid, req.session.username || '');
+    img.reviewStatus = reviewUpdate.review.status;
+    img.reviewerId = reviewUpdate.review.reviewerId || null;
+    img.reviewerUsername = reviewUpdate.review.reviewerUsername || null;
+    img.reviewUpdatedAt = reviewUpdate.review.updatedAt;
+    if (reviewUpdate.statusChanged) {
+      appendAuditEvent({
+        projectId: img.projectId,
+        imageId: img.id,
+        actorId: uid,
+        actorUsername: req.session.username || '',
+        type: 'review.status_changed',
+        details: {
+          previousStatus: reviewUpdate.previousStatus,
+          status: reviewUpdate.review.status,
+          reason: img.isNull ? 'marked_null' : 'unmarked_null',
+        },
+      });
+    }
+  }
   res.json(img);
 });
 

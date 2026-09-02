@@ -26,7 +26,17 @@ import yaml
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from ultralytics import YOLO
+from ultralytics import YOLO, SAM
+from ultralytics.models.sam.build import (
+    build_mobile_sam,
+    build_sam2_b,
+    build_sam2_l,
+    build_sam2_s,
+    build_sam2_t,
+    build_sam_vit_b,
+    build_sam_vit_h,
+    build_sam_vit_l,
+)
 
 logging.basicConfig(level=logging.INFO, format="[INFER] %(message)s")
 log = logging.getLogger("infer")
@@ -44,6 +54,41 @@ app.add_middleware(
 
 # ── Model cache (avoid reloading on every request) ─────────────────────────────
 _model_cache: Dict[str, YOLO] = {}
+_sam_cache: Dict[str, SAM] = {}
+
+
+class UploadedSAM(SAM):
+    """Load SAM checkpoints whose stored filename no longer identifies their family."""
+
+    def __init__(self, weights: str, checkpoint_name: str) -> None:
+        self._checkpoint_name = Path(checkpoint_name).name.lower()
+        super().__init__(weights)
+
+    def _load(self, weights: str, task=None):
+        builders = {
+            "sam_h.pt": build_sam_vit_h,
+            "sam_l.pt": build_sam_vit_l,
+            "sam_b.pt": build_sam_vit_b,
+            "mobile_sam.pt": build_mobile_sam,
+            "sam2_t.pt": build_sam2_t,
+            "sam2_s.pt": build_sam2_s,
+            "sam2_b.pt": build_sam2_b,
+            "sam2_l.pt": build_sam2_l,
+            "sam2.1_t.pt": build_sam2_t,
+            "sam2.1_s.pt": build_sam2_s,
+            "sam2.1_b.pt": build_sam2_b,
+            "sam2.1_l.pt": build_sam2_l,
+        }
+        builder = builders.get(self._checkpoint_name)
+        if not builder:
+            supported = ", ".join(builders)
+            raise ValueError(
+                f"Unsupported promptable segmentation checkpoint '{self._checkpoint_name}'. "
+                f"Use one of: {supported}."
+            )
+        self.is_sam2 = self._checkpoint_name.startswith("sam2")
+        self.is_sam3 = False
+        self.model = builder(weights)
 
 
 def load_model(model_path: str) -> YOLO:
@@ -57,6 +102,17 @@ def load_model(model_path: str) -> YOLO:
     return _model_cache[model_path]
 
 
+def load_sam_model(model_path: str, checkpoint_name: Optional[str] = None) -> SAM:
+    """Load and cache an uploaded SAM, MobileSAM, or SAM2 checkpoint."""
+    cache_key = f"{model_path}|{checkpoint_name or ''}"
+    if cache_key not in _sam_cache:
+        if not Path(model_path).exists():
+            raise FileNotFoundError(f"Segmentation model file not found: {model_path}")
+        log.info(f"Loading promptable segmentation model: {model_path}")
+        _sam_cache[cache_key] = UploadedSAM(model_path, checkpoint_name or Path(model_path).name)
+    return _sam_cache[cache_key]
+
+
 def get_image_size(image_path: str) -> tuple[int, int]:
     """Return (width, height) of an image without fully decoding it."""
     img = cv2.imread(image_path)
@@ -64,6 +120,58 @@ def get_image_size(image_path: str) -> tuple[int, int]:
         raise ValueError(f"Cannot read image: {image_path}")
     h, w = img.shape[:2]
     return w, h
+
+
+def bbox_overlap(a: List[float], b: List[float]) -> Dict[str, float]:
+    """Return overlap metrics for two xyxy boxes."""
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
+    intersection = iw * ih
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    union = area_a + area_b - intersection
+    min_area = min(area_a, area_b)
+    acx, acy = (ax1 + ax2) / 2.0, (ay1 + ay2) / 2.0
+    bcx, bcy = (bx1 + bx2) / 2.0, (by1 + by2) / 2.0
+    min_diag = min(np.hypot(ax2 - ax1, ay2 - ay1), np.hypot(bx2 - bx1, by2 - by1))
+    center_distance = np.hypot(acx - bcx, acy - bcy)
+    return {
+        "iou": intersection / union if union > 0 else 0.0,
+        "containment": intersection / min_area if min_area > 0 else 0.0,
+        "center_ratio": center_distance / min_diag if min_diag > 0 else float("inf"),
+    }
+
+
+def is_duplicate_box(a: List[float], b: List[float]) -> bool:
+    """
+    Treat boxes as duplicates when they cover the same object.
+
+    IoU alone misses nested duplicates, so also check how much of the smaller
+    box is covered and whether the two centers are close.
+    """
+    overlap = bbox_overlap(a, b)
+    if overlap["iou"] >= 0.45:
+        return True
+    if overlap["containment"] >= 0.80:
+        return True
+    return overlap["containment"] >= 0.60 and overlap["center_ratio"] <= 0.35
+
+
+def suppress_overlapping_detections(
+    detections: List[Dict[str, Any]],
+) -> tuple[List[Dict[str, Any]], int]:
+    """Remove duplicate detections by keeping the highest-confidence box."""
+    kept: List[Dict[str, Any]] = []
+    removed = 0
+    for det in sorted(detections, key=lambda d: d["conf"], reverse=True):
+        if any(is_duplicate_box(det["box"], existing["box"]) for existing in kept):
+            removed += 1
+            continue
+        kept.append(det)
+    return kept, removed
 
 
 # ── NG type constants (mirrors pipeline.py) ────────────────────────────────────
@@ -117,6 +225,23 @@ class InferResponse(BaseModel):
     results:  List[Dict[str, Any]]
     count:    int
     message:  str
+
+
+class SegmentRequest(BaseModel):
+    """POST /segment request body for SAM-style interactive prompting."""
+    model_path: str
+    model_name: Optional[str] = None
+    image_path: str
+    label: str = "object"
+    points: Optional[List[List[float]]] = None
+    point_labels: Optional[List[int]] = None
+    bboxes: Optional[List[List[float]]] = None
+
+
+class SegmentResponse(BaseModel):
+    results: List[Dict[str, Any]]
+    count: int
+    message: str
 
 
 # ── Classification helpers (ported from pipeline.py) ──────────────────────────
@@ -292,6 +417,11 @@ def infer(req: InferRequest):
     if not raw_detections:
         return InferResponse(results=[], count=0, message="No detections above threshold.")
 
+    raw_detection_count = len(raw_detections)
+    raw_detections, overlap_removed = suppress_overlapping_detections(raw_detections)
+    if overlap_removed:
+        log.info(f"Suppressed {overlap_removed} overlapping duplicate detection(s).")
+
     # ── Load optional classifiers ──
     cls_model       = None
     cls_fine_model  = None
@@ -350,6 +480,8 @@ def infer(req: InferRequest):
         results.append({
             "label": label,
             "type":  "bbox",
+            "confidence": det["conf"],
+            "class_id": det["cls_id"],
             "data": {
                 "x":      x1,
                 "y":      y1,
@@ -359,18 +491,77 @@ def infer(req: InferRequest):
         })
 
     msg = (
-        f"{len(results)} annotation(s) generated from {len(raw_detections)} detection(s)."
+        f"{len(results)} annotation(s) generated from {raw_detection_count} detection(s)."
         if results else
         "All detections classified as GOOD — no annotations added."
     )
+    if overlap_removed:
+        msg += f" Suppressed {overlap_removed} overlapping duplicate(s)."
     return InferResponse(results=results, count=len(results), message=msg)
+
+
+@app.post("/segment", response_model=SegmentResponse)
+def segment(req: SegmentRequest):
+    """Create editable mask contours from positive/negative point or box prompts."""
+    if not req.points and not req.bboxes:
+        raise HTTPException(400, "At least one point or bounding-box prompt is required.")
+    if req.points and len(req.points) != len(req.point_labels or []):
+        raise HTTPException(400, "points and point_labels must have the same length.")
+
+    try:
+        model = load_sam_model(req.model_path, req.model_name)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(400, str(exc))
+    if not Path(req.image_path).exists():
+        raise HTTPException(400, f"Image file not found: {req.image_path}")
+
+    kwargs: Dict[str, Any] = {"verbose": False, "save": False}
+    if req.points:
+        # A nested prompt represents one object refined by several foreground/background clicks.
+        kwargs["points"] = [req.points]
+        kwargs["labels"] = [req.point_labels]
+    if req.bboxes:
+        kwargs["bboxes"] = req.bboxes
+
+    try:
+        predictions = model(req.image_path, **kwargs)
+    except Exception as exc:
+        log.exception("Interactive segmentation failed")
+        raise HTTPException(422, f"Segmentation failed: {exc}")
+
+    output: List[Dict[str, Any]] = []
+    for prediction in predictions or []:
+        masks = getattr(prediction, "masks", None)
+        polygons = getattr(masks, "xy", None) if masks is not None else None
+        if polygons is None:
+            continue
+        for polygon in polygons:
+            points = [{"x": float(p[0]), "y": float(p[1])} for p in polygon.tolist()]
+            if len(points) < 3:
+                continue
+            output.append({
+                "label": req.label,
+                "type": "mask",
+                "data": {"contours": [{"operation": "add", "points": points}]},
+                "source": "sam",
+            })
+
+    return SegmentResponse(
+        results=output,
+        count=len(output),
+        message=f"Generated {len(output)} interactive mask(s)." if output else "No mask returned for these prompts.",
+    )
 
 
 # ── Status/health endpoints ────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "cached_models": list(_model_cache.keys())}
+    return {
+        "status": "ok",
+        "cached_models": list(_model_cache.keys()),
+        "cached_segmentation_models": list(_sam_cache.keys()),
+    }
 
 
 @app.get("/models")
@@ -386,6 +577,7 @@ def list_cached():
 @app.delete("/models/cache")
 def clear_cache():
     _model_cache.clear()
+    _sam_cache.clear()
     return {"message": "Model cache cleared."}
 
 

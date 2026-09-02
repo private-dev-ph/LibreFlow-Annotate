@@ -26,6 +26,9 @@
   let currentIndex = -1;
   let unsaved = false;
   let viewMode = localStorage.getItem('annotator_view_mode') || 'list';
+  let imageStatusFilter = localStorage.getItem('annotator_status_filter') || 'all';
+  let imageSearchQuery = '';
+  let autoSaveEnabled = localStorage.getItem('annotator_autosave') === 'true';
 
   // -- Labels -- load from project (merge with local additions) ---------------
   let labelClasses = [];
@@ -193,7 +196,11 @@
       : allProjectImages;
     imageCountEl.textContent = images.filter(i => i.annotated).length + '/' + images.length;
     renderImageList();
-    if (images.length > 0) await loadImage(0);
+    if (images.length > 0) {
+      const requestedImageId = new URLSearchParams(location.search).get('imageId');
+      const requestedIndex = images.findIndex(image => image.id === requestedImageId);
+      await loadImage(requestedIndex >= 0 ? requestedIndex : 0);
+    }
     else { canvasEmpty.classList.remove('hidden'); imageNavLabel.textContent = '-- / --'; }
   }
 
@@ -202,12 +209,22 @@
     imageCountEl.textContent = images.filter(i => i.annotated).length + '/' + images.length;
     imagesList.className = 'images-list-' + viewMode;
 
-    images.forEach((img, idx) => {
+    const visibleImages = images.map((img, idx) => ({ img, idx })).filter(({ img }) => {
+      if (imageStatusFilter === 'unannotated' && (img.annotated || img.isNull)) return false;
+      if (imageStatusFilter === 'annotated' && (!img.annotated || img.isNull)) return false;
+      if (imageStatusFilter === 'null' && !img.isNull) return false;
+      const q = imageSearchQuery.trim().toLowerCase();
+      if (!q) return true;
+      return String(img.originalName || '').toLowerCase().includes(q)
+        || (img.tags || []).some(tag => String(tag).toLowerCase().includes(q));
+    });
+
+    visibleImages.forEach(({ img, idx }) => {
       let el;
       if (viewMode === 'list') {
         el = document.createElement('li');
         el.className = 'img-list-item';
-        el.innerHTML = `<span class="img-dot-css${img.annotated ? ' annotated' : ''}"></span><span class="img-name-text">${esc(img.originalName)}</span>`;
+        el.innerHTML = `<span class="img-dot-css${img.annotated ? ' annotated' : ''}"></span><span class="img-name-text">${esc(img.originalName)}</span>${img.annotated ? `<span class="img-list-state-icon">${LibreFlowIcons.icon('check', 'Annotated')}</span>` : ''}${img.isNull ? '<span class="img-state-mini">NULL</span>' : ''}`;
       } else {
         el = document.createElement('li');
         el.className = 'img-thumb-item';
@@ -216,7 +233,7 @@
         el.innerHTML = `
           <div class="img-thumb-wrap" style="width:${size}px;height:${size}px">
             <img src="/uploads/${esc(img.filename)}" alt="${esc(img.originalName)}" loading="lazy" style="object-fit:cover;width:100%;height:100%;display:block" />
-            ${img.annotated ? '<span class="thumb-annotated-badge">&#10003;</span>' : ''}
+            ${img.annotated ? `<span class="thumb-annotated-badge">${LibreFlowIcons.icon('check')}</span>` : ''}
           </div>
           ${showName ? `<span class="img-thumb-name">${esc(img.originalName)}</span>` : ''}`;
       }
@@ -225,17 +242,32 @@
       if (img.annotated && viewMode === 'list') el.classList.add('annotated');
       el.title = img.originalName;
       el.addEventListener('click', async () => {
-        if (unsaved && !confirm('Unsaved changes - leave anyway?')) return;
-        await loadImage(idx);
+        await navigateTo(idx);
       });
       imagesList.appendChild(el);
     });
   }
 
+  const imageStatusSelect = document.getElementById('image-status-filter');
+  if (imageStatusSelect) {
+    imageStatusSelect.value = imageStatusFilter;
+    imageStatusSelect.addEventListener('change', () => {
+      imageStatusFilter = imageStatusSelect.value;
+      localStorage.setItem('annotator_status_filter', imageStatusFilter);
+      renderImageList();
+    });
+  }
+  document.getElementById('annotator-image-search')?.addEventListener('input', e => {
+    imageSearchQuery = e.target.value || '';
+    renderImageList();
+  });
+
   function esc(s) { return String(s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
   // -- Load image into canvas -------------------------------------------------
   const btnMarkNull = document.getElementById('btn-mark-null');
+  const imageTagInput = document.getElementById('image-tag-input');
+  const btnSaveTag = document.getElementById('btn-save-tag');
 
   function updateNullButton(img) {
     if (!img) { btnMarkNull.classList.remove('is-null'); btnMarkNull.textContent = ''; return; }
@@ -247,6 +279,9 @@
 
   async function loadImage(idx) {
     currentIndex = idx;
+    smartPoints = [];
+    smartPointLabels = [];
+    smartPromptImageId = images[idx]?.id || null;
     unsaved = false;
     saveIndicator.classList.remove('show');
     const img = images[idx];
@@ -260,6 +295,7 @@
     document.getElementById('btn-prev-img').disabled = idx === 0;
     document.getElementById('btn-next-img').disabled = idx === images.length - 1;
     updateNullButton(img);
+    if (imageTagInput) imageTagInput.value = (img.tags && img.tags[0]) ? img.tags[0] : '';
     renderImageList();
     // Populate semi-auto after image loads
     populateAutoModels();
@@ -285,6 +321,32 @@
     );
   });
 
+  async function saveCurrentImageTag() {
+    if (currentIndex < 0 || !imageTagInput) return;
+    const img = images[currentIndex];
+    const tag = imageTagInput.value.trim();
+    const tags = tag ? [tag] : [];
+    const updated = await API.updateImage(img.id, { tags });
+    images[currentIndex].tags = updated.tags || tags;
+    showToast(tag ? `Tag saved: ${tag}` : 'Tag cleared.', 'info');
+  }
+
+  btnSaveTag?.addEventListener('click', async () => {
+    try { await saveCurrentImageTag(); }
+    catch (e) { showToast(e.message || 'Failed to save tag.', 'warn'); }
+  });
+
+  imageTagInput?.addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    try { await saveCurrentImageTag(); }
+    catch (err) { showToast(err.message || 'Failed to save tag.', 'warn'); }
+  });
+  imageTagInput?.addEventListener('blur', async () => {
+    try { await saveCurrentImageTag(); }
+    catch {}
+  });
+
   // -- Shapes change callback -------------------------------------------------
   function onShapesChange(shapes, selectedId, dirty = false) {
     if (dirty) unsaved = true;
@@ -302,7 +364,9 @@
         <span class="ann-dot" style="background:${Canvas.colorFor(s.label)}"></span>
         <span class="ann-label-text">${esc(s.label)}</span>
         <span class="ann-type">${s.type}</span>
-        <button class="ann-del-btn" title="Delete">&#10005;</button>`;
+        ${s.source && s.source !== 'manual' ? `<span class="ann-source" title="Source: ${esc(s.source)}">${esc(s.source)}</span>` : ''}
+        ${Number.isFinite(Number(s.confidence)) ? `<span class="ann-confidence">${Math.round(Number(s.confidence)*100)}%</span>` : ''}
+        <button class="ann-del-btn" title="Delete" aria-label="Delete annotation">${LibreFlowIcons.icon('trash')}</button>`;
       li.querySelector('.ann-del-btn').addEventListener('click', e => {
         e.stopPropagation();
         Canvas.setSelected(s.id);
@@ -319,7 +383,10 @@
   async function saveAnnotations() {
     if (currentIndex < 0) return;
     const img = images[currentIndex];
-    const shapes = Canvas.getShapes().map(s => ({ label: s.label, type: s.type, data: s.data }));
+    const shapes = Canvas.getShapes().map(({ color, ...shape }) => ({
+      ...shape,
+      source: shape.source || 'manual',
+    }));
     await API.saveAnnotations(img.id, shapes);
     unsaved = false;
     saveIndicator.classList.remove('show');
@@ -329,6 +396,32 @@
   }
 
   document.getElementById('btn-save').addEventListener('click', saveAnnotations);
+
+  const autoSaveToggle = document.getElementById('autosave-toggle');
+  if (autoSaveToggle) {
+    autoSaveToggle.checked = autoSaveEnabled;
+    autoSaveToggle.addEventListener('change', () => {
+      autoSaveEnabled = autoSaveToggle.checked;
+      localStorage.setItem('annotator_autosave', String(autoSaveEnabled));
+    });
+  }
+
+  async function navigateTo(idx) {
+    if (idx < 0 || idx >= images.length || idx === currentIndex) return;
+    if (unsaved && autoSaveEnabled) {
+      try { await saveAnnotations(); }
+      catch (e) { showToast(e.message || 'Auto-save failed.', 'warn'); return; }
+    } else if (unsaved && !confirm('Unsaved changes - leave anyway?')) return;
+    await loadImage(idx);
+  }
+
+  document.getElementById('btn-save-next')?.addEventListener('click', async () => {
+    if (currentIndex < 0) return;
+    try {
+      await saveAnnotations();
+      if (currentIndex < images.length - 1) await loadImage(currentIndex + 1);
+    } catch (e) { showToast(e.message || 'Save failed.', 'warn'); }
+  });
 
   // -- Upload -----------------------------------------------------------------
   async function handleUpload(files) {
@@ -398,6 +491,14 @@
   // -- Semi-auto annotation panel ---------------------------------------------
   let projectModels = [];
   let lastModelId   = '';   // persists selected model across image navigation
+  let smartPoints = [];
+  let smartPointLabels = [];
+  let smartPromptImageId = null;
+
+  function selectedProjectModel() {
+    const id = document.getElementById('auto-model-select')?.value;
+    return projectModels.find(m => m.id === id) || null;
+  }
 
   async function populateAutoModels() {
     try {
@@ -427,7 +528,9 @@
         const rowBias = document.getElementById('slider-row-bias');
         if (rowDet)  rowDet.style.display  = (type === 'detection')      ? '' : 'none';
         if (rowBias) rowBias.style.display  = (type === 'classification') ? '' : 'none';
-        document.getElementById('btn-auto-infer').disabled = !sel.value || currentIndex < 0;
+        document.getElementById('btn-auto-infer').disabled = !sel.value || currentIndex < 0 || type === 'segmentation';
+        if (type === 'segmentation') document.getElementById('btn-auto-infer').title = 'Use the Smart Mask tool on the canvas.';
+        else document.getElementById('btn-auto-infer').title = '';
       }
 
       // Only attach listener once (first call); subsequent calls just restore value + updateSliders
@@ -459,10 +562,23 @@
       });
       const data = await r.json();
       if (data.results && data.results.length > 0) {
-        Canvas.addShapes(data.results);
-        unsaved = true; saveIndicator.classList.add('show');
-        if (statusEl) { statusEl.textContent = `✓ ${data.results.length} annotation(s) applied. Review and save.`; statusEl.className = 'auto-status success'; }
-        showToast(`${data.results.length} auto-annotation(s) applied.`);
+        const applyResult = Canvas.addShapes(data.results);
+        const added = applyResult?.added ?? data.results.length;
+        const skipped = applyResult?.skipped ?? 0;
+        const removedExisting = applyResult?.removedExisting ?? 0;
+        if (added > 0 || removedExisting > 0) {
+          unsaved = true; saveIndicator.classList.add('show');
+          const skipText = skipped ? ` ${skipped} duplicate/overlap(s) skipped.` : '';
+          const cleanText = removedExisting ? ` ${removedExisting} existing overlap(s) removed.` : '';
+          if (statusEl) { statusEl.textContent = `${added} annotation(s) applied.${skipText}${cleanText} Review and save.`; statusEl.className = 'auto-status success'; }
+          showToast(`${added} auto-annotation(s) applied.${skipped ? ` ${skipped} skipped.` : ''}${removedExisting ? ` ${removedExisting} cleaned.` : ''}`);
+        } else {
+          const msg = skipped
+            ? `${skipped} duplicate/overlapping detection(s) skipped. Nothing new to add.`
+            : (data.message || 'No new detections to add.');
+          if (statusEl) { statusEl.textContent = msg; statusEl.className = 'auto-status warn'; }
+          showToast(msg, 'warn');
+        }
       } else {
         const msg = data.message || data.info || 'No detections returned.';
         if (statusEl) { statusEl.textContent = msg; statusEl.className = 'auto-status warn'; }
@@ -478,26 +594,86 @@
     }
   });
 
+  Canvas.setSmartPromptCallback(async ({ point, positive }) => {
+    if (currentIndex < 0) return;
+    const model = selectedProjectModel();
+    if (!model || model.type !== 'segmentation') {
+      showToast('Select an uploaded Segmentation / SAM model first.', 'warn');
+      return;
+    }
+    const image = images[currentIndex];
+    if (smartPromptImageId !== image.id) {
+      smartPoints = []; smartPointLabels = []; smartPromptImageId = image.id;
+      Canvas.resetSmartMask(true);
+    }
+    smartPoints.push([point.x, point.y]);
+    smartPointLabels.push(positive ? 1 : 0);
+    const statusEl = document.getElementById('auto-status');
+    if (statusEl) { statusEl.textContent = 'Generating smart mask…'; statusEl.className = 'auto-status'; }
+
+    const label = labelClasses[activeLabel]?.name || labelClasses[0]?.name;
+    if (!label) { showToast('Add a label before creating a smart mask.', 'warn'); return; }
+    try {
+      const response = await fetch(`/api/models/${model.id}/segment`, {
+        method:'POST', credentials:'include', headers:{ 'Content-Type':'application/json' },
+        body:JSON.stringify({ imageId:image.id, label, points:smartPoints, pointLabels:smartPointLabels }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || data.message || 'Smart segmentation failed.');
+      const shape = data.results?.[0];
+      if (!shape) {
+        smartPoints.pop(); smartPointLabels.pop();
+        if (statusEl) { statusEl.textContent = data.message || 'No mask returned.'; statusEl.className = 'auto-status warn'; }
+        return;
+      }
+      Canvas.upsertSmartMask({ ...shape, source:'model', modelId:model.id });
+      unsaved = true; saveIndicator.classList.add('show');
+      if (statusEl) {
+        statusEl.textContent = `Smart mask ready · ${smartPoints.length} prompt${smartPoints.length === 1 ? '' : 's'}.`;
+        statusEl.className = 'auto-status success';
+      }
+    } catch (error) {
+      smartPoints.pop(); smartPointLabels.pop();
+      if (statusEl) { statusEl.textContent = error.message; statusEl.className = 'auto-status error'; }
+      showToast(error.message, 'warn');
+    }
+  });
+
+  document.getElementById('btn-smart-commit')?.addEventListener('click', () => {
+    Canvas.commitSmartMask();
+    smartPoints = []; smartPointLabels = [];
+    showToast('Smart mask kept. Click to start another object.');
+  });
+  document.getElementById('btn-smart-reset')?.addEventListener('click', () => {
+    Canvas.resetSmartMask(true);
+    smartPoints = []; smartPointLabels = [];
+    document.getElementById('auto-status').textContent = '';
+  });
+
   // -- Image navigation -------------------------------------------------------
   document.getElementById('btn-prev-img').addEventListener('click', async () => {
     if (currentIndex <= 0) return;
-    if (unsaved && !confirm('Unsaved changes - leave anyway?')) return;
-    await loadImage(currentIndex - 1);
+    await navigateTo(currentIndex - 1);
   });
   document.getElementById('btn-next-img').addEventListener('click', async () => {
     if (currentIndex >= images.length - 1) return;
-    if (unsaved && !confirm('Unsaved changes - leave anyway?')) return;
-    await loadImage(currentIndex + 1);
+    await navigateTo(currentIndex + 1);
   });
 
   // -- Tool buttons -----------------------------------------------------------
-  const toolBtns = { 'tool-select': 'select', 'tool-bbox': 'bbox', 'tool-polygon': 'polygon', 'tool-point': 'point' };
-  const toolBtnId = { 'select': 'tool-select', 'bbox': 'tool-bbox', 'polygon': 'tool-polygon', 'point': 'tool-point' };
+  const toolBtns = {
+    'tool-select':'select', 'tool-bbox':'bbox', 'tool-rbox':'rbox', 'tool-polygon':'polygon',
+    'tool-point':'point', 'tool-mask':'mask', 'tool-line':'line', 'tool-skeleton':'skeleton', 'tool-smart':'smart',
+  };
+  const toolBtnId = Object.fromEntries(Object.entries(toolBtns).map(([id, name]) => [name, id]));
 
   function switchTool(t) {
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
     if (toolBtnId[t]) document.getElementById(toolBtnId[t]).classList.add('active');
     Canvas.setTool(t);
+    // Shift is a negative prompt modifier in Smart Mask mode, never a visibility toggle.
+    Canvas.setAnnotationsVisible(true);
+    document.getElementById('smart-mask-help')?.classList.toggle('hidden', t !== 'smart');
   }
 
   Object.entries(toolBtns).forEach(([id, t]) => {
@@ -510,14 +686,33 @@
   document.getElementById('tool-zoom-in').addEventListener('click',  () => Canvas.zoomIn());
   document.getElementById('tool-zoom-out').addEventListener('click', () => Canvas.zoomOut());
   document.getElementById('tool-fit').addEventListener('click',      () => Canvas.fitToScreen());
+  document.getElementById('tool-rotate-left')?.addEventListener('click', () => {
+    if (!Canvas.rotateSelected(-5)) showToast('Select a rotated box first.', 'warn');
+  });
+  document.getElementById('tool-rotate-right')?.addEventListener('click', () => {
+    if (!Canvas.rotateSelected(5)) showToast('Select a rotated box first.', 'warn');
+  });
+  document.getElementById('tool-classification')?.addEventListener('click', () => {
+    promptLabel(label => {
+      if (label && Canvas.addClassification(label)) showToast(`Image classified as ${label}`);
+      else if (label) showToast('That classification is already present.', 'warn');
+    });
+  });
 
   // -- Shift: hold to hide all annotations ------------------------------------
   document.addEventListener('keydown', e => {
-    if (e.key === 'Shift' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) Canvas.setAnnotationsVisible(false);
+    if (e.key !== 'Shift' || e.repeat) return;
+    if (Canvas.getCurrentTool() === 'smart') {
+      Canvas.setAnnotationsVisible(true);
+      return;
+    }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) Canvas.setAnnotationsVisible(false);
   });
   document.addEventListener('keyup', e => {
     if (e.key === 'Shift') Canvas.setAnnotationsVisible(true);
   });
+  // A keyup is not guaranteed after focus changes (for example, Alt+Tab).
+  window.addEventListener('blur', () => Canvas.setAnnotationsVisible(true));
   // Also restore when any modifier combo is pressed while Shift is down
   document.addEventListener('keydown', e => {
     if (e.shiftKey && (e.ctrlKey || e.metaKey || e.altKey)) Canvas.setAnnotationsVisible(true);
@@ -552,10 +747,14 @@
   document.addEventListener('keydown', e => {
     const tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    const map = { v: 'tool-select', b: 'tool-bbox', p: 'tool-polygon', k: 'tool-point' };
-    if (map[e.key]) { document.getElementById(map[e.key]).click(); }
+    const map = {
+      v:'tool-select', b:'tool-bbox', r:'tool-rbox', p:'tool-polygon', k:'tool-point',
+      u:'tool-mask', l:'tool-line', j:'tool-skeleton', s:'tool-smart', c:'tool-classification',
+    };
+    if (map[e.key] && !e.ctrlKey && !e.metaKey && !e.altKey) { document.getElementById(map[e.key]).click(); }
     else if (e.key === 'Delete' || e.key === 'Backspace' || e.key === 'd') Canvas.deleteSelected();
     else if ((e.ctrlKey||e.metaKey) && e.key === 's') { e.preventDefault(); saveAnnotations(); }
+    else if ((e.ctrlKey||e.metaKey) && e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-save-next')?.click(); }
     else if ((e.ctrlKey||e.metaKey) && e.key === 'z') { e.preventDefault(); Canvas.undo(); }
     else if ((e.ctrlKey||e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) { e.preventDefault(); Canvas.redo(); }
     else if ((e.ctrlKey||e.metaKey) && e.key === 'c') {
@@ -576,6 +775,8 @@
       if (sel && sel.value && btn && !btn.disabled) btn.click();
     }
     else if (e.key === 'n') btnMarkNull.click();
+    else if (e.key === '[') Canvas.rotateSelected(-5);
+    else if (e.key === ']') Canvas.rotateSelected(5);
   });
 
   // -- Label picker (called by canvas.js) -------------------------------------

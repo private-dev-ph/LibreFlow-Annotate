@@ -3,14 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="/js/theme-init.js"></script>
   <title>LibreFlow Annotate</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/theme.css" />
 </head>
 <body>
   <!-- Sidebar -->
   <aside id="sidebar">
     <div class="logo">
-      <span class="logo-icon">■</span>
+      <img class="logo-icon" src="/assets/libreflow-logo.svg" alt="LibreFlow" />
       <span class="logo-text">LibreFlow Annotate</span>
     </div>
 
@@ -69,13 +72,13 @@
         <button id="tool-polygon" class="tool-btn" title="Polygon (P)">⬡</button>
         <button id="tool-point" class="tool-btn" title="Point (K)">•</button>
         <div class="toolbar-sep"></div>
-        <button id="tool-delete" class="tool-btn" title="Delete selected (Del)">🗑</button>
+        <button id="tool-delete" class="tool-btn" title="Delete selected (Del)" aria-label="Delete selected"><span data-lf-icon="trash"></span></button>
         <div class="toolbar-sep"></div>
         <button id="tool-zoom-in" class="tool-btn" title="Zoom In (+)">+</button>
         <button id="tool-zoom-out" class="tool-btn" title="Zoom Out (-)">−</button>
         <button id="tool-fit" class="tool-btn" title="Fit to screen (F)">⛶</button>
         <div class="toolbar-sep"></div>
-        <button id="btn-save" class="tool-btn save-btn" title="Save (Ctrl+S)">✓ Save</button>
+        <button id="btn-save" class="tool-btn save-btn" title="Save (Ctrl+S)"><span data-lf-icon="check"></span> Save</button>
       </div>
 
       <!-- Canvas wrapper -->
@@ -125,7 +128,9 @@
   <div id="toast"></div>
 
   <script src="/js/api.js"></script>
+  <script src="/js/icons.js"></script>
   <script src="/js/canvas.js"></script>
+  <script src="/js/theme.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

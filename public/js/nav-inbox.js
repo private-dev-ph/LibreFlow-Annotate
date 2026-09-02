@@ -34,11 +34,11 @@
   }
 
   function typeIcon(type) {
-    if (type === 'collaborator_added') return '👥';
-    if (type === 'batch_assigned')     return '📦';
-    if (type === 'job_done')           return '✅';
-    if (type === 'job_error')          return '❌';
-    return 'ℹ️';
+    if (type === 'collaborator_added') return LibreFlowIcons.icon('users', 'Collaborator added');
+    if (type === 'batch_assigned')     return LibreFlowIcons.icon('package', 'Batch assigned');
+    if (type === 'job_done')           return LibreFlowIcons.icon('check', 'Job completed');
+    if (type === 'job_error')          return LibreFlowIcons.icon('close', 'Job failed');
+    return LibreFlowIcons.icon('info', 'Information');
   }
 
   // ── State ─────────────────────────────────────────────────────────────────

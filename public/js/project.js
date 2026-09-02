@@ -21,6 +21,7 @@
 
   // Set annotator link
   document.getElementById('btn-annotator').href = `/annotator?projectId=${projectId}`;
+  document.getElementById('btn-dataset-lifecycle').href = `/dataset-lifecycle?sourceType=project&sourceId=${encodeURIComponent(projectId)}`;
 
   //─── Load project ──────────────────────────────────────────────────────────
   let project = null;
@@ -138,9 +139,9 @@
         <button class="label-rename-btn" data-idx="${i}" title="Rename label">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
-        <button class="label-rename-confirm hidden" data-idx="${i}" title="Save rename">✓</button>
+        <button class="label-rename-confirm hidden" data-idx="${i}" title="Save rename" aria-label="Save rename">${LibreFlowIcons.icon('check')}</button>
         <button class="label-rename-cancel  hidden" data-idx="${i}" title="Cancel">×</button>
-        <button class="label-del" data-idx="${i}" title="Remove">✕</button>
+        <button class="label-del" data-idx="${i}" title="Remove" aria-label="Remove label">${LibreFlowIcons.icon('close')}</button>
       </span>
     `).join('');
 
@@ -286,15 +287,15 @@
       renderLabels();
 
       const msg = data.imported > 0
-        ? `✅ Added ${data.imported} class${data.imported !== 1 ? 'es' : ''}${data.skipped ? ` (${data.skipped} already existed)` : ''}.`
-        : `⚠️ All ${data.skipped} class${data.skipped !== 1 ? 'es' : ''} already exist in this project.`;
+        ? `Added ${data.imported} class${data.imported !== 1 ? 'es' : ''}${data.skipped ? ` (${data.skipped} already existed)` : ''}.`
+        : `All ${data.skipped} class${data.skipped !== 1 ? 'es' : ''} already exist in this project.`;
       importResult.textContent = msg;
       importResult.className = `yaml-import-result ${data.imported > 0 ? 'success' : 'error'}`;
 
       if (data.imported > 0) Notify.success('Labels imported', `${data.imported} class${data.imported !== 1 ? 'es' : ''} added from YAML.`);
       else Notify.warn('Nothing new', 'All classes in that file already exist.');
     } catch (e) {
-      importResult.textContent = `❌ ${e.message}`;
+      importResult.textContent = e.message;
       importResult.className = 'yaml-import-result error';
       Notify.error('Import failed', e.message);
     } finally {
@@ -320,11 +321,14 @@
 
   //─── ── IMAGES ─────────────────────────────────────────────────────────────
   let allImages = [];
+  let imageSearchQuery = '';
+  let imageSortBy = 'uploadedAt_desc';
+  let imageGroupBy = 'none';
 
   async function loadImages() {
     try {
       allImages = await API.getImages(projectId);
-      renderImages();
+      renderImagesV2();
     } catch(e) {
       Notify.error('Failed to load images', e.message);
     }
@@ -345,7 +349,7 @@
     grid.innerHTML = allImages.map(img => `
       <div class="img-thumb">
         <img src="/uploads/${escHtml(img.filename)}" alt="${escHtml(img.originalName)}" loading="lazy" />
-        <button class="img-del" data-id="${escHtml(img.id)}" title="Delete">✕</button>
+        <button class="img-del" data-id="${escHtml(img.id)}" title="Delete" aria-label="Delete image">${LibreFlowIcons.icon('trash')}</button>
         <div class="img-name">${escHtml(img.originalName)}</div>
       </div>
     `).join('');
@@ -362,9 +366,188 @@
     });
   }
 
+  function renderImagesV2() {
+    const grid  = document.getElementById('images-grid');
+    const empty = document.getElementById('images-empty');
+    const count = document.getElementById('img-count');
+    const filtered = filterImages(allImages, imageSearchQuery);
+    const sorted = sortImages(filtered, imageSortBy);
+    const groups = groupImages(sorted, imageGroupBy);
+    count.textContent = allImages.length ? `(${filtered.length}/${allImages.length})` : '';
+
+    if (!sorted.length) {
+      grid.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    grid.innerHTML = groups.map(group => {
+      const cards = group.items.map(img => `
+        <div class="img-thumb">
+          <div class="img-tag-edit">
+            <input class="img-tag-input" data-id="${escHtml(img.id)}" type="text" value="${escHtml((img.tags && img.tags[0]) || '')}" placeholder="tag" />
+            <button class="img-tag-save" data-id="${escHtml(img.id)}">Save</button>
+          </div>
+          <img src="/uploads/${escHtml(img.filename)}" alt="${escHtml(img.originalName)}" loading="lazy" />
+          <button class="img-del" data-id="${escHtml(img.id)}" title="Delete" aria-label="Delete image">${LibreFlowIcons.icon('trash')}</button>
+          <div class="img-tags">${(img.tags || []).map(t => `<span class="img-tag-chip">${escHtml(t)}</span>`).join('')}</div>
+          <div class="img-meta">${new Date(img.uploadedAt).toLocaleDateString()} · ${formatBytes(img.size)}</div>
+          <div class="img-name">${escHtml(img.originalName)}</div>
+        </div>
+      `).join('');
+      if (imageGroupBy === 'none') return cards;
+      return `<div class="images-group"><div class="images-group-title">${escHtml(group.label)}</div><div class="images-grid">${cards}</div></div>`;
+    }).join('');
+
+    grid.querySelectorAll('.img-del').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        try {
+          await API.deleteImage(btn.dataset.id);
+          Notify.success('Image deleted');
+          loadImages();
+        } catch(e) {
+          Notify.error('Delete failed', e.message);
+        }
+      });
+    });
+    grid.querySelectorAll('.img-tag-save').forEach(btn => {
+      btn.addEventListener('click', async () => saveImageTag(btn.dataset.id));
+    });
+    grid.querySelectorAll('.img-tag-input').forEach(inp => {
+      inp.addEventListener('keydown', async (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        await saveImageTag(inp.dataset.id);
+      });
+    });
+  }
+
+  async function saveImageTag(imageId) {
+    const input = document.querySelector(`.img-tag-input[data-id="${escHtml(imageId)}"]`);
+    if (!input) return;
+    const tag = input.value.trim();
+    try {
+      const updated = await API.updateImage(imageId, { tags: tag ? [tag] : [] });
+      const target = allImages.find(i => i.id === imageId);
+      if (target) target.tags = updated.tags || (tag ? [tag] : []);
+      Notify.success(tag ? `Tag saved: ${tag}` : 'Tag cleared');
+      renderImagesV2();
+    } catch (e) {
+      Notify.error('Failed to save tag', e.message);
+    }
+  }
+
+  function tokenizeQuery(query) {
+    const tokens = [];
+    const re = /([a-zA-Z]+):"([^"]*)"|([a-zA-Z]+):(\S+)|"([^"]*)"|(\S+)/g;
+    let match;
+    while ((match = re.exec(query || '')) !== null) {
+      if (match[1]) tokens.push({ field: match[1].toLowerCase(), value: match[2] });
+      else if (match[3]) tokens.push({ field: match[3].toLowerCase(), value: match[4] });
+      else if (match[5]) tokens.push({ field: null, value: match[5] });
+      else if (match[6]) tokens.push({ field: null, value: match[6] });
+    }
+    return tokens;
+  }
+
+  function parseSizeToBytes(raw) {
+    const m = String(raw || '').trim().toLowerCase().match(/^([<>]=?|=)?\s*([\d.]+)\s*(b|kb|mb|gb)?$/);
+    if (!m) return null;
+    const n = Number(m[2]);
+    if (!Number.isFinite(n)) return null;
+    const op = m[1] || '=';
+    const unit = m[3] || 'b';
+    const mult = unit === 'gb' ? 1024 * 1024 * 1024 : unit === 'mb' ? 1024 * 1024 : unit === 'kb' ? 1024 : 1;
+    return { op, bytes: n * mult };
+  }
+
+  function matchesField(img, field, value) {
+    const q = String(value || '').toLowerCase();
+    const name = String(img.originalName || '').toLowerCase();
+    const tags = (img.tags || []).map(t => String(t).toLowerCase());
+    const dateISO = img.uploadedAt ? new Date(img.uploadedAt).toISOString().slice(0, 10) : '';
+    if (!field) {
+      return name.includes(q)
+        || tags.some(t => t.includes(q))
+        || dateISO.includes(q)
+        || formatBytes(img.size).toLowerCase().includes(q);
+    }
+    if (field === 'tag' || field === 'tags') return tags.some(t => t.includes(q));
+    if (field === 'name' || field === 'filename') return name.includes(q);
+    if (field === 'date' || field === 'uploaded' || field === 'uploadedat') return dateISO.includes(q);
+    if (field === 'size') {
+      const parsed = parseSizeToBytes(value);
+      if (!parsed) return formatBytes(img.size).toLowerCase().includes(q);
+      if (parsed.op === '>') return img.size > parsed.bytes;
+      if (parsed.op === '>=') return img.size >= parsed.bytes;
+      if (parsed.op === '<') return img.size < parsed.bytes;
+      if (parsed.op === '<=') return img.size <= parsed.bytes;
+      return Math.abs(img.size - parsed.bytes) < 1024;
+    }
+    return false;
+  }
+
+  function filterImages(images, query) {
+    const tokens = tokenizeQuery(query);
+    if (!tokens.length) return [...images];
+    return images.filter(img => tokens.every(t => matchesField(img, t.field, t.value)));
+  }
+
+  function sortImages(images, mode) {
+    const arr = [...images];
+    const byName = (a, b) => String(a.originalName || '').localeCompare(String(b.originalName || ''), undefined, { sensitivity: 'base' });
+    const byDate = (a, b) => new Date(a.uploadedAt || 0).getTime() - new Date(b.uploadedAt || 0).getTime();
+    const bySize = (a, b) => (a.size || 0) - (b.size || 0);
+    if (mode === 'uploadedAt_asc') arr.sort(byDate);
+    else if (mode === 'uploadedAt_desc') arr.sort((a, b) => byDate(b, a));
+    else if (mode === 'name_asc') arr.sort(byName);
+    else if (mode === 'name_desc') arr.sort((a, b) => byName(b, a));
+    else if (mode === 'size_asc') arr.sort(bySize);
+    else if (mode === 'size_desc') arr.sort((a, b) => bySize(b, a));
+    return arr;
+  }
+
+  function groupImages(images, mode) {
+    if (mode === 'none') return [{ label: '', items: images }];
+    const map = new Map();
+    images.forEach(img => {
+      let key = 'Ungrouped';
+      if (mode === 'tag') key = (img.tags && img.tags[0]) ? img.tags[0] : 'No Tag';
+      if (mode === 'date') key = img.uploadedAt ? new Date(img.uploadedAt).toLocaleDateString() : 'Unknown Date';
+      if (mode === 'size') {
+        if ((img.size || 0) < 500 * 1024) key = '< 500 KB';
+        else if (img.size < 2 * 1024 * 1024) key = '500 KB - 2 MB';
+        else if (img.size < 10 * 1024 * 1024) key = '2 MB - 10 MB';
+        else key = '>= 10 MB';
+      }
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(img);
+    });
+    return [...map.entries()].map(([label, items]) => ({ label, items }));
+  }
+
   // Drag-and-drop + click upload
   const dropZone = document.getElementById('drop-zone');
   const fileInput = document.getElementById('file-input');
+  const compressionQualitySlider = document.getElementById('compression-quality');
+  const compressionQualityInput = document.getElementById('compression-quality-input');
+
+  function getCompressionQuality() {
+    const raw = Number(compressionQualitySlider?.value || compressionQualityInput?.value || 70);
+    const safe = Number.isFinite(raw) ? raw : 70;
+    return Math.max(10, Math.min(100, Math.round(safe)));
+  }
+
+  function syncCompressionQuality(value, source) {
+    const clamped = Math.max(10, Math.min(100, Math.round(Number(value) || 70)));
+    if (source !== 'slider' && compressionQualitySlider) compressionQualitySlider.value = String(clamped);
+    if (source !== 'input' && compressionQualityInput) compressionQualityInput.value = String(clamped);
+  }
+
+  compressionQualitySlider?.addEventListener('input', () => syncCompressionQuality(compressionQualitySlider.value, 'slider'));
+  compressionQualityInput?.addEventListener('input', () => syncCompressionQuality(compressionQualityInput.value, 'input'));
+  compressionQualityInput?.addEventListener('blur', () => syncCompressionQuality(compressionQualityInput.value, 'input'));
+  syncCompressionQuality(70);
 
   dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
@@ -374,6 +557,81 @@
     handleFiles([...e.dataTransfer.files]);
   });
   fileInput.addEventListener('change', () => handleFiles([...fileInput.files]));
+  document.getElementById('image-search')?.addEventListener('input', e => {
+    imageSearchQuery = e.target.value || '';
+    renderImagesV2();
+  });
+  document.getElementById('image-sort-by')?.addEventListener('change', e => {
+    imageSortBy = e.target.value || 'uploadedAt_desc';
+    renderImagesV2();
+  });
+  document.getElementById('image-group-by')?.addEventListener('change', e => {
+    imageGroupBy = e.target.value || 'none';
+    renderImagesV2();
+  });
+
+  const btnExportDataset = document.getElementById('btn-export-dataset');
+  const btnAddFromDataset = document.getElementById('btn-add-from-dataset');
+  const datasetImportRow = document.getElementById('dataset-import-row');
+  const datasetSelect = document.getElementById('dataset-select');
+  const btnImportDataset = document.getElementById('btn-import-dataset');
+  const chkExportIncludeTags = document.getElementById('export-dataset-include-tags');
+  const chkImportIncludeTags = document.getElementById('import-dataset-include-tags');
+
+  async function refreshDatasetOptions() {
+    if (!datasetSelect) return;
+    const datasets = await API.getDatasets();
+    const owned = datasets.filter(d => d.userId === me.id || d.sharedWithCollaborators);
+    datasetSelect.innerHTML = owned.length
+      ? owned.map(d => `<option value="${escHtml(d.id)}">${escHtml(d.name)} (${d.imageCount || 0})</option>`).join('')
+      : '<option value="">No datasets available</option>';
+  }
+
+  btnAddFromDataset?.addEventListener('click', async () => {
+    datasetImportRow?.classList.toggle('hidden');
+    if (!datasetImportRow?.classList.contains('hidden')) {
+      try { await refreshDatasetOptions(); } catch {}
+    }
+  });
+
+  btnExportDataset?.addEventListener('click', async () => {
+    try {
+      const name = `${project.name} Dataset`;
+      const out = await API.exportDatasetFromProject(projectId, {
+        name,
+        includeTags: Boolean(chkExportIncludeTags?.checked),
+      });
+      if (out.error) throw new Error(out.error);
+      Notify.success('Dataset exported', `Created "${out.name}" with ${out.imageCount} images.`);
+    } catch (e) {
+      Notify.error('Dataset export failed', e.message);
+    }
+  });
+
+  btnImportDataset?.addEventListener('click', async () => {
+    const datasetId = datasetSelect?.value;
+    if (!datasetId) return;
+    try {
+      const out = await API.importDatasetToProject(datasetId, projectId, Boolean(chkImportIncludeTags?.checked));
+      if (out.error) throw new Error(out.error);
+      Notify.success('Dataset imported', `${out.images?.length || 0} images added.`);
+      await Promise.all([loadImages(), loadBatches()]);
+    } catch (e) {
+      Notify.error('Dataset import failed', e.message);
+    }
+  });
+  document.getElementById('image-search')?.addEventListener('input', e => {
+    imageSearchQuery = e.target.value || '';
+    renderImagesV2();
+  });
+  document.getElementById('image-sort-by')?.addEventListener('change', e => {
+    imageSortBy = e.target.value || 'uploadedAt_desc';
+    renderImagesV2();
+  });
+  document.getElementById('image-group-by')?.addEventListener('change', e => {
+    imageGroupBy = e.target.value || 'none';
+    renderImagesV2();
+  });
 
   function handleFiles(files) {
     const validFiles = files.filter(f =>
@@ -384,6 +642,7 @@
     Jobs.uploadChunked(projectId, validFiles, {
       name: label,
       batchName: label,
+      compressionQuality: getCompressionQuality(),
       onDone: ({ batchId }) => {
         loadImages();
         loadBatches();
@@ -416,14 +675,14 @@
     empty.style.display = 'none';
     list.innerHTML = allModels.map(m => `
       <div class="model-card">
-        <div class="model-icon">🧠</div>
+        <div class="model-icon">${LibreFlowIcons.icon('brain', 'Model')}</div>
         <div class="model-info">
           <div class="model-name">${escHtml(m.name)}</div>
           <div class="model-meta">
             <span class="badge-type badge-${escHtml(m.type)}">${escHtml(m.type)}</span>
             <span>${escHtml(m.format?.toUpperCase() || '')}</span>
             <span>${formatBytes(m.size)}</span>
-            ${m.yamlOriginalName ? `<span title="Config: ${escHtml(m.yamlOriginalName)}">📄 ${escHtml(m.yamlOriginalName)}</span>` : ''}
+            ${m.yamlOriginalName ? `<span title="Config: ${escHtml(m.yamlOriginalName)}">${LibreFlowIcons.icon('file')} ${escHtml(m.yamlOriginalName)}</span>` : ''}
             ${m.description ? `<span>${escHtml(m.description)}</span>` : ''}
           </div>
         </div>
@@ -609,7 +868,7 @@
             <span class="batch-name">${escHtml(b.name)}</span>
             <span class="batch-meta">
               <span>${b.imageCount} images</span>
-              ${assigned ? `<span class="batch-assigned-chip">👤 ${escHtml(assigned)}</span>` : ''}
+              ${assigned ? `<span class="batch-assigned-chip">${LibreFlowIcons.icon('users')} ${escHtml(assigned)}</span>` : ''}
             </span>
             <div class="batch-assign-wrap" onclick="event.stopPropagation()">
               <label>Assign:</label>
@@ -631,12 +890,12 @@
               </div>
             </div>
             ${subs.length === 0
-              ? '<p style="font-size:13px;color:#8892a4;margin-top:12px">No sub-batches \u2014 click Split to divide this batch.</p>'
+              ? '<p class="subbatches-empty">No sub-batches \u2014 click Split to divide this batch.</p>'
               : `<div class="subbatches-list">${subs.map(sb => `
                   <div class="subbatch-row">
                     <span class="subbatch-name">${escHtml(sb.name)}</span>
                     <span class="subbatch-count">${sb.imageIds ? sb.imageIds.length : 0} images</span>
-                    <button class="btn-batch-action btn-export-subbatch" style="margin-left:auto;flex-shrink:0"
+                    <button class="btn-batch-action btn-export-subbatch btn-export-subbatch--push"
                       data-batch-id="${escHtml(b.id)}" data-sub-id="${escHtml(sb.id)}" data-sub-name="${escHtml(sb.name)}">Export</button>
                     <div class="subbatch-assign">
                       <label>Assign:</label>
@@ -713,7 +972,7 @@
           await API.patchBatch(btn.dataset.batchId, { note });
           const b = allBatches.find(x => x.id === btn.dataset.batchId);
           if (b) b.note = note;
-          btn.textContent = 'Saved ✓';
+          btn.textContent = 'Saved';
           setTimeout(() => { btn.textContent = 'Save'; }, 1500);
         } catch(err) { Notify.error('Failed to save note', err.message); }
       });
@@ -727,7 +986,7 @@
         const note = textarea.value.trim();
         try {
           await API.patchSubBatch(btn.dataset.batchId, btn.dataset.subId, { note });
-          btn.textContent = 'Saved ✓';
+          btn.textContent = 'Saved';
           setTimeout(() => { btn.textContent = 'Save'; }, 1500);
         } catch(err) { Notify.error('Failed to save note', err.message); }
       });

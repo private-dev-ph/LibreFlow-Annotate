@@ -71,7 +71,7 @@
       card.className = 'project-card';
       card.innerHTML = `
         <div class="card-header">
-          <div class="card-icon">&#128193;</div>
+          <div class="card-icon">${LibreFlowIcons.icon('folder', 'Project')}</div>
           <div class="card-title">${escHtml(p.name)}</div>
           ${!isOwner ? `<span class="card-collab-badge">Collaborator</span>` : ''}
         </div>
@@ -100,7 +100,7 @@
           <span class="card-date">Created ${date}</span>
           <div class="card-actions">
             ${isOwner ? `<button class="card-btn danger btn-delete-card" data-id="${p.id}">Delete</button>` : ''}
-            <button class="card-btn primary btn-open-card" data-id="${p.id}">Open →</button>
+            <button class="card-btn primary btn-open-card" data-id="${p.id}">Open ${LibreFlowIcons.icon('arrowRight')}</button>
           </div>
         </div>
       `;

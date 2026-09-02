@@ -194,13 +194,91 @@ const Jobs = (() => {
   }
 
   /**
+   * Download a file as a tracked export job.
+   * @param {string} url
+   * @param {object} opts { name, type, filename, onDone, onError }
+   * @returns {string} jobId
+   */
+  function downloadFile(url, opts = {}) {
+    const jobId = `job-export-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+    const name = opts.name || 'Export';
+    const type = opts.type || 'export';
+    const job = {
+      id: jobId,
+      type,
+      name,
+      status: 'running',
+      progress: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      error: null,
+    };
+    upsert(job);
+
+    const notifyId = (typeof Notify !== 'undefined')
+      ? Notify.progress(`Exporting ${name}`, '0%', 0)
+      : null;
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url);
+    xhr.withCredentials = true;
+    xhr.responseType = 'blob';
+
+    xhr.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      const pct = Math.round((e.loaded / e.total) * 100);
+      const updated = { ...get(jobId), progress: pct, updatedAt: new Date().toISOString() };
+      upsert(updated);
+      if (notifyId) Notify.updateProgress(notifyId, pct, `${pct}% — ${name}`);
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        let fileName = opts.filename || 'download.zip';
+        const cd = xhr.getResponseHeader('Content-Disposition') || '';
+        const m = cd.match(/filename="?([^"]+)"?/i);
+        if (m && m[1]) fileName = m[1];
+
+        const blobUrl = URL.createObjectURL(xhr.response);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = fileName;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+
+        const updated = { ...get(jobId), status: 'done', progress: 100, updatedAt: new Date().toISOString() };
+        upsert(updated);
+        if (notifyId) Notify.promoteCompleted(notifyId, true, `${name} exported`);
+        if (typeof opts.onDone === 'function') opts.onDone({ fileName });
+      } else {
+        const errMsg = `Server error ${xhr.status}`;
+        const updated = { ...get(jobId), status: 'error', error: errMsg, updatedAt: new Date().toISOString() };
+        upsert(updated);
+        if (notifyId) Notify.promoteCompleted(notifyId, false, `Export failed: ${errMsg}`);
+        if (typeof opts.onError === 'function') opts.onError(errMsg);
+      }
+    };
+
+    xhr.onerror = () => {
+      const errMsg = 'Network error';
+      const updated = { ...get(jobId), status: 'error', error: errMsg, updatedAt: new Date().toISOString() };
+      upsert(updated);
+      if (notifyId) Notify.promoteCompleted(notifyId, false, `Export failed: ${errMsg}`);
+      if (typeof opts.onError === 'function') opts.onError(errMsg);
+    };
+
+    xhr.send();
+    return jobId;
+  }
+
+  /**
    * Upload an arbitrarily large set of files (images + ZIPs) to a project,
    * automatically chunking them into sequential XHR requests (≤100 files each).
    * All chunks land in the same server-side batch.
    *
    * @param {string}   projectId
    * @param {File[]}   files        – flat array of File objects
-   * @param {object}   opts         – { name, batchName, onDone, onError, onProgress }
+   * @param {object}   opts         – { name, batchName, compressionQuality, onDone, onError, onProgress }
    * @returns {string} jobId
    */
   function uploadChunked(projectId, files, opts = {}) {
@@ -208,6 +286,7 @@ const Jobs = (() => {
     const jobId      = `job-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
     const name       = opts.name  || `${files.length} files`;
     const batchLabel = opts.batchName || name;
+    const compressionQuality = Math.max(10, Math.min(100, Math.round(Number(opts.compressionQuality) || 70)));
     const total      = files.length;
 
     const job = {
@@ -250,6 +329,7 @@ const Jobs = (() => {
       const fd    = new FormData();
       fd.append('projectId', projectId);
       fd.append('batchName', batchLabel);
+      fd.append('compressionQuality', String(compressionQuality));
       if (batchId) fd.append('batchId', batchId);
       chunk.forEach(f => fd.append('images', f));
 
@@ -298,5 +378,5 @@ const Jobs = (() => {
     return jobId;
   }
 
-  return { getAll, get, upload, uploadModel, uploadChunked, clearCompleted, clearAll };
+  return { getAll, get, upload, uploadModel, uploadChunked, downloadFile, clearCompleted, clearAll };
 })();

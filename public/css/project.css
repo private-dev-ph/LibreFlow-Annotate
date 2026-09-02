@@ -48,6 +48,21 @@
   transition: opacity .2s;
 }
 .btn-open-annotator:hover { opacity: .85; }
+.project-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.btn-lifecycle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #aeb8ca;
+  background: #171b28;
+  border: 1px solid #30364b;
+  border-radius: 8px;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.btn-lifecycle:hover { color: #48e5c2; border-color: rgba(72,229,194,.5); }
 
 /* ── Rename header UI ── */
 .project-title-row {
@@ -345,6 +360,68 @@
 .yaml-import-result.error   { background: rgba(224,92,92,.1);   border: 1px solid rgba(224,92,92,.3);   color: #e05c5c; }
 
 /* ── Images tab ── */
+.compression-controls {
+  background: #141828;
+  border: 1px solid #252a3d;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.dataset-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.dataset-import-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.dataset-import-row.hidden { display: none; }
+.dataset-import-row select {
+  min-width: 220px;
+  background: #0f1117;
+  border: 1px solid #2f3550;
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+.dataset-checkbox {
+  font-size: 12px;
+  color: #9aa6bd;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.compression-controls label {
+  display: block;
+  font-size: 12px;
+  color: #9aa6bd;
+  margin-bottom: 8px;
+}
+.compression-quality-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.compression-quality-row input[type="range"] { flex: 1; }
+.compression-quality-row input[type="number"] {
+  width: 72px;
+  background: #0f1117;
+  border: 1px solid #2f3550;
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+.compression-quality-suffix { color: #9aa6bd; font-size: 13px; }
+.compression-help { margin-top: 8px; font-size: 12px; color: #8892a4; }
+
 .drop-zone {
   border: 2px dashed #252a3d;
   border-radius: 12px;
@@ -375,6 +452,95 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 12px;
+}
+.images-controls {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.images-controls input,
+.images-controls select {
+  background: #0f1117;
+  border: 1px solid #2a3045;
+  border-radius: 8px;
+  color: #e2e8f0;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.images-controls input:focus,
+.images-controls select:focus { outline: none; border-color: #6c63ff; }
+.images-group {
+  grid-column: 1 / -1;
+}
+.images-group-title {
+  margin: 6px 0 2px;
+  font-size: 12px;
+  color: #9aa6bd;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.img-tags {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 28px;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  max-height: 44px;
+  overflow: hidden;
+}
+.img-tag-chip {
+  background: rgba(15,17,23,.82);
+  border: 1px solid rgba(255,255,255,.16);
+  color: #d7deeb;
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 10px;
+}
+.img-tag-edit {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 6px;
+  display: flex;
+  gap: 4px;
+  z-index: 2;
+}
+.img-tag-input {
+  min-width: 0;
+  flex: 1;
+  height: 24px;
+  background: rgba(15,17,23,.8);
+  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 6px;
+  color: #e2e8f0;
+  padding: 0 6px;
+  font-size: 11px;
+}
+.img-tag-save {
+  height: 24px;
+  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 6px;
+  background: rgba(15,17,23,.8);
+  color: #e2e8f0;
+  font-size: 11px;
+  padding: 0 7px;
+  cursor: pointer;
+}
+.img-tag-save:hover { border-color: #6c63ff; color: #6c63ff; }
+.img-meta {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  font-size: 10px;
+  color: #a9b4c7;
+  background: rgba(15,17,23,.72);
+  border-radius: 5px;
+  padding: 2px 5px;
+  line-height: 1.2;
 }
 .img-thumb {
   position: relative;
@@ -858,3 +1024,86 @@
   transition: color .15s, border-color .15s;
 }
 .btn-cancel-sm:hover { color: #e2e8f0; border-color: #8892a4; }
+
+/* Project review queue */
+.review-overview { display: grid; grid-template-columns: repeat(5, minmax(110px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.review-count-card { border: 1px solid var(--border, #252a3d); border-radius: 10px; background: var(--bg2, #161a27); padding: 12px; cursor: pointer; text-align: left; color: inherit; }
+.review-count-card:hover, .review-count-card.active { border-color: var(--accent, #6c63ff); }
+.review-count-value { display: block; font-size: 22px; font-weight: 700; }
+.review-count-label { display: block; color: var(--text-muted, #8892a4); font-size: 11px; margin-top: 2px; }
+.project-review-toolbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.project-review-toolbar h2 { margin-bottom: 4px; }
+.project-review-toolbar p { margin: 0; color: var(--text-muted, #8892a4); font-size: 12px; }
+.project-review-controls { display: flex; gap: 8px; }
+.project-review-controls select, .project-reviewer-select { border: 1px solid var(--border, #252a3d); border-radius: 7px; background: var(--bg, #0f1117); color: var(--text, #e2e8f0); padding: 7px 9px; }
+.project-review-list { display: flex; flex-direction: column; gap: 7px; margin-top: 16px; }
+.project-review-row { display: grid; grid-template-columns: 46px minmax(150px, 1fr) 132px minmax(135px, .7fr) 65px 76px; gap: 10px; align-items: center; padding: 8px; border: 1px solid var(--border, #252a3d); border-radius: 8px; }
+.project-review-thumb { width: 46px; height: 38px; object-fit: cover; border-radius: 5px; background: var(--bg, #0f1117); }
+.project-review-name { min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-review-reason { color: #e05c5c; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-review-status { justify-self: start; padding: 3px 7px; border-radius: 999px; background: var(--bg3, #202638); color: var(--text-muted, #8892a4); font-size: 9px; text-transform: uppercase; }
+.project-review-status[data-status="submitted"] { color: #f5a623; background: rgba(245,166,35,.12); }
+.project-review-status[data-status="changes_requested"] { color: #e05c5c; background: rgba(224,92,92,.12); }
+.project-review-status[data-status="approved"] { color: #48e5c2; background: rgba(72,229,194,.12); }
+.project-review-open { color: var(--accent, #6c63ff); font-size: 11px; text-decoration: none; }
+.project-open-issues { color: #e05c5c; font-size: 10px; }
+.project-audit-card summary { cursor: pointer; font-weight: 600; }
+.project-audit-list { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; max-height: 320px; overflow: auto; }
+.project-audit-entry { border-left: 2px solid var(--border, #252a3d); padding: 4px 8px; font-size: 11px; }
+.project-audit-meta { color: var(--text-muted, #8892a4); font-size: 9px; }
+
+/* Theme-native project controls. */
+.project-body { background: var(--bg); color: var(--text); }
+.btn-lifecycle, .label-chip, .yaml-file-label, .compression-controls, .model-card,
+.batch-card, .collab-row, .collab-lookup-result, .modal-box, .split-dialog-box,
+.review-count-card, .project-review-row { background: var(--surface); border-color: var(--border); color: var(--text); }
+.btn-lifecycle, .btn-sm-ghost, .btn-batch-action, .btn-remove-collab, .btn-cancel, .btn-cancel-sm { background: var(--surface-2); border-color: var(--border); color: var(--text-dim); }
+.btn-lifecycle:hover, .btn-sm-ghost:hover, .btn-batch-action:hover, .btn-remove-collab:hover, .btn-cancel:hover, .btn-cancel-sm:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong); }
+.btn-remove-collab:hover, .btn-batch-action.danger:hover { border-color: var(--danger); color: var(--danger); }
+.label-chip { background: var(--surface-2); border-color: var(--border); color: var(--text); }
+.label-chip .label-del, .label-chip .label-rename-btn, .label-chip .label-rename-cancel { color: var(--text-dim); }
+.label-chip .label-del:hover, .label-chip .label-rename-cancel:hover { color: var(--danger); }
+.label-chip .label-rename-btn:hover { color: var(--accent-strong); }
+.label-chip .label-rename-confirm, .model-shared-badge { color: var(--success); }
+.label-chip .label-rename-input, .dataset-import-row select, .compression-quality-row input[type="number"], .images-controls input, .images-controls select, .field input, .field select, .batch-assign-select, .subbatch-select, .batch-note-input, .subbatch-note-input, .collab-search-row input, .field-select, .project-review-controls select, .project-reviewer-select { background: var(--surface-2); border-color: var(--border); color: var(--text); }
+.yaml-import-desc, .compression-controls label, .compression-quality-suffix, .batch-meta, .batch-assign-wrap label, .subbatch-count, .subbatch-assign label, .batch-note-label, .collab-added, .collab-empty, .batches-empty, .model-meta, .models-empty, .field label, .project-review-toolbar p, .review-count-label, .project-audit-meta, .section-count, .section-description, .dialog-description, .subbatches-empty { color: var(--text-dim); }
+.yaml-import-desc code { background: var(--surface-2); border-color: var(--border); color: var(--accent-strong); }
+.yaml-file-label { background: var(--surface-2); color: var(--text-dim); }
+.yaml-file-label:hover, .yaml-file-label.has-file { border-color: var(--accent); color: var(--accent-strong); }
+.compression-controls, .batch-body { background: var(--surface-2); border-color: var(--border); }
+.compression-quality-row input[type="range"] { accent-color: var(--accent); }
+.drop-zone { border-color: var(--border); background: var(--surface-2); }
+.drop-zone.drag-over { border-color: var(--accent); background: var(--accent-soft); }
+.drop-title, .model-name, .batch-name, .subbatch-name, .collab-username, .collab-lookup-name, .modal-title { color: var(--text); }
+.drop-sub { color: var(--text-dim); }
+.field-optional { color: var(--text-dim); font-weight: 400; text-transform: none; letter-spacing: 0; }
+.btn-upload-model, .btn-collab-search, .btn-import-yaml, .btn-add-label, .btn-primary-sm { background: var(--accent); color: var(--on-accent); }
+.btn-upload-model:hover, .btn-collab-search:hover, .btn-import-yaml:hover:not(:disabled), .btn-add-label:hover, .btn-primary-sm:hover { background: var(--accent-strong); color: var(--on-accent); }
+.model-card, .subbatch-row, .collab-lookup-result, .collab-row { background: var(--surface-2); border-color: var(--border); }
+.badge-classification, .project-review-status[data-status="approved"] { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+.badge-detection, .batch-assigned-chip { color: var(--accent-strong); background: var(--accent-soft); }
+.model-shared-badge { border-color: color-mix(in srgb, var(--success) 48%, var(--border)); }
+.batch-card { border-left-color: var(--accent); }
+.batch-header:hover { background: var(--accent-soft); }
+.batch-chevron, .collab-avatar { color: var(--text-dim); }
+.collab-avatar, .collab-lookup-avatar { background: var(--bg3); color: var(--accent-strong); }
+.collab-lookup-result.error, .project-review-reason, .project-open-issues { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.btn-add-collab, .btn-save-note, .btn-save-sub-note { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong); }
+.btn-add-collab:hover, .btn-save-note:hover, .btn-save-sub-note:hover { background: var(--accent); color: var(--on-accent); }
+.split-dialog, .modal { background: var(--overlay); }
+.split-opt { color: var(--text); }
+.split-opt input[type="radio"], .checkbox-label input[type="checkbox"], .dataset-checkbox input[type="checkbox"] { accent-color: var(--accent); }
+.checkbox-label, .dataset-checkbox { color: var(--text); }
+.project-review-status { background: var(--bg3); color: var(--text-dim); }
+.project-review-status[data-status="submitted"] { color: var(--accent-strong); background: var(--accent-soft); }
+.project-review-status[data-status="changes_requested"] { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.project-review-open { color: var(--accent-strong); }
+.section-description { font-size: 13px; margin-bottom: 16px; }
+.dialog-description { font-size: 13px; margin-bottom: 14px; }
+.subbatches-empty { font-size: 13px; margin-top: 12px; }
+.btn-export-subbatch--push { margin-left: auto; flex-shrink: 0; }
+@media (max-width: 900px) {
+  .review-overview { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+  .project-review-row { grid-template-columns: 42px minmax(130px, 1fr) 110px 65px; }
+  .project-reviewer-select, .project-review-reason { display: none; }
+}

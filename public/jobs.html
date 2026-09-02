@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="/js/theme-init.js"></script>
   <title>Jobs – LibreFlow Annotate</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/nav.css" />
   <link rel="stylesheet" href="/css/jobs.css" />
+  <link rel="stylesheet" href="/css/theme.css" />
 </head>
 <body>
 
@@ -13,7 +16,7 @@
   <nav id="top-nav">
     <div class="nav-left">
       <a class="nav-logo" href="/dashboard">
-        <span class="nav-logo-icon">■</span>
+        <img class="nav-logo-icon" src="/assets/libreflow-logo.svg" alt="" />
         <span class="nav-logo-name">LibreFlow Annotate</span>
       </a>
       <div class="nav-links">
@@ -22,13 +25,17 @@
           Dashboard
         </a>
         <a class="nav-link active" href="/jobs">
-          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A8 8 0 0 1 4.07 11H4a1 1 0 0 1 0-2h.07A8 8 0 0 1 11 4.07V4a1 1 0 0 1 2 0v.07A8 8 0 0 1 19.93 11H20a1 1 0 0 1 0 2h-.07A8 8 0 0 1 13 16.93z"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2"/></svg>
           Jobs
           <span id="jobs-badge" class="nav-badge hidden">0</span>
         </a>
         <a class="nav-link" href="/models">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
           Models
+        </a>
+        <a class="nav-link" href="/datasets">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="7.5 4.2 12 6.8 16.5 4.2"/><polyline points="7.5 19.8 7.5 12.6 3 10"/><polyline points="16.5 19.8 16.5 12.6 21 10"/></svg>
+          Datasets
         </a>
       </div>
     </div>
@@ -44,6 +51,10 @@
         <div class="nav-avatar" id="nav-avatar">?</div>
         <span class="nav-username" id="nav-username">Loading…</span>
       </div>
+      <button class="btn-theme-settings" id="btn-theme-settings" type="button" aria-label="Theme settings" aria-expanded="false" title="Theme settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.64 5.64l1.41 1.41M16.95 16.95l1.41 1.41M5.64 18.36l1.41-1.41M16.95 7.05l1.41-1.41"/><circle cx="12" cy="12" r="3.5"/><path d="M19 4.5l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5.5-1.5Z"/></svg>
+        <span class="btn-theme-label">Theme</span>
+      </button>
       <button class="btn-logout" id="btn-logout">Sign Out</button>
     </div>
   </nav>
@@ -51,27 +62,162 @@
   <!-- ── Page Body ── -->
   <div class="jobs-body">
     <div class="jobs-container">
-
       <div class="jobs-header">
-        <h1>Jobs</h1>
-        <button class="btn-clear" id="btn-clear">Clear Completed</button>
+        <div>
+          <h1>Automation</h1>
+          <p>Persistent jobs, ingestion, webhooks, and API access.</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn-clear" id="btn-refresh" type="button">Refresh</button>
+          <button class="btn-clear" id="btn-clear" type="button">Clear Completed</button>
+        </div>
       </div>
 
-      <div id="jobs-list" class="jobs-list"></div>
-
-      <div id="jobs-empty" class="jobs-empty" style="display:none">
-        <div class="jobs-empty-icon">🕒</div>
-        <h2>No jobs yet</h2>
-        <p>Upload images or models to a project to see jobs here.</p>
+      <div class="automation-tabs" role="tablist">
+        <button class="automation-tab active" data-tab="jobs" type="button">Jobs</button>
+        <button class="automation-tab" data-tab="run" type="button">Run automation</button>
+        <button class="automation-tab" data-tab="integrations" type="button">Integrations</button>
+        <button class="automation-tab" data-tab="api-keys" type="button">API keys</button>
       </div>
 
+      <section class="automation-panel active" data-panel="jobs">
+        <div id="jobs-list" class="jobs-list"></div>
+        <div id="jobs-empty" class="jobs-empty" style="display:none">
+          <div class="jobs-empty-icon" data-lf-icon="package" data-lf-icon-label="Jobs"></div>
+          <h2>No jobs yet</h2>
+          <p>Run batch inference or ingest images to create a persistent server job.</p>
+        </div>
+      </section>
+
+      <section class="automation-panel" data-panel="run">
+        <div class="automation-grid two-columns">
+          <form class="automation-card" id="inference-form">
+            <div class="card-heading">
+              <div><h2>Batch auto-annotation</h2><p>Run a model across selected or unannotated images.</p></div>
+              <span class="feature-chip">Resumable</span>
+            </div>
+            <label>Project<select id="inference-project" class="project-select" required></select></label>
+            <label>Model<select id="inference-model" required><option value="">Select a project first</option></select></label>
+            <div class="form-row">
+              <label>Images<select id="inference-selection"><option value="unannotated">Unannotated only</option><option value="all">All images</option><option value="review_queue">Review queue</option></select></label>
+              <label>Confidence<input id="inference-confidence" type="number" min="0.01" max="1" step="0.01" value="0.25" /></label>
+            </div>
+            <label>Specific image IDs <span class="label-help">optional, comma-separated</span><textarea id="inference-image-ids" rows="2" placeholder="image-id-1, image-id-2"></textarea></label>
+            <label class="check-row"><input id="inference-replace" type="checkbox" /> Replace existing annotations on selected images</label>
+            <button class="primary-action" type="submit">Queue inference</button>
+          </form>
+
+          <form class="automation-card" id="url-ingest-form">
+            <div class="card-heading">
+              <div><h2>Import image URLs</h2><p>Downloads are validated and processed in the background.</p></div>
+              <span class="feature-chip">HTTP(S)</span>
+            </div>
+            <label>Project<select id="url-project" class="project-select" required></select></label>
+            <label>Batch name<input id="url-batch-name" value="URL import" maxlength="120" /></label>
+            <label>Image URLs <span class="label-help">one per line, up to 500</span><textarea id="url-list" rows="8" required placeholder="https://example.com/image-01.jpg"></textarea></label>
+            <button class="primary-action" type="submit">Queue URL import</button>
+          </form>
+        </div>
+
+        <div class="automation-card review-card">
+          <div class="card-heading">
+            <div><h2>Auto-annotation review queue</h2><p>Approve model-generated annotations or request specific changes.</p></div>
+            <select id="review-project" class="project-select compact-select"></select>
+          </div>
+          <div id="review-list" class="compact-list"><p class="muted">Choose a project to load its queue.</p></div>
+        </div>
+      </section>
+
+      <section class="automation-panel" data-panel="integrations">
+        <div class="automation-card status-card" id="ingestion-status">Loading ingestion policy…</div>
+        <div class="automation-grid two-columns">
+          <form class="automation-card" id="folder-form">
+            <div class="card-heading"><div><h2>Watched folder</h2><p>Poll a mounted, allowlisted folder for new images.</p></div></div>
+            <label>Project<select id="folder-project" class="project-select" required></select></label>
+            <label>Name<input id="folder-name" value="Production drop folder" maxlength="120" required /></label>
+            <label>Mounted path<input id="folder-path" placeholder="/imports/camera-1" required /></label>
+            <div class="form-row"><label>Interval (seconds)<input id="folder-interval" type="number" min="30" value="300" /></label><label class="check-row lower"><input id="folder-recursive" type="checkbox" checked /> Include subfolders</label></div>
+            <button class="primary-action" type="submit">Add folder watch</button>
+          </form>
+
+          <form class="automation-card" id="s3-form">
+            <div class="card-heading"><div><h2>S3-compatible connector</h2><p>Sync MinIO or S3 objects through a resumable import job.</p></div><span class="feature-chip neutral">Sync</span></div>
+            <label>Project<select id="s3-project" class="project-select" required></select></label>
+            <div class="form-row"><label>Name<input id="s3-name" value="Object storage" /></label><label>Region<input id="s3-region" value="us-east-1" /></label></div>
+            <label>Endpoint<input id="s3-endpoint" type="url" placeholder="https://s3.example.com" /></label>
+            <div class="form-row"><label>Bucket<input id="s3-bucket" required /></label><label>Prefix<input id="s3-prefix" placeholder="incoming/" /></label></div>
+            <label>Credentials<select id="s3-credential-mode"><option value="environment">Environment variables</option><option value="static">Stored static credentials</option></select></label>
+            <div id="s3-static-fields" class="hidden"><div class="form-row"><label>Access key<input id="s3-access-key" autocomplete="off" /></label><label>Secret key<input id="s3-secret-key" type="password" autocomplete="new-password" /></label></div></div>
+            <button class="primary-action" type="submit">Save S3 contract</button>
+          </form>
+        </div>
+
+        <div class="automation-card">
+          <div class="card-heading"><div><h2>Storage connectors</h2><p>Folder watches can be scanned immediately; S3 entries expose readiness status.</p></div></div>
+          <div id="connectors-list" class="compact-list"></div>
+        </div>
+
+        <div class="automation-grid two-columns">
+          <form class="automation-card" id="webhook-form">
+            <div class="card-heading"><div><h2>Signed webhook</h2><p>Receive selected project and job events with an HMAC signature.</p></div></div>
+            <label>Project<select id="webhook-project" class="project-select"><option value="">All my projects</option></select></label>
+            <label>Name<input id="webhook-name" value="Automation webhook" maxlength="120" /></label>
+            <label>Endpoint URL<input id="webhook-url" type="url" required placeholder="https://example.com/libreflow-events" /></label>
+            <div><span class="field-label">Events</span><div id="webhook-events" class="checkbox-grid"></div></div>
+            <button class="primary-action" type="submit">Create webhook</button>
+            <div id="webhook-secret" class="one-time-secret hidden"></div>
+          </form>
+          <div class="automation-card">
+            <div class="card-heading"><div><h2>Webhooks & deliveries</h2><p>Failed deliveries can be retried without recreating events.</p></div></div>
+            <div id="webhooks-list" class="compact-list"></div>
+            <h3 class="subheading">Recent deliveries</h3>
+            <div id="deliveries-list" class="compact-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="automation-panel" data-panel="api-keys">
+        <div class="automation-grid api-layout">
+          <form class="automation-card" id="api-key-form">
+            <div class="card-heading"><div><h2>Create scoped API key</h2><p>The token is displayed once. Store it in a secret manager.</p></div></div>
+            <label>Name<input id="api-key-name" value="CI automation" maxlength="120" required /></label>
+            <div class="project-restriction-field">
+              <span id="api-key-projects-label" class="field-label">Restrict to projects <span class="label-help">optional</span></span>
+              <p id="api-key-projects-help" class="project-restrictions-help">Leave every switch off to allow this key to access all of your projects.</p>
+              <div id="api-key-projects" class="project-restrictions" role="group" aria-labelledby="api-key-projects-label" aria-describedby="api-key-projects-help"></div>
+            </div>
+            <div><span class="field-label">Scopes</span><div id="api-key-scopes" class="checkbox-grid"></div></div>
+            <button class="primary-action" type="submit">Create API key</button>
+            <div id="api-key-token" class="one-time-secret hidden"></div>
+          </form>
+          <div class="automation-card">
+            <div class="card-heading"><div><h2>Active keys</h2><p>Revoke keys immediately when no longer needed.</p></div><a class="docs-link" href="/docs/automation-api.md" target="_blank">API docs</a></div>
+            <div id="api-keys-list" class="compact-list"></div>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 
+  <div id="job-details-modal" class="job-details-modal" hidden>
+    <section class="job-details-dialog" role="dialog" aria-modal="true" aria-labelledby="job-details-title" tabindex="-1">
+      <header class="job-details-header">
+        <div>
+          <h2 id="job-details-title" class="job-details-title">Job details</h2>
+          <p id="job-details-summary" class="job-details-summary"></p>
+        </div>
+        <button id="job-details-close" class="job-details-close" type="button" aria-label="Close job details">×</button>
+      </header>
+      <div id="job-details-content" class="job-details-content"></div>
+    </section>
+  </div>
+
   <script src="/js/api.js"></script>
+  <script src="/js/icons.js"></script>
   <script src="/js/notifications.js"></script>
   <script src="/js/jobs.js"></script>
   <script src="/js/nav-inbox.js"></script>
+  <script src="/js/theme.js"></script>
   <script src="/js/jobs-page.js"></script>
 </body>
 </html>

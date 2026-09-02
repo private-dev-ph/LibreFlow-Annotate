@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="/js/theme-init.js"></script>
   <title>Project – LibreFlow Annotate</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/nav.css" />
   <link rel="stylesheet" href="/css/project.css" />
+  <link rel="stylesheet" href="/css/theme.css" />
 </head>
 <body>
 
@@ -13,7 +16,7 @@
   <nav id="top-nav">
     <div class="nav-left">
       <a class="nav-logo" href="/dashboard">
-        <span class="nav-logo-icon">■</span>
+        <img class="nav-logo-icon" src="/assets/libreflow-logo.svg" alt="" />
         <span class="nav-logo-name">LibreFlow Annotate</span>
       </a>
       <div class="nav-links">
@@ -22,13 +25,17 @@
           Dashboard
         </a>
         <a class="nav-link" href="/jobs">
-          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A8 8 0 0 1 4.07 11H4a1 1 0 0 1 0-2h.07A8 8 0 0 1 11 4.07V4a1 1 0 0 1 2 0v.07A8 8 0 0 1 19.93 11H20a1 1 0 0 1 0 2h-.07A8 8 0 0 1 13 16.93z"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2"/></svg>
           Jobs
           <span id="jobs-badge" class="nav-badge hidden">0</span>
         </a>
         <a class="nav-link" href="/models">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
           Models
+        </a>
+        <a class="nav-link" href="/datasets">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="7.5 4.2 12 6.8 16.5 4.2"/><polyline points="7.5 19.8 7.5 12.6 3 10"/><polyline points="16.5 19.8 16.5 12.6 21 10"/></svg>
+          Datasets
         </a>
         <span class="nav-sep"></span>
         <span class="nav-breadcrumb" id="nav-breadcrumb">…</span>
@@ -46,6 +53,10 @@
         <div class="nav-avatar" id="nav-avatar">?</div>
         <span class="nav-username" id="nav-username">Loading…</span>
       </div>
+      <button class="btn-theme-settings" id="btn-theme-settings" type="button" aria-label="Theme settings" aria-expanded="false" title="Theme settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.64 5.64l1.41 1.41M16.95 16.95l1.41 1.41M5.64 18.36l1.41-1.41M16.95 7.05l1.41-1.41"/><circle cx="12" cy="12" r="3.5"/><path d="M19 4.5l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5.5-1.5Z"/></svg>
+        <span class="btn-theme-label">Theme</span>
+      </button>
       <button class="btn-logout" id="btn-logout">Sign Out</button>
     </div>
   </nav>
@@ -73,10 +84,16 @@
             </div>
           </div>
         </div>
-        <a id="btn-annotator" class="btn-open-annotator" href="#">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 3 21 12 3 21 3 3"/></svg>
-          Open Annotator
-        </a>
+        <div class="project-header-actions">
+          <a id="btn-dataset-lifecycle" class="btn-lifecycle" href="#">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V9M10 19V5M16 19v-7M22 19V2"/><path d="M2 19h22"/></svg>
+            Versions &amp; Health
+          </a>
+          <a id="btn-annotator" class="btn-open-annotator" href="#">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 3 21 12 3 21 3 3"/></svg>
+            Open Annotator
+          </a>
+        </div>
       </div>
 
       <!-- Tab bar -->
@@ -96,6 +113,10 @@
         <button class="tab-btn" data-tab="batches">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="17"/><line x1="9" y1="14.5" x2="15" y2="14.5"/></svg>
           Batches
+        </button>
+        <button class="tab-btn" data-tab="review">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Review
         </button>
         <button class="tab-btn" data-tab="collaborators">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -137,15 +158,51 @@
       <div class="tab-panel" id="panel-images">
         <div class="section-card">
           <h2>Upload Images</h2>
+          <div class="dataset-actions-row">
+            <button id="btn-export-dataset" class="btn-sm-primary" type="button">Export as Dataset</button>
+            <label class="dataset-checkbox"><input type="checkbox" id="export-dataset-include-tags" checked /> Include tags</label>
+            <button id="btn-add-from-dataset" class="btn-sm-ghost" type="button">Add from Dataset</button>
+          </div>
+          <div class="dataset-import-row hidden" id="dataset-import-row">
+            <select id="dataset-select"></select>
+            <label class="dataset-checkbox"><input type="checkbox" id="import-dataset-include-tags" checked /> Include tags</label>
+            <button id="btn-import-dataset" class="btn-sm-primary" type="button">Import</button>
+          </div>
+          <div class="compression-controls">
+            <label for="compression-quality">Compression Quality</label>
+            <div class="compression-quality-row">
+              <input type="range" id="compression-quality" min="10" max="100" value="70" />
+              <input type="number" id="compression-quality-input" min="10" max="100" value="70" />
+              <span class="compression-quality-suffix">%</span>
+            </div>
+            <div class="compression-help">Default 70%. Lower value = smaller file size, higher value = better quality.</div>
+          </div>
           <div class="drop-zone" id="drop-zone">
             <input type="file" id="file-input" multiple accept="image/*,.zip" />
-            <div class="drop-icon">🖥</div>
+            <div class="drop-icon" data-lf-icon="upload" data-lf-icon-label="Upload images"></div>
             <div class="drop-title">Drag &amp; drop images or ZIP archives here</div>
             <div class="drop-sub">JPG, PNG, WEBP, BMP, TIFF, GIF — or ZIP containing images — 1000+ files supported</div>
           </div>
         </div>
         <div class="section-card">
-          <h2>Images <span id="img-count" style="font-weight:400;font-size:14px;color:#8892a4"></span></h2>
+          <h2>Images <span id="img-count" class="section-count"></span></h2>
+          <div class="images-controls">
+            <input type="text" id="image-search" placeholder='Search (e.g. name:panel tag:"component A" size:>1mb date:2026-04-30)' />
+            <select id="image-sort-by">
+              <option value="uploadedAt_desc">Newest Upload</option>
+              <option value="uploadedAt_asc">Oldest Upload</option>
+              <option value="name_asc">Name A-Z</option>
+              <option value="name_desc">Name Z-A</option>
+              <option value="size_desc">Size High-Low</option>
+              <option value="size_asc">Size Low-High</option>
+            </select>
+            <select id="image-group-by">
+              <option value="none">Group: None</option>
+              <option value="tag">Group: Tag</option>
+              <option value="date">Group: Upload Date</option>
+              <option value="size">Group: Size Range</option>
+            </select>
+          </div>
           <div id="images-grid" class="images-grid"></div>
           <div id="images-empty" class="images-empty" style="display:none">No images yet.</div>
         </div>
@@ -165,6 +222,7 @@
               <select id="model-type">
                 <option value="detection">Detection</option>
                 <option value="classification">Classification</option>
+                <option value="segmentation">Segmentation / SAM</option>
               </select>
             </div>
             <div class="field field-full">
@@ -176,7 +234,7 @@
               <input type="file" id="model-file" accept=".onnx,.pt,.pth,.tflite,.bin,.weights,.pb" />
             </div>
             <div class="field field-full">
-              <label>Config / Data YAML <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#6c63ff">(optional — e.g. YOLOv8 data.yaml)</span></label>
+              <label>Config / Data YAML <span class="field-optional">(optional — e.g. YOLOv8 data.yaml)</span></label>
               <input type="file" id="model-yaml" accept=".yaml,.yml" />
             </div>
             <div class="field field-full" style="display:flex;justify-content:flex-end">
@@ -196,13 +254,13 @@
         <div class="section-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
           <div>
             <h2>Upload Batches</h2>
-            <p style="font-size:13px;color:#8892a4;margin-bottom:0">Images uploaded to this project are grouped into batches. You can split a batch into sub-batches and assign them to collaborators.</p>
+            <p class="section-description">Images uploaded to this project are grouped into batches. You can split a batch into sub-batches and assign them to collaborators.</p>
           </div>
           <button id="btn-export-all-batches" class="btn-primary-sm" style="white-space:nowrap;flex-shrink:0">↓ Export All Batches</button>
         </div>
         <div id="batches-list" class="batches-list"></div>
         <div id="batches-empty" class="batches-empty" style="display:none">
-          <div style="font-size:38px;opacity:.2;margin-bottom:12px">📦</div>
+          <div class="batches-empty-icon" data-lf-icon="package" data-lf-icon-label="Batches"></div>
           <h3>No batches yet</h3>
           <p>Upload images on the Images tab to create batches.</p>
         </div>
@@ -211,7 +269,7 @@
         <div id="split-dialog" class="split-dialog hidden">
           <div class="split-dialog-box">
             <h3 id="split-dialog-title">Split Batch</h3>
-            <p id="split-dialog-sub" style="font-size:13px;color:#8892a4;margin-bottom:18px"></p>
+            <p id="split-dialog-sub" class="dialog-description"></p>
             <div class="split-options">
               <label class="split-opt">
                 <input type="radio" name="split-mode" value="size" checked /> Split so each sub-batch has
@@ -230,11 +288,41 @@
         </div>
       </div>
 
+      <!-- ── REVIEW panel ── -->
+      <div class="tab-panel" id="panel-review">
+        <div class="review-overview" id="project-review-counts"></div>
+        <div class="section-card">
+          <div class="project-review-toolbar">
+            <div>
+              <h2>Quality review queue</h2>
+              <p>Assign reviewers, find open issues, and open an image at the exact point it needs attention.</p>
+            </div>
+            <div class="project-review-controls">
+              <select id="project-review-filter" aria-label="Filter by review status">
+                <option value="">All statuses</option>
+                <option value="unannotated">Unannotated</option>
+                <option value="in_progress">In progress</option>
+                <option value="submitted">Submitted</option>
+                <option value="changes_requested">Changes requested</option>
+                <option value="approved">Approved</option>
+              </select>
+              <button id="btn-refresh-reviews" class="btn-sm-ghost" type="button">Refresh</button>
+            </div>
+          </div>
+          <div id="project-review-list" class="project-review-list"></div>
+          <div id="project-review-empty" class="images-empty" style="display:none">No images match this review status.</div>
+        </div>
+        <details class="section-card project-audit-card">
+          <summary>Recent audit activity</summary>
+          <div id="project-audit-list" class="project-audit-list"></div>
+        </details>
+      </div>
+
       <!-- ── COLLABORATORS panel ── -->
       <div class="tab-panel" id="panel-collaborators">
         <div class="section-card">
           <h2>Add Collaborator</h2>
-          <p style="font-size:13px;color:#8892a4;margin-bottom:16px">Collaborators can view and annotate images in this project.</p>
+          <p class="section-description">Collaborators can view and annotate images in this project.</p>
           <div class="collab-search-row">
             <input type="text" id="collab-search" placeholder="Search by username…" />
             <button class="btn-collab-search" id="btn-collab-search">Look Up</button>
@@ -255,7 +343,7 @@
   <div id="modal-batch-export" class="modal hidden">
     <div class="modal-box">
       <h3 class="modal-title">Export Annotations</h3>
-      <p id="batch-export-scope-label" style="font-size:13px;color:#8892a4;margin-bottom:14px"></p>
+      <p id="batch-export-scope-label" class="dialog-description"></p>
       <div class="field-group">
         <label class="field-label">Format</label>
         <select id="batch-export-format" class="field-select">
@@ -282,9 +370,12 @@
   </div>
 
   <script src="/js/api.js"></script>
+  <script src="/js/icons.js"></script>
   <script src="/js/notifications.js"></script>
   <script src="/js/jobs.js"></script>
   <script src="/js/nav-inbox.js"></script>
+  <script src="/js/theme.js"></script>
   <script src="/js/project.js"></script>
+  <script src="/js/project-review.js"></script>
 </body>
 </html>
