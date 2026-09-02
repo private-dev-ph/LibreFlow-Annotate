@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254" fill="none">
+  <title>Colorful code icon without braces</title>
+  <defs>
+    <linearGradient id="topGradient" x1="340" y1="370" x2="924" y2="370" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF2A73"/>
+      <stop offset="0.52" stop-color="#F52A7A"/>
+      <stop offset="1" stop-color="#D72A9B"/>
+    </linearGradient>
+    <linearGradient id="leftGradient" x1="404" y1="436" x2="404" y2="805" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F82E73"/>
+      <stop offset="1" stop-color="#FF6538"/>
+    </linearGradient>
+    <linearGradient id="rightGradient" x1="860" y1="436" x2="860" y2="604" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C936A8"/>
+      <stop offset="1" stop-color="#762DE2"/>
+    </linearGradient>
+    <linearGradient id="bottomLeftGradient" x1="404" y1="805" x2="404" y2="934" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF5A3B"/>
+      <stop offset="1" stop-color="#FF6934"/>
+    </linearGradient>
+    <linearGradient id="bottomRightGradient" x1="860" y1="805" x2="860" y2="934" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8A2DE2"/>
+      <stop offset="1" stop-color="#7131E8"/>
+    </linearGradient>
+    <linearGradient id="faceGradient" x1="507" y1="500" x2="739" y2="695" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F52D80"/>
+      <stop offset="1" stop-color="#EE2875"/>
+    </linearGradient>
+    <linearGradient id="arrowGradient" x1="448" y1="874" x2="893" y2="650" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF6B2A"/>
+      <stop offset="1" stop-color="#FF9B0B"/>
+    </linearGradient>
+    <mask id="nodeMask" maskUnits="userSpaceOnUse" x="0" y="0" width="1254" height="1254">
+      <rect width="1254" height="1254" fill="black"/>
+      <rect x="340" y="307" width="128" height="129" rx="22" fill="white"/>
+      <rect x="796" y="307" width="128" height="129" rx="22" fill="white"/>
+      <rect x="340" y="805" width="128" height="129" rx="22" fill="white"/>
+      <rect x="796" y="805" width="128" height="129" rx="22" fill="white"/>
+      <rect x="378" y="345" width="53" height="52" fill="black"/>
+      <rect x="834" y="345" width="53" height="52" fill="black"/>
+      <rect x="378" y="843" width="53" height="52" fill="black"/>
+      <rect x="834" y="843" width="53" height="52" fill="black"/>
+    </mask>
+  </defs>
+
+  <!-- structural connectors -->
+  <rect x="468" y="349" width="328" height="44" fill="url(#topGradient)"/>
+  <rect x="382" y="436" width="44" height="369" fill="url(#leftGradient)"/>
+  <rect x="837" y="436" width="46" height="168" fill="url(#rightGradient)"/>
+
+  <!-- curved arrow shaft and head -->
+  <path d="M448 873 C540 888 614 866 680 830 C748 792 804 737 854 684" stroke="url(#arrowGradient)" stroke-width="40" stroke-linecap="round" fill="none"/>
+  <path d="M785 644 H883 Q893 644 893 654 V755 Q893 765 883 765 H864 Q854 765 854 755 V684 H785 Q775 684 775 674 V654 Q775 644 785 644 Z" fill="url(#arrowGradient)"/>
+
+  <!-- four rounded nodes with transparent square cutouts -->
+  <g mask="url(#nodeMask)">
+    <rect x="340" y="307" width="128" height="129" rx="22" fill="url(#topGradient)"/>
+    <rect x="796" y="307" width="128" height="129" rx="22" fill="url(#topGradient)"/>
+    <rect x="340" y="805" width="128" height="129" rx="22" fill="url(#bottomLeftGradient)"/>
+    <rect x="796" y="805" width="128" height="129" rx="22" fill="url(#bottomRightGradient)"/>
+  </g>
+
+  <!-- face -->
+  <circle cx="543" cy="530" r="36" fill="url(#faceGradient)"/>
+  <circle cx="702" cy="530" r="36" fill="url(#faceGradient)"/>
+  <path d="M530 634 V636 C530 658 548 675 570 675 H675 C697 675 715 658 715 636 V634" stroke="url(#faceGradient)" stroke-width="40" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

@@ -1,221 +1,111 @@
 # LibreFlow Annotate
 
-LibreFlow Annotate is a local web application for computer vision dataset work. It provides project and batch management, image and dataset uploads, canvas annotation tools, collaborator access, model upload, and YOLO-powered auto-annotation through a Python inference service.
+> A local-first annotation and dataset-operations workspace for computer-vision teams.
 
-The app has two runtime parts:
+![Project status](https://img.shields.io/badge/status-active%20prototype-2f7d6d) ![Runtime](https://img.shields.io/badge/runtime-Node.js%20%2B%20Python-4b6b9a) ![Storage](https://img.shields.io/badge/storage-local--first-7a5c61) ![License](https://img.shields.io/badge/license-Apache--2.0-5b6573)
 
-- Node.js Express web app on port `6767`
-- Python FastAPI inference service on port `7878`
+<p align="center">
+  <img src="public/assets/libreflow-logo.svg" alt="LibreFlow Annotate logo" width="260">
+</p>
 
-Runtime files are stored in these project folders:
+## The idea
 
-- `data/` - JSON records for users, projects, images, annotations, batches, models, datasets, and notifications
-- `uploads/` - uploaded project images
-- `models/` - uploaded YOLO model files and optional YAML files
-- `datasets/` - standalone dataset images and dataset exports/imports
-- `versions/` - immutable, content-addressed dataset version snapshots
+Computer-vision data work commonly fragments across file shares, point annotation tools, model scripts, review spreadsheets, and export utilities. LibreFlow Annotate brings that loop together in a self-hosted application: get images in, label them with rich geometry, review the work, create an immutable dataset snapshot, and hand a verified export to training or downstream automation.
 
-These folders are intentionally not baked into Docker images. Docker Compose bind-mounts them so local and Docker runs can use the same data.
+The project is deliberately local-first. The supported runtime stores application records and uploaded assets on the operator's machine, while model inference runs in a companion local Python service. That makes it a practical prototype for sensitive inspection imagery, laboratory work, and small teams that want control of their data.
 
-## Features
+## Showcase
 
-- Local account registration and login
-- Project dashboard with project ownership and collaboration
-- Image upload from individual files or ZIP archives
-- Automatic image compression for common image formats
-- Batch and sub-batch organization
-- Canvas annotation with boxes, rotated boxes, polygons, masks, lines, points, skeletons, and image classifications
-- Annotation editing, relabeling, undo, redo, copy, paste, and keyboard shortcuts
-- Smart Mask point prompting through an uploaded SAM model
-- Stable annotation IDs, author/model provenance, immutable revisions, and non-destructive restore
-- Reviewer assignment, submission/approval states, annotation-linked issues, comments, and project audit queues
-- Label management with colors
-- YOLO model upload with optional YAML class map
-- AI auto-annotation using detection models and optional classification models
-- Dataset creation, dataset upload, project-to-dataset export, and dataset-to-project import
-- Dataset export formats including YOLO, Roboflow YOLO, COCO JSON, Pascal VOC XML, and CSV
-- Immutable dataset versions with SHA-256 manifests and deterministic train/valid/test splits
-- Version-time resize, letterbox, grayscale, crop, tile, flip, rotation, brightness, and seeded-noise processing with annotation lineage
-- Dataset health insights for class balance, geometry, dimensions, duplicates, filename collisions, spatial bias, and split leakage
-- Dry-run annotated dataset import for YOLO, COCO, and Pascal VOC with class and duplicate conflict policies
-- Persistent, resumable batch inference jobs with cancel/retry and annotation provenance
-- Scoped API keys, a dependency-free CLI, signed webhooks, and delivery history
-- HTTP(S) image ingestion, strictly allowlisted mounted-folder watches, and optional operational S3-compatible sync
+| Area | What the current iteration demonstrates |
+| --- | --- |
+| Annotation | Boxes, rotated boxes, polygons, masks, lines, points, skeletons, classifications, label management, keyboard shortcuts, undo/redo, and non-destructive revision restore. |
+| Team workflow | Project collaboration, reviewer assignment, submitted/approved/change-requested states, comments, annotation-linked issues, notifications, and audit queues. |
+| Model assistance | YOLO detection/classification auto-annotation and Smart Mask point prompting with a compatible SAM model. |
+| Dataset engineering | YOLO/COCO/Pascal VOC import, exports, deterministic splits, immutable content-addressed versions, augmentation lineage, and health diagnostics. |
+| Automation | Scoped API keys, a dependency-free CLI, resumable jobs, URL/folder/S3-compatible connectors, signed webhooks, and delivery history. |
+| Deployment | Local Node + Python services or Docker Compose. An opt-in PostgreSQL schema is included as a migration foundation. |
 
-See [Review and quality workflows](docs/review-and-quality.md), [Dataset lifecycle API](docs/dataset-lifecycle.md), and [Automation API](docs/automation-api.md) for the new review, versioning, health, import, API-key, job, ingestion, CLI, and webhook capabilities.
+## A representative flow
 
-## Requirements
+```mermaid
+flowchart LR
+    A[Create a project] --> B[Upload images\nor ingest a source]
+    B --> C[Annotate manually\nor with a model]
+    C --> D[Submit and review]
+    D --> E[Version the dataset]
+    E --> F[Check health\nand export]
+    F --> G[Train or automate\na downstream workflow]
+```
 
-### Local Run
+## How the system is put together
 
-- Node.js 20.9 or newer
-- Python 3.10 or newer
-- npm
-- Git
+```mermaid
+flowchart TB
+    Browser[Browser\nVanilla JS + Canvas] -->|Session cookie or scoped API key| App[Express app\nport 6767]
+    App --> Store[JSON metadata\ndata/]
+    App --> Assets[Local assets\nuploads • models • datasets • versions]
+    App --> Jobs[Resumable jobs\nand webhooks]
+    App -->|internal HTTP| Inference[FastAPI inference service\nUltralytics YOLO + OpenCV\nport 7878]
+    Inference --> Assets
+    App -. optional future migration path .-> Postgres[(PostgreSQL schema)]
+```
 
-Python 3.10 is recommended for parity with the existing launcher scripts. CPU inference works, but large YOLO models are much faster with a CUDA-capable GPU and a matching PyTorch installation.
+The browser never calls the Python service directly. Express applies project access checks before serving protected files or proxying model work. The supported persistence mode is JSON-backed local storage; PostgreSQL is currently an opt-in schema/migration foundation and is not wired into the live application store.
 
-### Docker Run
+## Quick start
 
-- Docker Desktop or Docker Engine
-- Docker Compose v2
-- Enough disk space for Python ML dependencies and model files
+### Local development
 
-The default Docker inference image installs CPU PyTorch first so the image does not pull the much larger CUDA dependency stack. For GPU acceleration, use an NVIDIA-enabled Docker runtime and replace the PyTorch install command in `Dockerfile.infer` with the command for your CUDA version.
-
-## Local Setup
-
-1. Install Node dependencies:
+Requirements: Node.js 20.9+, Python 3.10+, and npm.
 
 ```powershell
 npm install
-```
-
-2. Create the Python environment:
-
-```powershell
 py -3.10 -m venv py_scripts\.venv
 py_scripts\.venv\Scripts\pip install -r py_scripts\requirements.txt
-```
-
-On macOS or Linux:
-
-```bash
-python3.10 -m venv py_scripts/.venv
-py_scripts/.venv/bin/pip install -r py_scripts/requirements.txt
-```
-
-3. Start both services on Windows:
-
-```powershell
 .\start_app.ps1
 ```
 
-Or double-click `start_app.bat`.
+Open `http://localhost:6767` and register a local account. The launcher starts the Express app and the inference service. For manual commands and macOS/Linux instructions, see [Setup](docs/setup.md).
 
-4. Open the app:
-
-```text
-http://localhost:6767
-```
-
-5. Register a local account on first use.
-
-## Manual Local Start
-
-Start the inference server:
-
-```powershell
-cd py_scripts
-.\.venv\Scripts\python -m uvicorn infer_server:app --host 127.0.0.1 --port 7878
-```
-
-Start the Node web app in another terminal:
-
-```powershell
-$env:INFER_SERVER_URL = "http://127.0.0.1:7878"
-npm start
-```
-
-On macOS or Linux:
-
-```bash
-cd py_scripts
-./.venv/bin/python -m uvicorn infer_server:app --host 127.0.0.1 --port 7878
-```
-
-```bash
-INFER_SERVER_URL=http://127.0.0.1:7878 npm start
-```
-
-## Docker Setup
-
-1. Create a `.env` file if you want custom ports or a persistent session secret:
-
-```env
-PORT=6767
-INFER_PORT=7878
-SESSION_SECRET=replace-with-a-long-random-secret
-```
-
-2. Build and start the containers:
+### Docker Compose
 
 ```powershell
 docker compose up --build
 ```
 
-If Docker Desktop fails during image metadata lookup with an error like `lookup auth.docker.io: no such host`, build the images with the included classic-builder helper, then start Compose without rebuilding:
+Open `http://localhost:6767`. Compose preserves local runtime state through bind mounts for `data/`, `uploads/`, `models/`, `datasets/`, and `versions/`. Stop it with `docker compose down`.
+
+## Use cases
+
+- Industrial visual inspection: annotate defects, route samples through review, analyze class balance, and export a reproducible training release.
+- Research datasets: keep experiments tied to deterministic versions, transformations, split seeds, and lineage metadata.
+- Human-in-the-loop model improvement: use inference to draft labels, verify them in review, and retrain from immutable snapshots.
+- Private or offline workflows: operate on a local machine or controlled network with locally mounted image/model storage.
+- Pipeline integration: ingest approved sources, queue batch inference, and notify training/operations systems through scoped keys and signed webhooks.
+
+## Documentation
+
+The MkDocs site is the current technical source of truth:
+
+- [Documentation home](docs/index.md)
+- [Architecture and technologies](docs/architecture.md)
+- [Setup and operations](docs/setup.md)
+- [End-to-end usage](docs/usage.md)
+- [API reference](docs/api-reference.md)
+- [Review and quality](docs/review-and-quality.md)
+- [Dataset lifecycle](docs/dataset-lifecycle.md)
+- [Automation API and CLI](docs/automation-api.md)
+
+Serve it locally after installing MkDocs Material:
 
 ```powershell
-.\docker-build.ps1
-docker compose up -d
+py -m pip install mkdocs-material
+mkdocs serve
 ```
 
-3. Open the app:
+## API and automation
 
-```text
-http://localhost:6767
-```
-
-4. Stop the stack:
-
-```powershell
-docker compose down
-```
-
-The Compose file starts two services:
-
-- `app` - Node.js web app
-- `inference` - FastAPI YOLO inference service
-
-Both services mount the same host folders into `/app/data`, `/app/uploads`, `/app/models`, and `/app/datasets`. The web app additionally mounts `/app/versions` for immutable snapshots. Shared image/model paths are required because the web app sends them to the inference service.
-
-## Docker Data and File Persistence
-
-The following bind mounts keep uploads and model files working across container restarts:
-
-```yaml
-./data:/app/data
-./uploads:/app/uploads
-./models:/app/models
-./datasets:/app/datasets
-./versions:/app/versions
-```
-
-Do not remove these mounts unless you also replace the file-path contract between the Node app and the Python inference service.
-
-To back up a Docker or local installation, copy these folders:
-
-```text
-data/
-uploads/
-models/
-datasets/
-versions/
-```
-
-To move the app to another machine, restore those folders before starting the app.
-
-## Environment Variables
-
-| Variable | Default | Used by | Description |
-| --- | --- | --- | --- |
-| `PORT` | `6767` | Node app | Web server port. In Docker, this controls the host port mapping. |
-| `SESSION_SECRET` | development fallback | Node app | Cookie signing secret. Set this for every persistent install. |
-| `INFER_SERVER_URL` | `http://127.0.0.1:7878` | Node app | URL of the Python inference service. Compose sets this to `http://inference:7878`. |
-| `INFER_PORT` | `7878` | Docker Compose | Host port for the inference service, mainly for debugging. |
-| `YOLO_CONFIG_DIR` | unset locally | Docker inference | Set to `/tmp/ultralytics` in Docker so Ultralytics can write config files. |
-| `AUTOMATION_SECRET_KEY` | `SESSION_SECRET` | Node app | Encrypts webhook and connector secrets. Keep stable across restarts. |
-| `AUTOMATION_JOB_CONCURRENCY` | `1` | Node app | Number of persistent automation jobs processed concurrently (1–8). |
-| `INGEST_ALLOWED_ROOTS` | empty | Node app | Path-delimited or JSON-array allowlist for mounted-folder ingestion. |
-| `INGEST_ALLOW_PRIVATE_URLS` | `0` | Node app | Set to `1` only when URL ingestion must reach trusted private hosts. |
-| `INGEST_MAX_BYTES` | 50 MB | Node app | Maximum size of each remotely ingested or API-uploaded image. |
-| `WEBHOOK_ALLOWED_PORTS` | `80,443` | Node app | Comma-separated destination ports allowed for webhook delivery. |
-| `WEBHOOK_ALLOW_PRIVATE_URLS` | `0` | Node app | Emergency opt-in for trusted private webhook receivers; keep disabled for shared deployments. |
-
-## Automation API and CLI
-
-Open **Jobs → Automation** to run persistent batch inference, manage review queues, configure storage connectors/webhooks, and create scoped API keys. Full REST, signature, ingestion-policy, and CLI documentation is in [docs/automation-api.md](docs/automation-api.md).
+The browser UI uses authenticated session routes. Persistent automation also supports scoped Bearer keys created from **Jobs → Automation**.
 
 ```powershell
 $env:LIBREFLOW_URL = "http://localhost:6767"
@@ -224,185 +114,31 @@ npm run cli -- projects list
 npm run cli -- jobs list
 ```
 
-## Model Upload and Inference
+The [API reference](docs/api-reference.md) documents core routes and auth boundaries; [Automation API](docs/automation-api.md) includes API-key scopes, job, ingestion, connector, webhook, and CLI contracts.
 
-1. Start the app and log in.
-2. Create or open a project.
-3. Go to the Models page.
-4. Upload a supported model file: `.pt`, `.pth`, `.onnx`, `.tflite`, `.bin`, `.weights`, or `.pb`.
-5. Optionally upload a `.yaml` or `.yml` class-name file with the model.
-6. Open an image in the annotator.
-7. Select the model in the Auto-Annotate panel.
-8. Set the confidence threshold and optional classification bias.
-9. Run inference and review the generated boxes.
+## Current scope and honest limits
 
-In Docker, uploaded model files are stored on the host in `models/` and mounted into both containers at `/app/models`, so inference can load them.
+LibreFlow is an active prototype intended for local/self-hosted teams. JSON persistence is the supported default and requires regular folder-level backups. The optional PostgreSQL profile creates relational schema only; it does not migrate the running application to a database. Large-model performance depends on the available CPU/GPU and matching PyTorch setup. Deployments exposed beyond a trusted network need production session secrets, HTTPS/reverse-proxy hardening, access controls, and carefully restricted ingestion/webhook settings.
 
-## Image and Dataset Uploads
-
-Project image uploads support common image files and ZIP archives. Uploaded images are written to `uploads/` and recorded in `data/images.json`.
-
-Dataset uploads and exported dataset images are written to `datasets/` and recorded in `data/datasets.json`.
-
-Supported image extensions include:
-
-- `.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`, `.tif`, `.tiff`, `.gif`, `.svg`
-
-Large uploads are limited to 500 MB per file by the server.
-
-## Common Workflows
-
-### Create and Annotate a Project
-
-1. Register or log in.
-2. Create a project from the dashboard.
-3. Add labels on the project page.
-4. Upload images or a ZIP archive.
-5. Open an image in the annotator.
-6. Draw boxes, rotated boxes, polygons, masks, lines, points, skeletons, or classifications.
-7. Save annotations.
-8. Export from the annotator or project batch controls.
-
-### Use AI Auto-Annotation
-
-1. Upload a YOLO detection model on the Models page.
-2. Upload images into a project.
-3. Open an image in the annotator.
-4. Select the model and run inference.
-5. Edit the generated annotations as needed.
-6. Save.
-
-### Work with Datasets
-
-1. Export a project into a reusable dataset.
-2. Upload standalone dataset images or ZIPs.
-3. Tag dataset images.
-4. Import a dataset into another project.
-5. Export the dataset as a ZIP when needed.
-
-## Useful Commands
-
-Local:
-
-```powershell
-npm start
-npm run dev
-```
-
-Docker:
-
-```powershell
-.\docker-build.ps1
-docker compose up --build
-docker compose up -d
-docker compose logs -f app
-docker compose logs -f inference
-docker compose down
-```
-
-Health checks:
-
-```powershell
-Invoke-RestMethod http://localhost:6767/login
-Invoke-RestMethod http://localhost:7878/health
-```
-
-## Troubleshooting
-
-### The app opens, but auto-annotation says the inference server is not running
-
-For local runs, confirm `http://127.0.0.1:7878/health` responds. For Docker, check:
-
-```powershell
-docker compose ps
-docker compose logs -f inference
-```
-
-The Node container must use:
-
-```text
-INFER_SERVER_URL=http://inference:7878
-```
-
-This is already set in `docker-compose.yml`.
-
-### Uploaded models are visible but inference cannot find the model file
-
-Make sure `models/` is mounted into both containers at the same path:
-
-```text
-/app/models
-```
-
-The Compose file already does this. If you change mount paths, update both services together.
-
-### Uploaded images show broken thumbnails
-
-Check that `uploads/` is mounted into the `app` service and that the files exist on the host. The app serves images from:
-
-```text
-/uploads/<filename>
-```
-
-### Docker build is slow or large
-
-The inference image installs ML dependencies, including Ultralytics, Torch, and OpenCV. The first build can take a while. The provided Dockerfile installs CPU Torch first to avoid CUDA package downloads by default. Later builds should use Docker layer cache unless `Dockerfile.infer` or `py_scripts/requirements.txt` changes.
-
-### Docker build fails with `lookup auth.docker.io: no such host`
-
-This is a Docker Desktop or DNS issue during BuildKit metadata lookup, not an application code error. Use the included fallback builder:
-
-```powershell
-.\docker-build.ps1
-docker compose up -d
-```
-
-The helper disables BuildKit for the image build so Docker can use the classic builder path, then Compose can run the already-built `libreflow-annotate-app:local` and `libreflow-annotate-inference:local` images.
-
-### Sessions reset after restart
-
-Set a stable `SESSION_SECRET` in `.env`. Changing the secret invalidates existing login sessions.
-
-### Port already in use
-
-Change host ports in `.env`:
-
-```env
-PORT=8080
-INFER_PORT=8787
-```
-
-Then restart:
-
-```powershell
-docker compose up --build
-```
-
-## Project Structure
+## Project structure
 
 ```text
 LibreFlow-Annotate/
-  data/                 JSON runtime database, gitignored
-  bin/                  dependency-free automation CLI
-  datasets/             dataset image storage, gitignored
-  docs/                 additional documentation
-  lib/                  shared access, review, history, lifecycle, and automation services
-  middleware/           session and hybrid API-key authentication
-  models/               uploaded model files, gitignored
-  public/               frontend HTML, CSS, and JavaScript
-  py_scripts/           Python inference server and pipeline code
-  routes/               Express API route handlers
-  uploads/              uploaded project images, gitignored
-  versions/             immutable dataset snapshots, gitignored
-  Dockerfile            Node.js web app image
-  Dockerfile.infer      Python inference image
-  docker-compose.yml    two-service local Docker stack
-  package.json          Node dependencies and scripts
-  server.js             Express application entrypoint
-  start_app.bat         Windows launcher
-  start_app.ps1         Windows PowerShell launcher
+  bin/            Automation CLI
+  docs/           MkDocs documentation source
+  lib/            Access, jobs, lifecycle, integration, and storage services
+  middleware/     Session and API-key authentication
+  public/         Browser UI
+  py_scripts/     FastAPI inference service
+  routes/         Express route handlers
+  db/             Optional PostgreSQL schema and migration tool
+  data/           Runtime metadata (gitignored)
+  uploads/        Project images (gitignored)
+  models/         Uploaded model files (gitignored)
+  datasets/       Dataset assets (gitignored)
+  versions/       Immutable dataset snapshots (gitignored)
 ```
 
 ## License
 
-This project is licensed under Apache-2.0. See `LICENSE`.
+Released under the [Apache License 2.0](LICENSE).

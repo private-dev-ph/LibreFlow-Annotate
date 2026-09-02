@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="/js/theme-init.js"></script>
   <title>Project – LibreFlow Annotate</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/nav.css" />
   <link rel="stylesheet" href="/css/project.css" />
   <link rel="stylesheet" href="/css/theme.css" />
@@ -14,7 +16,7 @@
   <nav id="top-nav">
     <div class="nav-left">
       <a class="nav-logo" href="/dashboard">
-        <span class="nav-logo-icon">■</span>
+        <img class="nav-logo-icon" src="/assets/libreflow-logo.svg" alt="" />
         <span class="nav-logo-name">LibreFlow Annotate</span>
       </a>
       <div class="nav-links">
@@ -23,7 +25,7 @@
           Dashboard
         </a>
         <a class="nav-link" href="/jobs">
-          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A8 8 0 0 1 4.07 11H4a1 1 0 0 1 0-2h.07A8 8 0 0 1 11 4.07V4a1 1 0 0 1 2 0v.07A8 8 0 0 1 19.93 11H20a1 1 0 0 1 0 2h-.07A8 8 0 0 1 13 16.93z"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2"/></svg>
           Jobs
           <span id="jobs-badge" class="nav-badge hidden">0</span>
         </a>
@@ -177,13 +179,13 @@
           </div>
           <div class="drop-zone" id="drop-zone">
             <input type="file" id="file-input" multiple accept="image/*,.zip" />
-            <div class="drop-icon">🖥</div>
+            <div class="drop-icon" data-lf-icon="upload" data-lf-icon-label="Upload images"></div>
             <div class="drop-title">Drag &amp; drop images or ZIP archives here</div>
             <div class="drop-sub">JPG, PNG, WEBP, BMP, TIFF, GIF — or ZIP containing images — 1000+ files supported</div>
           </div>
         </div>
         <div class="section-card">
-          <h2>Images <span id="img-count" style="font-weight:400;font-size:14px;color:#8892a4"></span></h2>
+          <h2>Images <span id="img-count" class="section-count"></span></h2>
           <div class="images-controls">
             <input type="text" id="image-search" placeholder='Search (e.g. name:panel tag:"component A" size:>1mb date:2026-04-30)' />
             <select id="image-sort-by">
@@ -232,7 +234,7 @@
               <input type="file" id="model-file" accept=".onnx,.pt,.pth,.tflite,.bin,.weights,.pb" />
             </div>
             <div class="field field-full">
-              <label>Config / Data YAML <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#6c63ff">(optional — e.g. YOLOv8 data.yaml)</span></label>
+              <label>Config / Data YAML <span class="field-optional">(optional — e.g. YOLOv8 data.yaml)</span></label>
               <input type="file" id="model-yaml" accept=".yaml,.yml" />
             </div>
             <div class="field field-full" style="display:flex;justify-content:flex-end">
@@ -252,13 +254,13 @@
         <div class="section-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
           <div>
             <h2>Upload Batches</h2>
-            <p style="font-size:13px;color:#8892a4;margin-bottom:0">Images uploaded to this project are grouped into batches. You can split a batch into sub-batches and assign them to collaborators.</p>
+            <p class="section-description">Images uploaded to this project are grouped into batches. You can split a batch into sub-batches and assign them to collaborators.</p>
           </div>
           <button id="btn-export-all-batches" class="btn-primary-sm" style="white-space:nowrap;flex-shrink:0">↓ Export All Batches</button>
         </div>
         <div id="batches-list" class="batches-list"></div>
         <div id="batches-empty" class="batches-empty" style="display:none">
-          <div style="font-size:38px;opacity:.2;margin-bottom:12px">📦</div>
+          <div class="batches-empty-icon" data-lf-icon="package" data-lf-icon-label="Batches"></div>
           <h3>No batches yet</h3>
           <p>Upload images on the Images tab to create batches.</p>
         </div>
@@ -267,7 +269,7 @@
         <div id="split-dialog" class="split-dialog hidden">
           <div class="split-dialog-box">
             <h3 id="split-dialog-title">Split Batch</h3>
-            <p id="split-dialog-sub" style="font-size:13px;color:#8892a4;margin-bottom:18px"></p>
+            <p id="split-dialog-sub" class="dialog-description"></p>
             <div class="split-options">
               <label class="split-opt">
                 <input type="radio" name="split-mode" value="size" checked /> Split so each sub-batch has
@@ -320,7 +322,7 @@
       <div class="tab-panel" id="panel-collaborators">
         <div class="section-card">
           <h2>Add Collaborator</h2>
-          <p style="font-size:13px;color:#8892a4;margin-bottom:16px">Collaborators can view and annotate images in this project.</p>
+          <p class="section-description">Collaborators can view and annotate images in this project.</p>
           <div class="collab-search-row">
             <input type="text" id="collab-search" placeholder="Search by username…" />
             <button class="btn-collab-search" id="btn-collab-search">Look Up</button>
@@ -341,7 +343,7 @@
   <div id="modal-batch-export" class="modal hidden">
     <div class="modal-box">
       <h3 class="modal-title">Export Annotations</h3>
-      <p id="batch-export-scope-label" style="font-size:13px;color:#8892a4;margin-bottom:14px"></p>
+      <p id="batch-export-scope-label" class="dialog-description"></p>
       <div class="field-group">
         <label class="field-label">Format</label>
         <select id="batch-export-format" class="field-select">
@@ -368,6 +370,7 @@
   </div>
 
   <script src="/js/api.js"></script>
+  <script src="/js/icons.js"></script>
   <script src="/js/notifications.js"></script>
   <script src="/js/jobs.js"></script>
   <script src="/js/nav-inbox.js"></script>

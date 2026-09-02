@@ -187,6 +187,13 @@ test('annotation saves preserve IDs/provenance and revisions can be restored', a
   assert.equal(second.body[0].createdAt, createdAt);
   assert.equal(second.body[0].updatedBy, 'u-owner');
 
+  const unchanged = await request('/api/annotations', users.owner, {
+    method: 'POST',
+    body: { imageId: 'img-one', shapes: second.body },
+  });
+  assert.equal(unchanged.status, 200);
+  assert.deepEqual(unchanged.body, second.body);
+
   const history = await request('/api/annotations/img-one/revisions?includeAnnotations=true', users.collaborator);
   assert.equal(history.status, 200);
   assert.deepEqual(history.body.map(item => item.version), [3, 2, 1]);

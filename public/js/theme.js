@@ -110,7 +110,7 @@
               <span class="theme-option-name">${theme.name}</span>
               <span class="theme-option-desc">${theme.description}</span>
               <span class="theme-option-hex">${theme.colors.join(' · ')}</span>
-              <span class="theme-check" aria-hidden="true">✓</span>
+              <span class="theme-check" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg></span>
             </button>
           `).join('')}
         </div>

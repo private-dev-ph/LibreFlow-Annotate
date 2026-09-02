@@ -1051,6 +1051,57 @@
 .project-audit-list { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; max-height: 320px; overflow: auto; }
 .project-audit-entry { border-left: 2px solid var(--border, #252a3d); padding: 4px 8px; font-size: 11px; }
 .project-audit-meta { color: var(--text-muted, #8892a4); font-size: 9px; }
+
+/* Theme-native project controls. */
+.project-body { background: var(--bg); color: var(--text); }
+.btn-lifecycle, .label-chip, .yaml-file-label, .compression-controls, .model-card,
+.batch-card, .collab-row, .collab-lookup-result, .modal-box, .split-dialog-box,
+.review-count-card, .project-review-row { background: var(--surface); border-color: var(--border); color: var(--text); }
+.btn-lifecycle, .btn-sm-ghost, .btn-batch-action, .btn-remove-collab, .btn-cancel, .btn-cancel-sm { background: var(--surface-2); border-color: var(--border); color: var(--text-dim); }
+.btn-lifecycle:hover, .btn-sm-ghost:hover, .btn-batch-action:hover, .btn-remove-collab:hover, .btn-cancel:hover, .btn-cancel-sm:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong); }
+.btn-remove-collab:hover, .btn-batch-action.danger:hover { border-color: var(--danger); color: var(--danger); }
+.label-chip { background: var(--surface-2); border-color: var(--border); color: var(--text); }
+.label-chip .label-del, .label-chip .label-rename-btn, .label-chip .label-rename-cancel { color: var(--text-dim); }
+.label-chip .label-del:hover, .label-chip .label-rename-cancel:hover { color: var(--danger); }
+.label-chip .label-rename-btn:hover { color: var(--accent-strong); }
+.label-chip .label-rename-confirm, .model-shared-badge { color: var(--success); }
+.label-chip .label-rename-input, .dataset-import-row select, .compression-quality-row input[type="number"], .images-controls input, .images-controls select, .field input, .field select, .batch-assign-select, .subbatch-select, .batch-note-input, .subbatch-note-input, .collab-search-row input, .field-select, .project-review-controls select, .project-reviewer-select { background: var(--surface-2); border-color: var(--border); color: var(--text); }
+.yaml-import-desc, .compression-controls label, .compression-quality-suffix, .batch-meta, .batch-assign-wrap label, .subbatch-count, .subbatch-assign label, .batch-note-label, .collab-added, .collab-empty, .batches-empty, .model-meta, .models-empty, .field label, .project-review-toolbar p, .review-count-label, .project-audit-meta, .section-count, .section-description, .dialog-description, .subbatches-empty { color: var(--text-dim); }
+.yaml-import-desc code { background: var(--surface-2); border-color: var(--border); color: var(--accent-strong); }
+.yaml-file-label { background: var(--surface-2); color: var(--text-dim); }
+.yaml-file-label:hover, .yaml-file-label.has-file { border-color: var(--accent); color: var(--accent-strong); }
+.compression-controls, .batch-body { background: var(--surface-2); border-color: var(--border); }
+.compression-quality-row input[type="range"] { accent-color: var(--accent); }
+.drop-zone { border-color: var(--border); background: var(--surface-2); }
+.drop-zone.drag-over { border-color: var(--accent); background: var(--accent-soft); }
+.drop-title, .model-name, .batch-name, .subbatch-name, .collab-username, .collab-lookup-name, .modal-title { color: var(--text); }
+.drop-sub { color: var(--text-dim); }
+.field-optional { color: var(--text-dim); font-weight: 400; text-transform: none; letter-spacing: 0; }
+.btn-upload-model, .btn-collab-search, .btn-import-yaml, .btn-add-label, .btn-primary-sm { background: var(--accent); color: var(--on-accent); }
+.btn-upload-model:hover, .btn-collab-search:hover, .btn-import-yaml:hover:not(:disabled), .btn-add-label:hover, .btn-primary-sm:hover { background: var(--accent-strong); color: var(--on-accent); }
+.model-card, .subbatch-row, .collab-lookup-result, .collab-row { background: var(--surface-2); border-color: var(--border); }
+.badge-classification, .project-review-status[data-status="approved"] { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+.badge-detection, .batch-assigned-chip { color: var(--accent-strong); background: var(--accent-soft); }
+.model-shared-badge { border-color: color-mix(in srgb, var(--success) 48%, var(--border)); }
+.batch-card { border-left-color: var(--accent); }
+.batch-header:hover { background: var(--accent-soft); }
+.batch-chevron, .collab-avatar { color: var(--text-dim); }
+.collab-avatar, .collab-lookup-avatar { background: var(--bg3); color: var(--accent-strong); }
+.collab-lookup-result.error, .project-review-reason, .project-open-issues { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.btn-add-collab, .btn-save-note, .btn-save-sub-note { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong); }
+.btn-add-collab:hover, .btn-save-note:hover, .btn-save-sub-note:hover { background: var(--accent); color: var(--on-accent); }
+.split-dialog, .modal { background: var(--overlay); }
+.split-opt { color: var(--text); }
+.split-opt input[type="radio"], .checkbox-label input[type="checkbox"], .dataset-checkbox input[type="checkbox"] { accent-color: var(--accent); }
+.checkbox-label, .dataset-checkbox { color: var(--text); }
+.project-review-status { background: var(--bg3); color: var(--text-dim); }
+.project-review-status[data-status="submitted"] { color: var(--accent-strong); background: var(--accent-soft); }
+.project-review-status[data-status="changes_requested"] { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.project-review-open { color: var(--accent-strong); }
+.section-description { font-size: 13px; margin-bottom: 16px; }
+.dialog-description { font-size: 13px; margin-bottom: 14px; }
+.subbatches-empty { font-size: 13px; margin-top: 12px; }
+.btn-export-subbatch--push { margin-left: auto; flex-shrink: 0; }
 @media (max-width: 900px) {
   .review-overview { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
   .project-review-row { grid-template-columns: 42px minmax(130px, 1fr) 110px 65px; }

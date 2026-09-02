@@ -111,7 +111,8 @@
   --surface: #fffdf9;
   --surface-2: #fbf3e8;
   --accent: #a64ac9;
-  --accent-strong: #17e9e0;
+  /* Light Purple Pop needs a calm ink, not the dark-mode electric teal. */
+  --accent-strong: #62407c;
   --accent2: #fccd04;
   --accent-soft: #ead8f1;
   --danger: #ef7043;
@@ -239,6 +240,40 @@ body {
 
 ::selection { background: var(--accent-soft); color: var(--text); }
 ::placeholder { color: var(--text-dim); opacity: .78; }
+
+/* Native-like controls are normalized so each page inherits the active palette. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 36px !important;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%), linear-gradient(135deg, var(--text-dim) 50%, transparent 50%) !important;
+  background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50% !important;
+  background-size: 5px 5px, 5px 5px !important;
+  background-repeat: no-repeat !important;
+}
+select option, select optgroup { background: var(--surface); color: var(--text); }
+input[type="file"] {
+  padding: 7px !important;
+  color: var(--text-dim) !important;
+}
+input[type="file"]::file-selector-button {
+  margin-right: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover { border-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
+
+* { scrollbar-width: thin; scrollbar-color: var(--accent) var(--surface-2); }
+*::-webkit-scrollbar { width: 11px; height: 11px; }
+*::-webkit-scrollbar-track { background: var(--surface-2); border-radius: 999px; }
+*::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 72%, var(--text-dim)); border: 3px solid var(--surface-2); border-radius: 999px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--accent-strong); }
+*::-webkit-scrollbar-corner { background: var(--surface-2); }
 
 /* Shared navigation */
 #top-nav {

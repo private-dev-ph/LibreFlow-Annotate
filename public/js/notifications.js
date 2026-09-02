@@ -27,12 +27,12 @@ const Notify = (() => {
       width: 340px;
     }
     .notify-item {
-      background: #1e2130;
-      border: 1px solid #2a2f45;
-      border-left: 4px solid #6c63ff;
-      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      border-radius: var(--radius);
       padding: 12px 14px 12px 14px;
-      box-shadow: 0 8px 32px rgba(0,0,0,.45);
+      box-shadow: var(--shadow);
       display: flex;
       flex-direction: column;
       gap: 6px;
@@ -52,11 +52,11 @@ const Notify = (() => {
       transform: translateX(120%);
       opacity: 0;
     }
-    .notify-item.type-success { border-left-color: #48e5c2; }
-    .notify-item.type-error   { border-left-color: #e05c5c; }
-    .notify-item.type-warn    { border-left-color: #f5a623; }
-    .notify-item.type-info    { border-left-color: #4fc3f7; }
-    .notify-item.type-progress{ border-left-color: #6c63ff; }
+    .notify-item.type-success { border-left-color: var(--success); }
+    .notify-item.type-error   { border-left-color: var(--danger); }
+    .notify-item.type-warn    { border-left-color: var(--accent2); }
+    .notify-item.type-info    { border-left-color: var(--accent-strong); }
+    .notify-item.type-progress{ border-left-color: var(--accent); }
 
     .notify-top {
       display: flex;
@@ -73,12 +73,12 @@ const Notify = (() => {
     .notify-title {
       font-size: 13px;
       font-weight: 600;
-      color: #e2e8f0;
+      color: var(--text);
       line-height: 1.3;
     }
     .notify-msg {
       font-size: 12px;
-      color: #8892a4;
+      color: var(--text-dim);
       margin-top: 2px;
       line-height: 1.4;
       word-break: break-word;
@@ -86,7 +86,7 @@ const Notify = (() => {
     .notify-close {
       background: transparent;
       border: none;
-      color: #8892a4;
+      color: var(--text-dim);
       cursor: pointer;
       font-size: 14px;
       line-height: 1;
@@ -94,11 +94,11 @@ const Notify = (() => {
       flex-shrink: 0;
       transition: color .15s;
     }
-    .notify-close:hover { color: #e2e8f0; }
+    .notify-close:hover { color: var(--accent-strong); }
 
     .notify-progress-bar-wrap {
       height: 4px;
-      background: #2a2f45;
+      background: var(--bg3);
       border-radius: 2px;
       overflow: hidden;
       margin-top: 2px;
@@ -106,13 +106,13 @@ const Notify = (() => {
     .notify-progress-bar {
       height: 100%;
       border-radius: 2px;
-      background: linear-gradient(90deg, #6c63ff, #48e5c2);
+      background: linear-gradient(90deg, var(--accent2), var(--accent));
       transition: width .4s ease;
     }
     .notify-shimmer {
       position: absolute;
       inset: 0;
-      background: linear-gradient(90deg, transparent 30%, rgba(255,255,255,.03) 50%, transparent 70%);
+      background: linear-gradient(90deg, transparent 30%, color-mix(in srgb, var(--on-accent) 10%, transparent) 50%, transparent 70%);
       animation: shimmer 2s infinite;
     }
     @keyframes shimmer {
@@ -128,11 +128,11 @@ const Notify = (() => {
   document.body.appendChild(container);
 
   const ICONS = {
-    success: '✅',
-    error:   '❌',
-    warn:    '⚠️',
-    info:    'ℹ️',
-    progress:'⏳',
+    success: LibreFlowIcons.icon('check', 'Success'),
+    error:   LibreFlowIcons.icon('close', 'Error'),
+    warn:    LibreFlowIcons.icon('warning', 'Warning'),
+    info:    LibreFlowIcons.icon('info', 'Information'),
+    progress: LibreFlowIcons.icon('clock', 'In progress'),
   };
 
   const AUTO_DISMISS = { success: 4000, info: 5000, warn: 6000, error: 8000, progress: 0 };
@@ -150,12 +150,12 @@ const Notify = (() => {
     el.innerHTML = `
       ${type === 'progress' ? '<div class="notify-shimmer"></div>' : ''}
       <div class="notify-top">
-        <span class="notify-icon">${ICONS[type] || 'ℹ️'}</span>
+        <span class="notify-icon">${ICONS[type] || LibreFlowIcons.icon('info', 'Information')}</span>
         <div class="notify-body">
           <div class="notify-title">${escHtml(title)}</div>
           ${message ? `<div class="notify-msg notify-msg-el">${escHtml(message)}</div>` : ''}
         </div>
-        <button class="notify-close" title="Dismiss">✕</button>
+        <button class="notify-close" title="Dismiss" aria-label="Dismiss notification">${LibreFlowIcons.icon('close')}</button>
       </div>
       ${type === 'progress' ? `
         <div class="notify-progress-bar-wrap">

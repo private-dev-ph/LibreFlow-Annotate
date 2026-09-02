@@ -224,7 +224,7 @@
       if (viewMode === 'list') {
         el = document.createElement('li');
         el.className = 'img-list-item';
-        el.innerHTML = `<span class="img-dot-css${img.annotated ? ' annotated' : ''}"></span><span class="img-name-text">${esc(img.originalName)}</span>${img.isNull ? '<span class="img-state-mini">NULL</span>' : ''}`;
+        el.innerHTML = `<span class="img-dot-css${img.annotated ? ' annotated' : ''}"></span><span class="img-name-text">${esc(img.originalName)}</span>${img.annotated ? `<span class="img-list-state-icon">${LibreFlowIcons.icon('check', 'Annotated')}</span>` : ''}${img.isNull ? '<span class="img-state-mini">NULL</span>' : ''}`;
       } else {
         el = document.createElement('li');
         el.className = 'img-thumb-item';
@@ -233,7 +233,7 @@
         el.innerHTML = `
           <div class="img-thumb-wrap" style="width:${size}px;height:${size}px">
             <img src="/uploads/${esc(img.filename)}" alt="${esc(img.originalName)}" loading="lazy" style="object-fit:cover;width:100%;height:100%;display:block" />
-            ${img.annotated ? '<span class="thumb-annotated-badge">&#10003;</span>' : ''}
+            ${img.annotated ? `<span class="thumb-annotated-badge">${LibreFlowIcons.icon('check')}</span>` : ''}
           </div>
           ${showName ? `<span class="img-thumb-name">${esc(img.originalName)}</span>` : ''}`;
       }
@@ -366,7 +366,7 @@
         <span class="ann-type">${s.type}</span>
         ${s.source && s.source !== 'manual' ? `<span class="ann-source" title="Source: ${esc(s.source)}">${esc(s.source)}</span>` : ''}
         ${Number.isFinite(Number(s.confidence)) ? `<span class="ann-confidence">${Math.round(Number(s.confidence)*100)}%</span>` : ''}
-        <button class="ann-del-btn" title="Delete">&#10005;</button>`;
+        <button class="ann-del-btn" title="Delete" aria-label="Delete annotation">${LibreFlowIcons.icon('trash')}</button>`;
       li.querySelector('.ann-del-btn').addEventListener('click', e => {
         e.stopPropagation();
         Canvas.setSelected(s.id);
@@ -570,7 +570,7 @@
           unsaved = true; saveIndicator.classList.add('show');
           const skipText = skipped ? ` ${skipped} duplicate/overlap(s) skipped.` : '';
           const cleanText = removedExisting ? ` ${removedExisting} existing overlap(s) removed.` : '';
-          if (statusEl) { statusEl.textContent = `✓ ${added} annotation(s) applied.${skipText}${cleanText} Review and save.`; statusEl.className = 'auto-status success'; }
+          if (statusEl) { statusEl.textContent = `${added} annotation(s) applied.${skipText}${cleanText} Review and save.`; statusEl.className = 'auto-status success'; }
           showToast(`${added} auto-annotation(s) applied.${skipped ? ` ${skipped} skipped.` : ''}${removedExisting ? ` ${removedExisting} cleaned.` : ''}`);
         } else {
           const msg = skipped
@@ -671,6 +671,8 @@
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
     if (toolBtnId[t]) document.getElementById(toolBtnId[t]).classList.add('active');
     Canvas.setTool(t);
+    // Shift is a negative prompt modifier in Smart Mask mode, never a visibility toggle.
+    Canvas.setAnnotationsVisible(true);
     document.getElementById('smart-mask-help')?.classList.toggle('hidden', t !== 'smart');
   }
 
@@ -699,11 +701,18 @@
 
   // -- Shift: hold to hide all annotations ------------------------------------
   document.addEventListener('keydown', e => {
-    if (e.key === 'Shift' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) Canvas.setAnnotationsVisible(false);
+    if (e.key !== 'Shift' || e.repeat) return;
+    if (Canvas.getCurrentTool() === 'smart') {
+      Canvas.setAnnotationsVisible(true);
+      return;
+    }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) Canvas.setAnnotationsVisible(false);
   });
   document.addEventListener('keyup', e => {
     if (e.key === 'Shift') Canvas.setAnnotationsVisible(true);
   });
+  // A keyup is not guaranteed after focus changes (for example, Alt+Tab).
+  window.addEventListener('blur', () => Canvas.setAnnotationsVisible(true));
   // Also restore when any modifier combo is pressed while Shift is down
   document.addEventListener('keydown', e => {
     if (e.shiftKey && (e.ctrlKey || e.metaKey || e.altKey)) Canvas.setAnnotationsVisible(true);

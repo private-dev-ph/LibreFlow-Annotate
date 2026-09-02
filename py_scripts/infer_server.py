@@ -27,6 +27,16 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from ultralytics import YOLO, SAM
+from ultralytics.models.sam.build import (
+    build_mobile_sam,
+    build_sam2_b,
+    build_sam2_l,
+    build_sam2_s,
+    build_sam2_t,
+    build_sam_vit_b,
+    build_sam_vit_h,
+    build_sam_vit_l,
+)
 
 logging.basicConfig(level=logging.INFO, format="[INFER] %(message)s")
 log = logging.getLogger("infer")
@@ -47,6 +57,40 @@ _model_cache: Dict[str, YOLO] = {}
 _sam_cache: Dict[str, SAM] = {}
 
 
+class UploadedSAM(SAM):
+    """Load SAM checkpoints whose stored filename no longer identifies their family."""
+
+    def __init__(self, weights: str, checkpoint_name: str) -> None:
+        self._checkpoint_name = Path(checkpoint_name).name.lower()
+        super().__init__(weights)
+
+    def _load(self, weights: str, task=None):
+        builders = {
+            "sam_h.pt": build_sam_vit_h,
+            "sam_l.pt": build_sam_vit_l,
+            "sam_b.pt": build_sam_vit_b,
+            "mobile_sam.pt": build_mobile_sam,
+            "sam2_t.pt": build_sam2_t,
+            "sam2_s.pt": build_sam2_s,
+            "sam2_b.pt": build_sam2_b,
+            "sam2_l.pt": build_sam2_l,
+            "sam2.1_t.pt": build_sam2_t,
+            "sam2.1_s.pt": build_sam2_s,
+            "sam2.1_b.pt": build_sam2_b,
+            "sam2.1_l.pt": build_sam2_l,
+        }
+        builder = builders.get(self._checkpoint_name)
+        if not builder:
+            supported = ", ".join(builders)
+            raise ValueError(
+                f"Unsupported promptable segmentation checkpoint '{self._checkpoint_name}'. "
+                f"Use one of: {supported}."
+            )
+        self.is_sam2 = self._checkpoint_name.startswith("sam2")
+        self.is_sam3 = False
+        self.model = builder(weights)
+
+
 def load_model(model_path: str) -> YOLO:
     """Load and cache a YOLO model by its absolute path."""
     if model_path not in _model_cache:
@@ -58,14 +102,15 @@ def load_model(model_path: str) -> YOLO:
     return _model_cache[model_path]
 
 
-def load_sam_model(model_path: str) -> SAM:
+def load_sam_model(model_path: str, checkpoint_name: Optional[str] = None) -> SAM:
     """Load and cache an uploaded SAM, MobileSAM, or SAM2 checkpoint."""
-    if model_path not in _sam_cache:
+    cache_key = f"{model_path}|{checkpoint_name or ''}"
+    if cache_key not in _sam_cache:
         if not Path(model_path).exists():
             raise FileNotFoundError(f"Segmentation model file not found: {model_path}")
         log.info(f"Loading promptable segmentation model: {model_path}")
-        _sam_cache[model_path] = SAM(model_path)
-    return _sam_cache[model_path]
+        _sam_cache[cache_key] = UploadedSAM(model_path, checkpoint_name or Path(model_path).name)
+    return _sam_cache[cache_key]
 
 
 def get_image_size(image_path: str) -> tuple[int, int]:
@@ -185,6 +230,7 @@ class InferResponse(BaseModel):
 class SegmentRequest(BaseModel):
     """POST /segment request body for SAM-style interactive prompting."""
     model_path: str
+    model_name: Optional[str] = None
     image_path: str
     label: str = "object"
     points: Optional[List[List[float]]] = None
@@ -463,7 +509,7 @@ def segment(req: SegmentRequest):
         raise HTTPException(400, "points and point_labels must have the same length.")
 
     try:
-        model = load_sam_model(req.model_path)
+        model = load_sam_model(req.model_path, req.model_name)
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(400, str(exc))
     if not Path(req.image_path).exists():

@@ -8,11 +8,13 @@
 
 .datasets-layout {
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
   gap: 14px;
   padding: 18px;
   height: calc(100vh - 56px);
   box-sizing: border-box;
+  min-height: 0;
+  min-width: 0;
 }
 
 .datasets-list-card,
@@ -23,9 +25,16 @@
   padding: 14px;
   box-shadow: 0 8px 30px rgba(0,0,0,.26);
   min-height: 0;
+  min-width: 0;
+  box-sizing: border-box;
 }
 .datasets-list-card { display: flex; flex-direction: column; }
-.dataset-main-card { display: flex; flex-direction: column; }
+.dataset-main-card {
+  display: flex;
+  flex-direction: column;
+  /* Keep the only vertical scrollbar inside the image region. */
+  overflow: hidden;
+}
 
 .row {
   display: flex;
@@ -116,8 +125,13 @@ input:focus, select:focus { outline: none; border-color: #6c63ff; }
   margin-top: 12px;
   border: 1px solid #2a314a;
   border-radius: 10px;
-  flex: 1;
-  min-height: 240px;
+  /* `min-height: 0` lets this flex item yield space to the fixed controls
+     instead of overflowing its bounded card on short viewports. */
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   overflow: auto;
   padding: 10px;
   background: rgba(10,13,22,.65);
@@ -127,6 +141,7 @@ input:focus, select:focus { outline: none; border-color: #6c63ff; }
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 12px;
+  min-width: 0;
 }
 
 .group-title {
@@ -233,3 +248,8 @@ input:focus, select:focus { outline: none; border-color: #6c63ff; }
   gap: 8px;
 }
 .modal-help { font-size: 12px; color: #9aa6bd; margin: 0; }
+
+/* Dataset export checkmark follows the active theme in both light and dark mode. */
+.small-check { color: var(--text-dim); }
+.small-check input[type="checkbox"] { accent-color: var(--accent); inline-size: 16px; block-size: 16px; }
+.small-check:focus-within { color: var(--accent-strong); }

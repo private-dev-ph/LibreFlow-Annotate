@@ -87,8 +87,16 @@ router.post('/upload', (req, res) => {
       cleanupUploads();
       return res.status(400).json({ error: 'No model file received.' });
     }
+    if (!ALLOWED_MODEL_EXT.test(path.extname(modelFile.originalname))) {
+      cleanupUploads();
+      return res.status(400).json({ error: 'The model field must contain a supported model file.' });
+    }
+    if (yamlFile && !ALLOWED_YAML_EXT.test(path.extname(yamlFile.originalname))) {
+      cleanupUploads();
+      return res.status(400).json({ error: 'The yaml field must contain a .yaml or .yml file.' });
+    }
 
-    const { projectId, name, type, description } = req.body;
+    const { projectId, name, type, description, format } = req.body;
     if (!projectId) {
       cleanupUploads();
       return res.status(400).json({ error: 'projectId is required.' });
@@ -100,6 +108,14 @@ router.post('/upload', (req, res) => {
     }
 
     const ext = path.extname(modelFile.originalname).toLowerCase().replace('.', '');
+    if (format && format.toLowerCase() !== ext) {
+      cleanupUploads();
+      return res.status(400).json({ error: 'Selected model format does not match the uploaded file.' });
+    }
+    if (type && !['detection', 'classification', 'segmentation', 'custom'].includes(type)) {
+      cleanupUploads();
+      return res.status(400).json({ error: 'Unsupported model task type.' });
+    }
     const model = {
       id:               uuidv4(),
       userId:           req.session.userId,
@@ -338,6 +354,10 @@ router.post('/:id/segment', async (req, res) => {
 
   const payload = {
     model_path: path.join(MODELS_DIR, model.filename),
+    // Uploaded checkpoints are stored under UUID filenames. Preserve the original
+    // filename so the inference service can select the correct SAM family (SAM2
+    // checkpoints are otherwise indistinguishable from SAM1 after upload).
+    model_name: model.originalName || model.name || model.filename,
     image_path: path.join(UPLOADS_DIR, img.filename),
     label: label || 'object',
     points: Array.isArray(points) && points.length ? points : null,

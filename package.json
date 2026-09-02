@@ -10,6 +10,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "cli": "node bin/libreflow.js",
+    "db:migrate": "node db/migrate.js",
     "test": "node --test"
   },
   "keywords": [
@@ -27,6 +28,7 @@
     "express-session": "^1.19.0",
     "js-yaml": "^4.1.1",
     "multer": "^2.1.0",
+    "pg": "^8.16.3",
     "sharp": "^0.35.4",
     "uuid": "^11.1.1"
   },

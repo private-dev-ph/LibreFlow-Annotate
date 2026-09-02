@@ -124,14 +124,9 @@ html, body { height: 100%; overflow: hidden; }
 }
 #images-list li:hover { background: var(--bg3); }
 #images-list li.active { background: var(--accent); color: #fff; }
-#images-list li.annotated::after {
-  content: '✓';
-  margin-left: auto;
-  color: var(--accent2);
-  font-size: 11px;
-  flex-shrink: 0;
-}
-#images-list li.active.annotated::after { color: #c7f9ee; }
+.img-list-state-icon { margin-left: auto; color: var(--accent2); flex-shrink: 0; }
+.img-list-item.active .img-list-state-icon { color: var(--on-accent); }
+.img-list-state-icon .lf-icon { width: 14px; height: 14px; }
 
 .upload-btn {
   background: var(--accent);
@@ -621,6 +616,7 @@ html, body { height: 100%; overflow: hidden; }
 .review-resolve-btn { float: right; border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: 9px; }
 .review-annotation-link { margin-top: 3px; border: 0; padding: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: 9px; text-decoration: underline; }
 .review-link-row { display: flex; align-items: center; gap: 5px; color: var(--text-muted); font-size: 9px; }
+.review-link-row input[type="checkbox"], .review-comment-actions input[type="checkbox"] { accent-color: var(--accent); }
 .review-comment-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--text-muted); font-size: 9px; }
 .review-rejection { color: #e05c5c; background: rgba(224,92,92,.08); border-radius: 4px; padding: 5px 6px; font-size: 10px; }
 .review-feedback { min-height: 12px; color: var(--text-muted); font-size: 9px; }

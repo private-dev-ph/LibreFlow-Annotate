@@ -201,7 +201,12 @@
       await refresh(currentImageId);
       setFeedback('Review note added.');
     } catch (error) {
-      setFeedback(error.message, true);
+      const message = error?.message || 'Failed to add review note.';
+      if (/annotationId must belong to (this )?image\.?/i.test(message)) {
+        setFeedback(`${message} The selected annotation may not be saved yet. Save annotations, then try again.`, true);
+      } else {
+        setFeedback(message, true);
+      }
     } finally {
       addCommentButton.disabled = false;
     }

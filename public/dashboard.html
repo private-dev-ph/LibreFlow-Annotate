@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="/js/theme-init.js"></script>
   <title>Dashboard – LibreFlow Annotate</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/nav.css" />
   <link rel="stylesheet" href="/css/dashboard.css" />
   <link rel="stylesheet" href="/css/theme.css" />
@@ -14,7 +16,7 @@
   <nav id="top-nav">
     <div class="nav-left">
       <a class="nav-logo" href="/dashboard">
-        <span class="nav-logo-icon">■</span>
+        <img class="nav-logo-icon" src="/assets/libreflow-logo.svg" alt="" />
         <span class="nav-logo-name">LibreFlow Annotate</span>
       </a>
       <div class="nav-links">
@@ -23,7 +25,7 @@
           Dashboard
         </a>
         <a class="nav-link" href="/jobs">
-          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A8 8 0 0 1 4.07 11H4a1 1 0 0 1 0-2h.07A8 8 0 0 1 11 4.07V4a1 1 0 0 1 2 0v.07A8 8 0 0 1 19.93 11H20a1 1 0 0 1 0 2h-.07A8 8 0 0 1 13 16.93z"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2"/></svg>
           Jobs
           <span id="jobs-badge" class="nav-badge hidden">0</span>
         </a>
@@ -74,7 +76,7 @@
 
       <!-- Search / filter bar -->
       <div class="dash-toolbar">
-        <input id="search-projects" type="text" placeholder="🔍  Search projects…" />
+        <input id="search-projects" type="text" placeholder="Search projects…" aria-label="Search projects" />
       </div>
 
       <!-- Project grid -->
@@ -82,7 +84,7 @@
 
       <!-- Empty state -->
       <div id="empty-state" class="empty-state hidden">
-        <div class="empty-icon">📁</div>
+        <div class="empty-icon" data-lf-icon="folder" data-lf-icon-label="Projects"></div>
         <h2>No projects yet</h2>
         <p>Create your first project to start annotating images.</p>
         <button class="btn-new-project" id="btn-empty-new">+ New Project</button>
@@ -126,6 +128,7 @@
   <div id="toast" class="toast"></div>
 
   <script src="/js/api.js"></script>
+  <script src="/js/icons.js"></script>
   <script src="/js/notifications.js"></script>
   <script src="/js/jobs.js"></script>
   <script src="/js/nav-inbox.js"></script>

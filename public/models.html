@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="/js/theme-init.js"></script>
   <title>Models – LibreFlow Annotate</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/nav.css" />
   <link rel="stylesheet" href="/css/models-page.css" />
   <link rel="stylesheet" href="/css/theme.css" />
@@ -14,7 +16,7 @@
   <nav id="top-nav">
     <div class="nav-left">
       <a class="nav-logo" href="/dashboard">
-        <span class="nav-logo-icon">■</span>
+        <img class="nav-logo-icon" src="/assets/libreflow-logo.svg" alt="" />
         <span class="nav-logo-name">LibreFlow Annotate</span>
       </a>
       <div class="nav-links">
@@ -23,7 +25,7 @@
           Dashboard
         </a>
         <a class="nav-link" href="/jobs">
-          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A8 8 0 0 1 4.07 11H4a1 1 0 0 1 0-2h.07A8 8 0 0 1 11 4.07V4a1 1 0 0 1 2 0v.07A8 8 0 0 1 19.93 11H20a1 1 0 0 1 0 2h-.07A8 8 0 0 1 13 16.93z"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2"/></svg>
           Jobs
           <span id="jobs-badge" class="nav-badge hidden">0</span>
         </a>
@@ -66,11 +68,14 @@
           <h1 class="models-title">Models</h1>
           <p class="models-sub">Manage all inference models across your projects</p>
         </div>
+        <button id="btn-open-upload-model" class="btn-upload-model" type="button">
+          <span aria-hidden="true">+</span> Upload model
+        </button>
       </div>
 
       <!-- Filter bar -->
       <div class="models-toolbar">
-        <input id="search-models" type="text" placeholder="🔍  Search models…" />
+        <input id="search-models" type="text" placeholder="Search models…" aria-label="Search models" />
         <select id="filter-project">
           <option value="">All projects</option>
         </select>
@@ -88,12 +93,75 @@
 
       <!-- Empty state -->
       <div id="models-empty" class="models-empty hidden">
-        <div class="empty-icon">🧠</div>
+        <div class="empty-icon" data-lf-icon="brain" data-lf-icon-label="Model"></div>
         <h2>No models yet</h2>
         <p>Upload a model from a project's Models tab to see it here.</p>
       </div>
 
     </div>
+  </div>
+
+  <!-- ── Upload Model Modal ── -->
+  <div id="modal-upload-model" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="upload-model-title">
+    <form id="upload-model-form" class="modal-box modal-box-upload" novalidate>
+      <div class="modal-heading">
+        <div>
+          <h3 id="upload-model-title">Upload model</h3>
+          <p>Add an inference model to a project you can access.</p>
+        </div>
+        <button id="btn-close-upload-model" class="modal-close" type="button" aria-label="Close upload model dialog">×</button>
+      </div>
+      <div class="field-group">
+        <label for="upload-model-project">Project</label>
+        <select id="upload-model-project" required></select>
+      </div>
+      <div class="upload-model-grid">
+        <div class="field-group">
+          <label for="upload-model-name">Model name</label>
+          <input id="upload-model-name" type="text" maxlength="160" autocomplete="off" placeholder="e.g. Defect detector v2" required />
+        </div>
+        <div class="field-group">
+          <label for="upload-model-type">Task type</label>
+          <select id="upload-model-type">
+            <option value="detection">Detection</option>
+            <option value="classification">Classification</option>
+            <option value="segmentation">Segmentation</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-group">
+        <label for="upload-model-format">Model format</label>
+        <select id="upload-model-format" required>
+          <option value="">Select a format</option>
+          <option value="onnx">ONNX (.onnx)</option>
+          <option value="tflite">TensorFlow Lite (.tflite)</option>
+          <option value="pt">PyTorch (.pt)</option>
+          <option value="pth">PyTorch (.pth)</option>
+          <option value="bin">Binary (.bin)</option>
+          <option value="weights">Weights (.weights)</option>
+          <option value="pb">TensorFlow (.pb)</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label for="upload-model-file">Model file</label>
+        <input id="upload-model-file" class="file-input" type="file" accept=".onnx,.tflite,.pt,.pth,.bin,.weights,.pb" required />
+        <p class="field-help">Supported: ONNX, TensorFlow Lite, PyTorch, binary, weights, and PB. Maximum 500 MB.</p>
+      </div>
+      <div class="field-group">
+        <label for="upload-model-yaml">YAML configuration <span>Optional</span></label>
+        <input id="upload-model-yaml" class="file-input" type="file" accept=".yaml,.yml" />
+      </div>
+      <div class="field-group">
+        <label for="upload-model-desc">Description <span>Optional</span></label>
+        <textarea id="upload-model-desc" rows="3" maxlength="1000" placeholder="A short note about this model or its training data"></textarea>
+      </div>
+      <p id="upload-model-error" class="form-error hidden" role="alert"></p>
+      <div class="modal-actions">
+        <button id="btn-cancel-upload-model" class="btn-cancel" type="button">Cancel</button>
+        <button id="btn-submit-upload-model" class="btn-primary-sm" type="submit">Upload model</button>
+      </div>
+    </form>
   </div>
 
   <!-- ── Edit Modal ── -->
@@ -138,6 +206,7 @@
   </div>
 
   <script src="/js/api.js"></script>
+  <script src="/js/icons.js"></script>
   <script src="/js/notifications.js"></script>
   <script src="/js/jobs.js"></script>
   <script src="/js/nav-inbox.js"></script>

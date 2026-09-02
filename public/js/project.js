@@ -139,9 +139,9 @@
         <button class="label-rename-btn" data-idx="${i}" title="Rename label">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
-        <button class="label-rename-confirm hidden" data-idx="${i}" title="Save rename">✓</button>
+        <button class="label-rename-confirm hidden" data-idx="${i}" title="Save rename" aria-label="Save rename">${LibreFlowIcons.icon('check')}</button>
         <button class="label-rename-cancel  hidden" data-idx="${i}" title="Cancel">×</button>
-        <button class="label-del" data-idx="${i}" title="Remove">✕</button>
+        <button class="label-del" data-idx="${i}" title="Remove" aria-label="Remove label">${LibreFlowIcons.icon('close')}</button>
       </span>
     `).join('');
 
@@ -287,15 +287,15 @@
       renderLabels();
 
       const msg = data.imported > 0
-        ? `✅ Added ${data.imported} class${data.imported !== 1 ? 'es' : ''}${data.skipped ? ` (${data.skipped} already existed)` : ''}.`
-        : `⚠️ All ${data.skipped} class${data.skipped !== 1 ? 'es' : ''} already exist in this project.`;
+        ? `Added ${data.imported} class${data.imported !== 1 ? 'es' : ''}${data.skipped ? ` (${data.skipped} already existed)` : ''}.`
+        : `All ${data.skipped} class${data.skipped !== 1 ? 'es' : ''} already exist in this project.`;
       importResult.textContent = msg;
       importResult.className = `yaml-import-result ${data.imported > 0 ? 'success' : 'error'}`;
 
       if (data.imported > 0) Notify.success('Labels imported', `${data.imported} class${data.imported !== 1 ? 'es' : ''} added from YAML.`);
       else Notify.warn('Nothing new', 'All classes in that file already exist.');
     } catch (e) {
-      importResult.textContent = `❌ ${e.message}`;
+      importResult.textContent = e.message;
       importResult.className = 'yaml-import-result error';
       Notify.error('Import failed', e.message);
     } finally {
@@ -349,7 +349,7 @@
     grid.innerHTML = allImages.map(img => `
       <div class="img-thumb">
         <img src="/uploads/${escHtml(img.filename)}" alt="${escHtml(img.originalName)}" loading="lazy" />
-        <button class="img-del" data-id="${escHtml(img.id)}" title="Delete">✕</button>
+        <button class="img-del" data-id="${escHtml(img.id)}" title="Delete" aria-label="Delete image">${LibreFlowIcons.icon('trash')}</button>
         <div class="img-name">${escHtml(img.originalName)}</div>
       </div>
     `).join('');
@@ -389,7 +389,7 @@
             <button class="img-tag-save" data-id="${escHtml(img.id)}">Save</button>
           </div>
           <img src="/uploads/${escHtml(img.filename)}" alt="${escHtml(img.originalName)}" loading="lazy" />
-          <button class="img-del" data-id="${escHtml(img.id)}" title="Delete">✕</button>
+          <button class="img-del" data-id="${escHtml(img.id)}" title="Delete" aria-label="Delete image">${LibreFlowIcons.icon('trash')}</button>
           <div class="img-tags">${(img.tags || []).map(t => `<span class="img-tag-chip">${escHtml(t)}</span>`).join('')}</div>
           <div class="img-meta">${new Date(img.uploadedAt).toLocaleDateString()} · ${formatBytes(img.size)}</div>
           <div class="img-name">${escHtml(img.originalName)}</div>
@@ -675,14 +675,14 @@
     empty.style.display = 'none';
     list.innerHTML = allModels.map(m => `
       <div class="model-card">
-        <div class="model-icon">🧠</div>
+        <div class="model-icon">${LibreFlowIcons.icon('brain', 'Model')}</div>
         <div class="model-info">
           <div class="model-name">${escHtml(m.name)}</div>
           <div class="model-meta">
             <span class="badge-type badge-${escHtml(m.type)}">${escHtml(m.type)}</span>
             <span>${escHtml(m.format?.toUpperCase() || '')}</span>
             <span>${formatBytes(m.size)}</span>
-            ${m.yamlOriginalName ? `<span title="Config: ${escHtml(m.yamlOriginalName)}">📄 ${escHtml(m.yamlOriginalName)}</span>` : ''}
+            ${m.yamlOriginalName ? `<span title="Config: ${escHtml(m.yamlOriginalName)}">${LibreFlowIcons.icon('file')} ${escHtml(m.yamlOriginalName)}</span>` : ''}
             ${m.description ? `<span>${escHtml(m.description)}</span>` : ''}
           </div>
         </div>
@@ -868,7 +868,7 @@
             <span class="batch-name">${escHtml(b.name)}</span>
             <span class="batch-meta">
               <span>${b.imageCount} images</span>
-              ${assigned ? `<span class="batch-assigned-chip">👤 ${escHtml(assigned)}</span>` : ''}
+              ${assigned ? `<span class="batch-assigned-chip">${LibreFlowIcons.icon('users')} ${escHtml(assigned)}</span>` : ''}
             </span>
             <div class="batch-assign-wrap" onclick="event.stopPropagation()">
               <label>Assign:</label>
@@ -890,12 +890,12 @@
               </div>
             </div>
             ${subs.length === 0
-              ? '<p style="font-size:13px;color:#8892a4;margin-top:12px">No sub-batches \u2014 click Split to divide this batch.</p>'
+              ? '<p class="subbatches-empty">No sub-batches \u2014 click Split to divide this batch.</p>'
               : `<div class="subbatches-list">${subs.map(sb => `
                   <div class="subbatch-row">
                     <span class="subbatch-name">${escHtml(sb.name)}</span>
                     <span class="subbatch-count">${sb.imageIds ? sb.imageIds.length : 0} images</span>
-                    <button class="btn-batch-action btn-export-subbatch" style="margin-left:auto;flex-shrink:0"
+                    <button class="btn-batch-action btn-export-subbatch btn-export-subbatch--push"
                       data-batch-id="${escHtml(b.id)}" data-sub-id="${escHtml(sb.id)}" data-sub-name="${escHtml(sb.name)}">Export</button>
                     <div class="subbatch-assign">
                       <label>Assign:</label>
@@ -972,7 +972,7 @@
           await API.patchBatch(btn.dataset.batchId, { note });
           const b = allBatches.find(x => x.id === btn.dataset.batchId);
           if (b) b.note = note;
-          btn.textContent = 'Saved ✓';
+          btn.textContent = 'Saved';
           setTimeout(() => { btn.textContent = 'Save'; }, 1500);
         } catch(err) { Notify.error('Failed to save note', err.message); }
       });
@@ -986,7 +986,7 @@
         const note = textarea.value.trim();
         try {
           await API.patchSubBatch(btn.dataset.batchId, btn.dataset.subId, { note });
-          btn.textContent = 'Saved ✓';
+          btn.textContent = 'Saved';
           setTimeout(() => { btn.textContent = 'Save'; }, 1500);
         } catch(err) { Notify.error('Failed to save note', err.message); }
       });

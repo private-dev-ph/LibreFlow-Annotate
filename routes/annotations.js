@@ -365,8 +365,14 @@ router.post('/', (req, res) => {
     defaultModelId: modelId,
   }).map(annotation => ({ ...annotation, imageId }));
 
-  annotations = annotations.filter(a => a.imageId !== imageId).concat(newAnnotations);
   const annotationsChanged = annotationSetFingerprint(existing) !== annotationSetFingerprint(newAnnotations);
+  if (!annotationsChanged) {
+    // Do not create a revision, audit event, webhook delivery, or JSON rewrite for
+    // a save request that is identical to the persisted annotation set.
+    return res.status(200).json(existing);
+  }
+
+  annotations = annotations.filter(a => a.imageId !== imageId).concat(newAnnotations);
   writeAnnotations(annotations);
   markImageAnnotated(imageId, newAnnotations.length);
   const revision = createRevision({
@@ -376,14 +382,12 @@ router.post('/', (req, res) => {
     ...actor(req),
     action: 'save',
   });
-  const reviewUpdate = annotationsChanged
-    ? touchAfterAnnotation(
-      context.image,
-      newAnnotations.length,
-      req.session.userId,
-      req.session.username || '',
-    )
-    : null;
+  const reviewUpdate = touchAfterAnnotation(
+    context.image,
+    newAnnotations.length,
+    req.session.userId,
+    req.session.username || '',
+  );
   appendAuditEvent({
     projectId: context.project.id,
     imageId,

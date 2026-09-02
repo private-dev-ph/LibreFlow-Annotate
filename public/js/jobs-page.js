@@ -23,6 +23,25 @@
     if (typeof Notify !== 'undefined' && typeof Notify[type] === 'function') Notify[type](title, message);
   }
 
+  async function copyText(value) {
+    if (!value) throw new Error('Nothing is available to copy.');
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return;
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = typeof document.execCommand === 'function' && document.execCommand('copy');
+    textarea.remove();
+    if (!copied) throw new Error('Could not copy to the clipboard. Copy the value manually.');
+  }
+
   async function request(url, options = {}) {
     const response = await fetch(url, {
       credentials: 'include', ...options,
@@ -49,7 +68,11 @@
       if ([...select.options].some(option => option.value === previous)) select.value = previous;
       else if (!includeAll && state.projects[0]) select.value = state.projects[0].id;
     });
-    document.getElementById('api-key-projects').innerHTML = state.projects.map(project => `<option value="${esc(project.id)}">${esc(project.name)}</option>`).join('');
+    document.getElementById('api-key-projects').innerHTML = state.projects.map(project => `
+      <label class="project-restriction">
+        <input class="project-restriction-toggle" type="checkbox" value="${esc(project.id)}" aria-label="Restrict key to ${esc(project.name)}" />
+        <span class="project-restriction-name">${esc(project.name)}</span>
+      </label>`).join('') || '<p class="muted">Create a project before restricting a key.</p>';
   }
 
   function statusPresentation(status) {
@@ -78,17 +101,17 @@
 
     list.innerHTML = jobs.map(job => {
       const status = statusPresentation(job.status);
-      const percent = ['completed', 'done'].includes(job.status) ? 100 : Number(job.progress?.percent ?? job.progress ?? 0);
+      const percent = jobProgress(job);
       const count = job.progress?.total !== undefined ? `${job.progress.processed}/${job.progress.total} items` : (job.fileCount ? `${job.fileCount} files` : job.type || 'Job');
       const failures = job.progress?.failed ? ` · ${job.progress.failed} failed` : '';
       const timestamp = new Date(job.updatedAt || job.createdAt).toLocaleString();
       const canCancel = job.source === 'server' && ['queued', 'running'].includes(job.status);
       const canRetry = job.source === 'server' && ['completed_with_errors', 'failed', 'canceled'].includes(job.status);
-      const icon = job.type === 'batch_inference' ? '&#129504;' : (job.type?.includes('ingestion') ? '&#128444;' : (job.type === 'model_upload' ? '&#129504;' : '&#128230;'));
+      const icon = job.type === 'batch_inference' ? LibreFlowIcons.icon('brain', 'Inference job') : (job.type?.includes('ingestion') ? LibreFlowIcons.icon('image', 'Image ingestion') : (job.type === 'model_upload' ? LibreFlowIcons.icon('brain', 'Model upload') : LibreFlowIcons.icon('package', 'Job')));
       return `<article class="job-card status-${status.css}">
         <div class="job-top"><div class="job-icon">${icon}</div><div class="job-info"><div class="job-name">${esc(job.name)}</div><div class="job-meta">${esc(count)}${esc(failures)} · ${esc(timestamp)} · ${job.source === 'server' ? 'server' : 'this browser'}</div></div><span class="job-badge badge-${status.css}">${esc(status.label)}</span></div>
         <div class="job-progress-wrap"><div class="job-progress-bar" style="width:${Math.max(0, Math.min(100, percent))}%"></div></div>
-        ${job.error ? `<div class="job-error-msg">&#9888; ${esc(job.error)}</div>` : ''}
+        ${job.error ? `<div class="job-error-msg">${LibreFlowIcons.icon('warning')} ${esc(job.error)}</div>` : ''}
         ${canCancel || canRetry || job.source === 'server' ? `<div class="job-actions">${job.source === 'server' ? `<button class="mini-action secondary" data-job-details="${esc(job.id)}" type="button">Details</button>` : ''}${canCancel ? `<button class="mini-action danger" data-job-cancel="${esc(job.id)}" type="button">Cancel</button>` : ''}${canRetry ? `<button class="mini-action" data-job-retry="${esc(job.id)}" type="button">Retry failed</button>` : ''}</div>` : ''}
       </article>`;
     }).join('');
@@ -105,6 +128,52 @@
     const models = await API.getModels(projectId);
     if (!Array.isArray(models)) throw new Error(models?.error || 'Models response was invalid.');
     select.innerHTML = `<option value="">Select model</option>${models.map(model => `<option value="${esc(model.id)}">${esc(model.name)} (${esc(model.format)})</option>`).join('')}`;
+  }
+
+  function jobProgress(job) {
+    const percent = ['completed', 'done'].includes(job.status) ? 100 : Number(job.progress?.percent ?? job.progress ?? 0);
+    return Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : 0));
+  }
+
+  let jobDetailsReturnFocus = null;
+  function closeJobDetails() {
+    const modal = document.getElementById('job-details-modal');
+    modal.hidden = true;
+    modal.removeEventListener('keydown', trapJobDetailsFocus);
+    jobDetailsReturnFocus?.focus();
+    jobDetailsReturnFocus = null;
+  }
+
+  function trapJobDetailsFocus(event) {
+    if (event.key === 'Escape') { closeJobDetails(); return; }
+    if (event.key !== 'Tab') return;
+    const dialog = document.querySelector('#job-details-modal .job-details-dialog');
+    const focusable = [...dialog.querySelectorAll('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')];
+    if (!focusable.length) return;
+    const first = focusable[0]; const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+
+  function showJobDetails(job, trigger) {
+    const modal = document.getElementById('job-details-modal');
+    const details = job.items?.slice(0, 25) || [];
+    const progress = job.progress || {};
+    const percent = jobProgress(job);
+    document.getElementById('job-details-title').textContent = job.name || 'Job details';
+    document.getElementById('job-details-summary').textContent = `${statusPresentation(job.status).label} · ${projectName(job.projectId)} · ${new Date(job.updatedAt || job.createdAt).toLocaleString()}`;
+    document.getElementById('job-details-content').innerHTML = `
+      <div class="job-details-progress">
+        <div class="job-details-progress-label"><span>${esc(progress.processed ?? 0)} of ${esc(progress.total ?? 0)} processed</span><span>${percent}%</span></div>
+        <div class="job-progress-wrap"><div class="job-progress-bar" style="width:${percent}%"></div></div>
+      </div>
+      ${job.error ? `<p class="job-error-msg">${LibreFlowIcons.icon('warning')} ${esc(job.error)}</p>` : ''}
+      <h3 class="subheading">Items${job.items?.length > details.length ? ` (showing first ${details.length})` : ''}</h3>
+      ${details.length ? `<ul class="job-details-list">${details.map(item => `<li class="job-details-item"><span class="job-details-item-status">${esc(item.status || 'pending')}</span>${esc(item.originalName || item.imageId || item.id || 'Untitled item')}${item.error ? `<span class="job-details-item-error">${esc(item.error)}</span>` : ''}</li>`).join('')}</ul>` : '<p class="job-details-empty">No item details are available for this job.</p>'}`;
+    jobDetailsReturnFocus = trigger;
+    modal.hidden = false;
+    modal.addEventListener('keydown', trapJobDetailsFocus);
+    document.getElementById('job-details-close').focus();
   }
 
   function renderIngestionStatus(status) {
@@ -217,7 +286,7 @@
     event.preventDefault();
     try {
       const scopes = [...document.querySelectorAll('input[name="api-scope"]:checked')].map(input => input.value);
-      const projectIds = [...document.getElementById('api-key-projects').selectedOptions].map(option => option.value);
+      const projectIds = [...document.querySelectorAll('#api-key-projects .project-restriction-toggle:checked')].map(input => input.value);
       const created = await request('/api/automation/api-keys', { method: 'POST', body: JSON.stringify({ name: document.getElementById('api-key-name').value, scopes, projectIds }) });
       state.lastApiToken = created.token;
       const tokenBox = document.getElementById('api-key-token'); tokenBox.classList.remove('hidden'); tokenBox.innerHTML = `Copy once: ${esc(created.token)} <button type="button" class="mini-action" data-copy="api-key">Copy</button>`;
@@ -233,8 +302,7 @@
       else if (button.dataset.jobRetry) await request(`/api/automation/jobs/${button.dataset.jobRetry}/retry`, { method: 'POST' });
       else if (button.dataset.jobDetails) {
         const job = await request(`/api/automation/jobs/${button.dataset.jobDetails}`);
-        const details = job.items?.slice(0, 25).map(item => `${item.status}: ${item.originalName || item.imageId || item.id}${item.error ? ` — ${item.error}` : ''}`).join('\n') || 'No item details.';
-        window.alert(`${job.name}\n${job.status}\n${job.progress.processed}/${job.progress.total} processed\n\n${details}`);
+        showJobDetails(job, button);
       } else if (button.dataset.connectorScan) { await request(`/api/automation/connectors/${button.dataset.connectorScan}/scan`, { method: 'POST' }); toast('success', 'Folder scan queued'); }
       else if (button.dataset.connectorStatus) window.alert(JSON.stringify(await request(`/api/automation/connectors/${button.dataset.connectorStatus}/status`), null, 2));
       else if (button.dataset.connectorDelete) { if (window.confirm('Delete this connector?')) await request(`/api/automation/connectors/${button.dataset.connectorDelete}`, { method: 'DELETE' }); else return; }
@@ -248,7 +316,7 @@
         await request(`/api/automation/review-queue/${button.dataset.imageId}`, { method: 'PATCH', body: JSON.stringify({ status: button.dataset.review, comment }) });
         await loadReviewQueue(); toast('success', `Annotation ${button.dataset.review}`);
       }
-      else if (button.dataset.copy) { await navigator.clipboard.writeText(button.dataset.copy === 'webhook' ? state.lastWebhookSecret : state.lastApiToken); toast('success', 'Copied to clipboard'); }
+      else if (button.dataset.copy) { await copyText(button.dataset.copy === 'webhook' ? state.lastWebhookSecret : state.lastApiToken); toast('success', 'Copied to clipboard'); }
       else return;
       if (button.dataset.jobCancel || button.dataset.jobRetry || button.dataset.connectorScan) await loadJobs();
       if (button.dataset.connectorDelete || button.dataset.webhookToggle || button.dataset.webhookDelete || button.dataset.deliveryRetry || button.dataset.keyRevoke) await loadIntegrations();
@@ -256,6 +324,10 @@
   });
 
   document.getElementById('btn-refresh').addEventListener('click', () => fullRefresh().catch(error => toast('error', 'Refresh failed', error.message)));
+  document.getElementById('job-details-close').addEventListener('click', closeJobDetails);
+  document.getElementById('job-details-modal').addEventListener('click', event => {
+    if (event.target === event.currentTarget) closeJobDetails();
+  });
   document.getElementById('btn-clear').addEventListener('click', async () => {
     try { Jobs.clearCompleted(); await request('/api/automation/jobs', { method: 'DELETE' }); await loadJobs(); }
     catch (error) { toast('error', 'Could not clear jobs', error.message); }

@@ -192,3 +192,8 @@ versions/
 
 # Local linked worktrees used for parallel feature development
 .worktrees/
+
+# Agents
+.agents/
+.codex/
+AGENTS.md
