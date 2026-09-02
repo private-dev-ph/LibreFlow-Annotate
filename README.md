@@ -12,7 +12,9 @@
 
 Computer-vision data work commonly fragments across file shares, point annotation tools, model scripts, review spreadsheets, and export utilities. LibreFlow Annotate brings that loop together in a self-hosted application: get images in, label them with rich geometry, review the work, create an immutable dataset snapshot, and hand a verified export to training or downstream automation.
 
-The project is deliberately local-first. The supported runtime stores application records and uploaded assets on the operator's machine, while model inference runs in a companion local Python service. That makes it a practical prototype for sensitive inspection imagery, laboratory work, and small teams that want control of their data.
+Online sources are also too expensive and restrictive especially those with token-based systems just to run a simple inference as well as limited or metered API integration with automation workflows.
+
+The project is deliberately local-first. The supported runtime stores application records and uploaded assets on the operator's machine, while model inference runs in a companion local Python service. That makes it a practical prototype for sensitive inspection imagery, laboratory work, and small teams that want control of their data. With this, the user has the power to run all of the inferences that they want with no token limitations as well as integrate their own automation workflows to use LibreFlow to automate the inference of datasets for model improvement.
 
 ## Showcase
 
