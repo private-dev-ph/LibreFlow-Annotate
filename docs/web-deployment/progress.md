@@ -3,7 +3,7 @@
 | Milestone | Feature branch | Status | Files / verification / unresolved issues |
 | --- | --- | --- | --- |
 | Architecture and baseline | web-deployment | complete | architecture.md; fetched remote, main already at newest SHA; baseline 52 tests passed during onboarding |
-| Storage, encryption, sync | storage-foundation | active | Implementation pending |
+| Storage, encryption, sync | storage-foundation | complete | crypto.mjs, workspace.mjs, recovery.mjs; 4 negative/functional tests pass; large metadata/export scaling remains limited |
 | Cloud provider adapters | cloud-storage-support | active | Implementation pending; live credentials unavailable |
 | Secured inference companion | local-inference | active | Implementation pending |
 | Stateless build and UI | stateless-web | not started | Host privacy is release-blocking |
