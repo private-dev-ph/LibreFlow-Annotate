@@ -51,3 +51,20 @@ test('chunked encrypted assets verify integrity, survive portable migration and 
  const corrupt=structuredClone(asset);corrupt.chunks[0].hash='a'.repeat(64);await assert.rejects(async()=>{for await(const c of w.readAsset(corrupt))void c;},/Invalid asset/);
  const bad=structuredClone(backup);bad.schemaVersion=2;await assert.rejects(importPortable(new MemoryProvider(),'root',bad,password),/Unsupported/);
 });
+test('unsaved canvas drafts are encrypted, recoverable independently from committed cloud events', async()=> {
+ const [{Workspace}]=await setup();const p=new MemoryProvider();const w=await Workspace.create(p,'root',password);const id=crypto.randomUUID();
+ await w.stageDraft(id,[{label:'private unsaved edit'}]);assert.deepEqual(await w.readDraft(id),[{label:'private unsaved edit'}]);
+ assert.ok(!(await w.drafts.entries()).some(r=>JSON.stringify(r).includes('private unsaved edit')));
+ await w.sync();assert.equal(w.nodes.size,0);await w.clearDraft(id);assert.equal(await w.readDraft(id),null);
+});
+test('remote revision deletion and duplicate immutable identities stop sync without discarding local state',async()=>{
+ const [{Workspace}]=await setup();const p=new MemoryProvider();const w=await Workspace.create(p,'root',password);const id=crypto.randomUUID();await w.put('project',id,{name:'preserved'});
+ const record=[...p.files.values()].find(f=>f.name.startsWith('record-'));p.files.delete(record.id);await assert.rejects(w.sync(),/deleted remotely/);assert.equal(w.get('project',id).name,'preserved');assert.equal(w.status.state,'conflict');
+ p.files.set(record.id,record);await p.write({name:record.name,bytes:record.data});await assert.rejects(w.sync(),/Duplicate immutable/);
+});
+test('interrupted encrypted transfers expose a recovery queue and reuse verified chunks on retry',async()=>{
+ const [{Workspace}]=await setup();const p=new MemoryProvider();const w=await Workspace.create(p,'root',password);const file=new Blob([new Uint8Array(4*1024*1024+1)]);file.name='large.png';
+ const controller=new AbortController();await assert.rejects(w.manageAsset(file,{signal:controller.signal,onProgress:()=>controller.abort()}),/abort/i);
+ assert.equal((await w.pendingTransfers()).length,1);assert.equal((await w.pendingTransfers())[0].processed,4*1024*1024);const before=[...p.files.values()].filter(f=>f.name.startsWith('asset-')).length;
+ const asset=await w.manageAsset(file);assert.equal((await w.pendingTransfers()).length,0);assert.equal([...p.files.values()].filter(f=>f.name.startsWith('asset-')).length,before+1);assert.equal(asset.chunks.length,2);
+});
