@@ -11,7 +11,7 @@ export function createGraphOneDriveProvider({ fetch: fetchImpl = globalThis.fetc
   let workspaceId = 'root';
   const headers = () => bearer(token);
   const request = (url, options = {}) => providerFetch(fetchImpl, 'OneDrive', url, options, graphHosts);
-  const meta = (item, etag = item.eTag) => record({ id: item.id, name: item.name, revision: etag || item.cTag || null, size: item.size, mimeType: item.file?.mimeType || 'application/octet-stream', providerName: 'onedrive' });
+  const meta = (item, etag = item.eTag) => record({ id: item.id, name: item.name, revision: etag || item.cTag || null, size: item.size, mimeType: item.folder?'inode/directory':item.file?.mimeType || 'application/octet-stream', providerName: 'onedrive' });
   return {
     provider: { name: 'onedrive' },
     async connect({ token: accessToken } = {}) { if (!accessToken) throw new ProviderError('auth_expired', 'A Microsoft Graph access token is required.'); token = accessToken; return this.capabilities(); },

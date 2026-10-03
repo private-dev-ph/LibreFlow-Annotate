@@ -18,7 +18,7 @@ export function mapHttpError(provider, status, body = '') {
   if (status === 401 || status === 403) code = 'auth_expired';
   else if (status === 404 || status === 410) code = 'not_found';
   else if (status === 409 || status === 412) code = 'conflict';
-  else if (status === 413 || status === 507 || /quota|storage.?full|insufficient.?space/i.test(detail)) code = 'quota';
+  else if (status === 429 || status === 413 || status === 507 || /quota|storage.?full|insufficient.?space/i.test(detail)) code = 'quota';
   if (/path\/not_found|itemNotFound|resourceNotFound|fileNotFound/i.test(detail)) code = 'not_found';
   if (/quota|insufficient.?space|insufficientStorage|storage.?full/i.test(detail)) code = 'quota';
   return new ProviderError(code, detail || `${provider} request failed (${status}).`, { status, provider });
@@ -74,6 +74,13 @@ export function contentRange(range) {
   return `bytes=${start}-${end}`;
 }
 
-export async function readBytes(response) { return new Uint8Array(await response.arrayBuffer()); }
+export async function readBytes(response, maximum = 32 * 1024 * 1024) {
+  const declared=Number(response.headers?.get('content-length'));if(declared>maximum){await response.body?.cancel();throw new ProviderError('quota','Provider object exceeds the bounded read limit; use ranged reads');}
+  if(!response.body?.getReader){const data=new Uint8Array(await response.arrayBuffer());if(data.length>maximum)throw new ProviderError('quota','Provider object exceeds the bounded read limit');return data;}
+  const reader=response.body.getReader();const chunks=[];let size=0;
+  try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>maximum){await reader.cancel();throw new ProviderError('quota','Provider object exceeds the bounded read limit; use ranged reads');}chunks.push(value);}}
+  finally{reader.releaseLock();}
+  const result=new Uint8Array(size);let offset=0;for(const chunk of chunks){result.set(chunk,offset);offset+=chunk.byteLength;}return result;
+}
 export const API_HOST = host => name => name === host;
 export const suffixHost = suffix => name => name.endsWith(`.${suffix}`);

@@ -13,11 +13,11 @@ export function createDropboxProvider({ fetch: fetchImpl = globalThis.fetch, chu
   const request = (url, options = {}) => providerFetch(fetchImpl, 'Dropbox', url, options, hosts);
   const metadata = item => {
     if (item.id && item.path_lower) paths.set(item.id, item.path_lower);
-    return record({ id: item.id, name: item.name, revision: item.rev || null, size: item.size, mimeType: item.mime_type || 'application/octet-stream', providerName: 'dropbox' });
+    return record({ id: item.id, name: item.name, revision: item.rev || null, size: item.size, mimeType: item['.tag']==='folder'?'inode/directory':item.mime_type||({'png':'image/png','jpg':'image/jpeg','jpeg':'image/jpeg','webp':'image/webp','gif':'image/gif','bmp':'image/bmp'}[String(item.name).split('.').at(-1).toLowerCase()]||'application/octet-stream'), providerName: 'dropbox' });
   };
   const pathFor = async id => {
     if (!id) return '';
-    if (paths.has(id)) return paths.get(id);
+    // Resolve opaque IDs afresh so moved/renamed folders keep working.
     const res = await request(`${API}/files/get_metadata`, { method: 'POST', headers: { ...auth(), 'Content-Type': 'application/json' }, body: JSON.stringify({ path: id, include_media_info: false, include_deleted: false }) });
     const item = await res.json(); metadata(item);
     if (!item.path_lower) throw new ProviderError('not_found', 'Dropbox item has no current path.', { provider: 'Dropbox' });

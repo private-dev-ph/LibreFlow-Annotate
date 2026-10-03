@@ -190,3 +190,15 @@ test('PKCE rejects a mismatched state and Google GIS returns only an in-memory a
   assert.deepEqual(requested, { prompt: '' }); callback({ access_token: 'gis-token', expires_in: 1000 });
   assert.equal((await pending).accessToken, 'gis-token');
 });
+test('provider streams enforce a bounded read even without Content-Length',async()=>{
+ const {readBytes,mapHttpError}=await import('../public/web/providers/shared.mjs');
+ const data=new Response(new ReadableStream({start(controller){controller.enqueue(new Uint8Array([1,2]));controller.enqueue(new Uint8Array([3,4]));controller.close();}}));
+ await assertCode(readBytes(data,3),'quota');assert.equal(mapHttpError('test',429).code,'quota');
+ const declared=new Response(new Uint8Array([1]),{headers:{'Content-Length':'100'}});await assertCode(readBytes(declared,5),'quota');
+});
+test('Dropbox follows stable folder IDs after remote renames and reports folder capabilities',async()=>{
+ let moved=false;const seen=[];const provider=createDropboxProvider({fetch:async(url,options)=>{
+ if(url.endsWith('get_metadata'))return json({id:'id:folder',name:moved?'renamed':'original',path_lower:moved?'/renamed':'/original','.tag':'folder'});
+ if(url.endsWith('list_folder')){seen.push(JSON.parse(options.body).path);return json({entries:[],has_more:false});}throw new Error('Unexpected request');
+ }});await provider.connect({token:'transient'});assert.equal((await provider.stat('id:folder')).mimeType,'inode/directory');await provider.list('id:folder');moved=true;await provider.list('id:folder');assert.deepEqual(seen,['/original','/renamed']);
+});
