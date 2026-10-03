@@ -3,6 +3,10 @@ const cors = require('cors');
 const session = require('express-session');
 const path = require('path');
 const fs = require('fs');
+const { loadSecurityConfig } = require('./lib/security-config');
+
+// Reject unsafe production configuration before loading routes or starting services.
+const securityConfig = loadSecurityConfig();
 
 const authRouter        = require('./routes/auth');
 const imagesRouter      = require('./routes/images');
@@ -28,10 +32,13 @@ const {
 const automationRouter  = require('./routes/automation');
 const { startJobRuntime } = require('./lib/job-runner');
 const { resumeWebhookDeliveries } = require('./lib/webhooks');
+const { DurableFileSessionStore } = require('./lib/security-session-store');
+const { createOriginPolicy, securityHeaders } = require('./lib/security-middleware');
 
 const app = express();
 const PORT = process.env.PORT || 6767;
 const HOST = '0.0.0.0'; // accessible on local network
+if (securityConfig.trustProxy) app.set('trust proxy', securityConfig.trustProxy);
 
 // Ensure required directories exist
 ['uploads', 'data', 'models', 'datasets', 'versions'].forEach(dir => {
@@ -39,15 +46,31 @@ const HOST = '0.0.0.0'; // accessible on local network
 });
 
 // Middleware
-app.use(cors({ origin: true, credentials: true }));
+const originPolicy = createOriginPolicy(securityConfig);
+app.use(securityHeaders);
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || securityConfig.allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(null, false);
+  },
+  credentials: true,
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'libreflow-dev-secret-change-in-production',
+  name: 'libreflow.sid',
+  secret: securityConfig.sessionSecret,
+  store: new DurableFileSessionStore(securityConfig.sessionStoreDir),
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000 },
+  cookie: {
+    httpOnly: true,
+    secure: securityConfig.production,
+    sameSite: securityConfig.sameSite,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  },
 }));
+app.use(originPolicy.csrf);
 
 // Static files
 app.use('/uploads', requireAuth, requireUploadedImageAccess, express.static(path.join(__dirname, 'uploads')));
