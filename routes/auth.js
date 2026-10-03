@@ -3,9 +3,22 @@ const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const { createAuthRateLimiter } = require('../lib/security-rate-limit');
 
 const router = express.Router();
 const USERS_FILE = path.join(__dirname, '..', 'data', 'users.json');
+const registerLimit = createAuthRateLimiter({ maxAttempts: 5 });
+const loginLimit = createAuthRateLimiter({ maxAttempts: 10 });
+
+function regenerateSession(req) {
+  return new Promise((resolve, reject) => req.session.regenerate(error => error ? reject(error) : resolve()));
+}
+
+function establishSession(req, user) {
+  req.session.userId = user.id;
+  req.session.username = user.username;
+  req.session.email = user.email;
+}
 
 function readUsers() {
   if (!fs.existsSync(USERS_FILE)) return [];
@@ -17,17 +30,25 @@ function writeUsers(users) {
 }
 
 // POST /api/auth/register
-router.post('/register', async (req, res) => {
-  const { username, email, password } = req.body;
+router.post('/register', (req, _res, next) => {
+  req.rateLimitIdentity = String(req.body?.email || req.body?.username || '').trim().toLowerCase();
+  next();
+}, registerLimit, async (req, res) => {
+  const username = String(req.body?.username || '').trim();
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = req.body?.password;
   if (!username || !email || !password)
     return res.status(400).json({ error: 'All fields are required.' });
-  if (password.length < 6)
-    return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  if (username.length > 64 || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    return res.status(400).json({ error: 'Enter a valid username and email.' });
+  if (typeof password !== 'string' || password.length < 12 || password.length > 128 ||
+      [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(pattern => pattern.test(password)).length < 3)
+    return res.status(400).json({ error: 'Password must be 12–128 characters and use at least three character types.' });
 
   const users = readUsers();
-  if (users.find(u => u.email === email))
+  if (users.find(u => String(u.email).trim().toLowerCase() === email))
     return res.status(409).json({ error: 'Email already registered.' });
-  if (users.find(u => u.username === username))
+  if (users.find(u => String(u.username).trim().toLowerCase() === username.toLowerCase()))
     return res.status(409).json({ error: 'Username already taken.' });
 
   const hash = await bcrypt.hash(password, 10);
@@ -35,29 +56,35 @@ router.post('/register', async (req, res) => {
   users.push(user);
   writeUsers(users);
 
-  req.session.userId = user.id;
-  req.session.username = user.username;
-  req.session.email = user.email;
+  try {
+    await regenerateSession(req);
+    establishSession(req, user);
+  } catch { return res.status(500).json({ error: 'Unable to create a secure session.' }); }
 
   res.status(201).json({ id: user.id, username: user.username, email: user.email });
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password)
+router.post('/login', (req, _res, next) => {
+  req.rateLimitIdentity = String(req.body?.email || '').trim().toLowerCase();
+  next();
+}, loginLimit, async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = req.body?.password;
+  if (!email || typeof password !== 'string' || !password || password.length > 128)
     return res.status(400).json({ error: 'Email and password are required.' });
 
   const users = readUsers();
-  const user = users.find(u => u.email === email);
+  const user = users.find(u => String(u.email).trim().toLowerCase() === email);
   if (!user) return res.status(401).json({ error: 'Invalid email or password.' });
 
   const match = await bcrypt.compare(password, user.passwordHash);
   if (!match) return res.status(401).json({ error: 'Invalid email or password.' });
 
-  req.session.userId = user.id;
-  req.session.username = user.username;
-  req.session.email = user.email;
+  try {
+    await regenerateSession(req);
+    establishSession(req, user);
+  } catch { return res.status(500).json({ error: 'Unable to create a secure session.' }); }
 
   res.json({ id: user.id, username: user.username, email: user.email });
 });

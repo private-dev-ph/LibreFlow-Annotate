@@ -8,6 +8,7 @@ const sharp   = require('sharp');
 const { touchAfterAnnotation } = require('../lib/review-state');
 const { appendAuditEvent } = require('../lib/audit-log');
 const { dataPath, uploadsDir, readJson: readDataJson } = require('../lib/data-store');
+const { validateArchiveEntries } = require('../lib/archive-safety');
 
 const router = express.Router();
 const DATA_FILE    = dataPath('images.json');
@@ -28,20 +29,22 @@ const storage = multer.diskStorage({
 
 const ALLOWED_IMAGE_MIME = new Set([
   'image/jpeg','image/jpg','image/png','image/bmp','image/webp',
-  'image/tiff','image/gif','image/svg+xml','image/x-png',
+  'image/tiff','image/gif','image/x-png',
 ]);
-const ALLOWED_IMAGE_EXT = /\.(jpe?g|jpg|png|bmp|webp|tiff?|gif|svg)$/i;
+const ALLOWED_IMAGE_EXT = /\.(jpe?g|jpg|png|bmp|webp|tiff?|gif)$/i;
 const ALLOWED_ZIP_EXT   = /\.zip$/i;
 const ALLOWED_ZIP_MIME  = new Set(['application/zip','application/x-zip-compressed','multipart/x-zip','application/octet-stream']);
+const MAX_IMAGE_PIXELS = 268_402_689;
 
 const upload = multer({
   storage,
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB (covers large ZIPs)
+  limits: { fileSize: 100 * 1024 * 1024, files: 200 },
   fileFilter(req, file, cb) {
     const ext   = path.extname(file.originalname);
     const isImg = ALLOWED_IMAGE_EXT.test(ext) || ALLOWED_IMAGE_MIME.has(file.mimetype);
     const isZip = ALLOWED_ZIP_EXT.test(ext)   || ALLOWED_ZIP_MIME.has(file.mimetype);
-    cb(null, isImg || isZip); // silently drop anything else
+    if (!isImg && !isZip) return cb(new Error('Only supported raster images and ZIP archives are accepted.'));
+    cb(null, true);
   },
 });
 
@@ -69,11 +72,11 @@ function clampCompressionQuality(raw) {
 
 async function compressImageInPlace(filePath, quality) {
   const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.svg' || ext === '.gif') return;
-  if (!['.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff'].includes(ext)) return;
+  if (ext === '.gif') return;
+  if (!['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tif', '.tiff'].includes(ext)) return;
 
   const original = fs.readFileSync(filePath);
-  let pipeline = sharp(original, { failOnError: false, limitInputPixels: false }).rotate();
+  let pipeline = sharp(original, { failOnError: true, limitInputPixels: MAX_IMAGE_PIXELS }).rotate();
 
   if (ext === '.jpg' || ext === '.jpeg') {
     pipeline = pipeline.jpeg({ quality, mozjpeg: true });
@@ -91,19 +94,46 @@ async function compressImageInPlace(filePath, quality) {
   }
 }
 
+async function validateRasterImage(buffer) {
+  let metadata;
+  try { metadata = await sharp(buffer, { failOnError: true, limitInputPixels: MAX_IMAGE_PIXELS }).metadata(); }
+  catch { throw new Error('File is not a supported decodable raster image.'); }
+  if (!['jpeg', 'png', 'bmp', 'webp', 'tiff', 'gif'].includes(metadata.format)) {
+    throw new Error('Only decoded raster image formats are accepted; SVG is disabled.');
+  }
+  try {
+    await sharp(buffer, { failOnError: true, limitInputPixels: MAX_IMAGE_PIXELS })
+      .resize({ width: 1, height: 1, fit: 'inside' }).toBuffer();
+  } catch { throw new Error('Image data is corrupt or cannot be decoded.'); }
+  return metadata.format;
+}
+
+function extensionMatchesFormat(filename, format) {
+  const supported = {
+    '.jpg': 'jpeg', '.jpeg': 'jpeg', '.png': 'png', '.bmp': 'bmp',
+    '.webp': 'webp', '.tif': 'tiff', '.tiff': 'tiff', '.gif': 'gif',
+  };
+  return supported[path.extname(filename).toLowerCase()] === format;
+}
+
 // Extract images from a ZIP, save to UPLOADS_DIR, return [{filename, originalName, size}]
 async function extractZip(zipFilePath, quality) {
   const zip     = new AdmZip(zipFilePath);
   const entries = zip.getEntries();
+  validateArchiveEntries(entries);
   const results = [];
   for (const entry of entries) {
     if (entry.isDirectory) continue;
     const name = path.basename(entry.entryName);
     if (!ALLOWED_IMAGE_EXT.test(name)) continue;
+    const data = entry.getData();
+    if (data.length > 100 * 1024 * 1024) throw new Error('Archive entry exceeded its expanded size limit.');
+    const format = await validateRasterImage(data);
+    if (!extensionMatchesFormat(name, format)) throw new Error('Archive image content does not match its file extension.');
     const ext     = path.extname(name).toLowerCase() || '.jpg';
     const newName = uuidv4() + ext;
     const dest    = path.join(UPLOADS_DIR, newName);
-    fs.writeFileSync(dest, entry.getData());
+    fs.writeFileSync(dest, data, { flag: 'wx', mode: 0o600 });
     try { await compressImageInPlace(dest, quality); } catch {}
     results.push({ filename: newName, originalName: name, size: fs.statSync(dest).size });
   }
@@ -138,7 +168,8 @@ router.post('/upload', (req, res) => {
   upload.array('images', 2000)(req, res, (err) => {
     (async () => {
     if (err) {
-      if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 500 MB per file).' });
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 100 MB per file).' });
+      if (err.code === 'LIMIT_FILE_COUNT') return res.status(413).json({ error: 'Too many files (max 200 per request).' });
       return res.status(400).json({ error: err.message || 'Upload failed.' });
     }
 
@@ -160,6 +191,16 @@ router.post('/upload', (req, res) => {
     const toSave = [];
     for (const f of regularFiles) {
       const fp = path.join(UPLOADS_DIR, f.filename);
+      let actualFormat;
+      try { actualFormat = await validateRasterImage(fs.readFileSync(fp)); }
+      catch (error) {
+        try { fs.unlinkSync(fp); } catch {}
+        return res.status(400).json({ error: error.message });
+      }
+      if (!extensionMatchesFormat(fp, actualFormat)) {
+        try { fs.unlinkSync(fp); } catch {}
+        return res.status(400).json({ error: 'Image content does not match its file extension.' });
+      }
       try { await compressImageInPlace(fp, compressionQuality); } catch {}
       toSave.push({
         filename: f.filename,
@@ -330,4 +371,4 @@ router.patch('/:id', (req, res) => {
 });
 
 module.exports = router;
-
+module.exports.validateRasterImage = validateRasterImage;
