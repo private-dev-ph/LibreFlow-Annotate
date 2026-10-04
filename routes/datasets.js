@@ -5,6 +5,7 @@ const fs = require('fs');
 const AdmZip = require('adm-zip');
 const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
+const { validateArchiveEntries } = require('../lib/archive-safety');
 
 const router = express.Router();
 
@@ -31,12 +32,14 @@ function readBatches() { return readJson(BATCHES_FILE, []); }
 function writeBatches(d) { writeJson(BATCHES_FILE, d); }
 function readProjects() { return readJson(PROJECTS_FILE, []); }
 
-const ALLOWED_IMAGE_EXT = /\.(jpe?g|jpg|png|bmp|webp|tiff?|gif|svg)$/i;
+const ALLOWED_IMAGE_EXT = /\.(jpe?g|jpg|png|bmp|webp|tiff?|gif)$/i;
 const ALLOWED_IMAGE_MIME = new Set([
   'image/jpeg', 'image/jpg', 'image/png', 'image/bmp', 'image/webp',
-  'image/tiff', 'image/gif', 'image/svg+xml', 'image/x-png',
+  'image/tiff', 'image/gif', 'image/x-png',
 ]);
 const ALLOWED_ZIP_EXT = /\.zip$/i;
+const MAX_IMAGE_PIXELS = 268_402_689;
+const ARCHIVE_LIMITS = { entries: 2000, entryBytes: 100 * 1024 * 1024, totalBytes: 1024 * 1024 * 1024, compressionRatio: 200 };
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, DATASETS_DIR),
@@ -48,11 +51,12 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 500 * 1024 * 1024 },
+  limits: { fileSize: 100 * 1024 * 1024, files: 200 },
   fileFilter(req, file, cb) {
     const ext = path.extname(file.originalname).toLowerCase();
     const ok = ALLOWED_IMAGE_EXT.test(ext) || ALLOWED_IMAGE_MIME.has(file.mimetype) || ALLOWED_ZIP_EXT.test(ext);
-    cb(null, ok);
+    if (!ok) return cb(new Error('Only supported raster images and ZIP archives are accepted.'));
+    cb(null, true);
   },
 });
 
@@ -64,10 +68,10 @@ function clampQuality(raw) {
 
 async function compressDatasetImageInPlace(filePath, quality) {
   const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.svg' || ext === '.gif') return;
+  if (ext === '.gif') return;
   if (!['.jpg', '.jpeg', '.png', '.webp', '.tif', '.tiff'].includes(ext)) return;
   const original = fs.readFileSync(filePath);
-  let pipeline = sharp(original, { failOnError: false, limitInputPixels: false }).rotate();
+  let pipeline = sharp(original, { failOnError: true, limitInputPixels: MAX_IMAGE_PIXELS }).rotate();
   if (ext === '.jpg' || ext === '.jpeg') pipeline = pipeline.jpeg({ quality, mozjpeg: true });
   else if (ext === '.png') pipeline = pipeline.png({ quality, compressionLevel: 9, effort: 10, palette: true });
   else if (ext === '.webp') pipeline = pipeline.webp({ quality, effort: 6 });
@@ -76,29 +80,82 @@ async function compressDatasetImageInPlace(filePath, quality) {
   if (out.length > 0 && out.length < original.length) fs.writeFileSync(filePath, out);
 }
 
-async function extractZipToDatasetImages(zipPath, quality) {
+async function validateDatasetRaster(buffer, filename) {
+  let metadata;
+  try { metadata = await sharp(buffer, { failOnError: true, limitInputPixels: MAX_IMAGE_PIXELS }).metadata(); }
+  catch { throw new Error('File is not a supported decodable raster image.'); }
+  const formats = {
+    '.jpg': 'jpeg', '.jpeg': 'jpeg', '.png': 'png', '.bmp': 'bmp',
+    '.webp': 'webp', '.tif': 'tiff', '.tiff': 'tiff', '.gif': 'gif',
+  };
+  if (formats[path.extname(filename).toLowerCase()] !== metadata.format) {
+    throw new Error('Image content does not match a supported raster file extension.');
+  }
+  try {
+    await sharp(buffer, { failOnError: true, limitInputPixels: MAX_IMAGE_PIXELS })
+      .resize({ width: 1, height: 1, fit: 'inside' }).toBuffer();
+  } catch { throw new Error('Image data is corrupt or cannot be decoded.'); }
+  return metadata.format;
+}
+
+async function extractZipToDatasetImages(zipPath, quality, outputDirectory = DATASETS_DIR) {
   const zip = new AdmZip(zipPath);
+  const entries = zip.getEntries();
+  validateArchiveEntries(entries, ARCHIVE_LIMITS);
   const out = [];
-  for (const entry of zip.getEntries()) {
+  const candidates = [];
+  for (const entry of entries) {
     if (entry.isDirectory) continue;
-    const name = path.basename(entry.entryName);
+    const name = path.posix.basename(String(entry.entryName).replaceAll('\\', '/'));
     if (!ALLOWED_IMAGE_EXT.test(name)) continue;
-    const ext = path.extname(name).toLowerCase() || '.jpg';
-    const filename = uuidv4() + ext;
-    const dest = path.join(DATASETS_DIR, filename);
-    fs.writeFileSync(dest, entry.getData());
-    try { await compressDatasetImageInPlace(dest, quality); } catch {}
-    out.push({
-      id: uuidv4(),
-      filename,
-      originalName: name,
-      size: fs.statSync(dest).size,
-      tags: [],
-      uploadedAt: new Date().toISOString(),
-      url: `/datasets-files/${filename}`,
-    });
+    const data = entry.getData();
+    const declaredSize = Number(entry.header?.size ?? entry.size ?? 0);
+    if (data.length > ARCHIVE_LIMITS.entryBytes || data.length !== declaredSize) {
+      throw new Error('Archive image size does not match its validated entry size.');
+    }
+    await validateDatasetRaster(data, name);
+    candidates.push({ name, data });
+  }
+  if (candidates.reduce((sum, item) => sum + item.data.length, 0) > ARCHIVE_LIMITS.totalBytes) {
+    throw new Error('Archive exceeds the total expanded size limit.');
+  }
+  const created = [];
+  try {
+    for (const { name, data } of candidates) {
+      const ext = path.extname(name).toLowerCase();
+      const filename = uuidv4() + ext;
+      const dest = path.join(outputDirectory, filename);
+      fs.writeFileSync(dest, data, { flag: 'wx', mode: 0o600 });
+      created.push(dest);
+      try { await compressDatasetImageInPlace(dest, quality); } catch { /* Validated source remains stored as-is. */ }
+      out.push({
+        id: uuidv4(), filename, originalName: name, size: fs.statSync(dest).size,
+        tags: [], uploadedAt: new Date().toISOString(), url: `/datasets-files/${filename}`,
+      });
+    }
+  } catch (error) {
+    created.forEach(file => { try { fs.unlinkSync(file); } catch {} });
+    throw error;
   }
   return out;
+}
+
+async function processUploadedImage(file, quality) {
+  const filepath = path.join(DATASETS_DIR, file.filename);
+  const buffer = fs.readFileSync(filepath);
+  await validateDatasetRaster(buffer, file.originalname);
+  try { await compressDatasetImageInPlace(filepath, quality); } catch { /* Keep the validated original bytes. */ }
+  return {
+    id: uuidv4(), filename: file.filename, originalName: file.originalname,
+    size: fs.statSync(filepath).size, tags: [], uploadedAt: new Date().toISOString(),
+    url: `/datasets-files/${file.filename}`,
+  };
+}
+
+function cleanupUploadedFiles(files) {
+  for (const file of files || []) {
+    try { fs.unlinkSync(path.join(DATASETS_DIR, file.filename)); } catch {}
+  }
 }
 
 function canAccessProject(projectId, userId) {
@@ -184,10 +241,12 @@ router.post('/export-from-project', (req, res) => {
 });
 
 router.post('/upload', (req, res) => {
-  upload.array('images', 2000)(req, res, (err) => {
+  upload.array('images', 200)(req, res, (err) => {
     (async () => {
       if (err) {
-        if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 500 MB).' });
+        cleanupUploadedFiles(req.files);
+        if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 100 MB).' });
+        if (err.code === 'LIMIT_FILE_COUNT') return res.status(413).json({ error: 'Too many files (max 200 per request).' });
         return res.status(400).json({ error: err.message || 'Upload failed.' });
       }
       const uid = req.session.userId;
@@ -206,21 +265,12 @@ router.post('/upload', (req, res) => {
           catch {}
           try { fs.unlinkSync(path.join(DATASETS_DIR, f.filename)); } catch {}
         } else {
-          const fp = path.join(DATASETS_DIR, f.filename);
-          try { await compressDatasetImageInPlace(fp, quality); } catch {}
-          images.push({
-            id: uuidv4(),
-            filename: f.filename,
-            originalName: f.originalname,
-            size: fs.statSync(fp).size,
-            tags: [],
-            uploadedAt: new Date().toISOString(),
-            url: `/datasets-files/${f.filename}`,
-          });
+          try { images.push(await processUploadedImage(f, quality)); }
+          catch { try { fs.unlinkSync(path.join(DATASETS_DIR, f.filename)); } catch {} }
         }
       }
 
-      if (!images.length) return res.status(400).json({ error: 'No images found after processing.' });
+      if (!images.length) return res.status(400).json({ error: 'No valid raster images found after processing.' });
 
       const datasets = readDatasets();
       const dataset = {
@@ -244,17 +294,22 @@ router.post('/upload', (req, res) => {
 });
 
 router.post('/:id/upload-images', (req, res) => {
-  upload.array('images', 2000)(req, res, (err) => {
+  upload.array('images', 200)(req, res, (err) => {
     (async () => {
       if (err) {
-        if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 500 MB).' });
+        cleanupUploadedFiles(req.files);
+        if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 100 MB).' });
+        if (err.code === 'LIMIT_FILE_COUNT') return res.status(413).json({ error: 'Too many files (max 200 per request).' });
         return res.status(400).json({ error: err.message || 'Upload failed.' });
       }
       const uid = req.session.userId;
       const quality = clampQuality(req.body.compressionQuality);
       const all = readDatasets();
       const ds = all.find(d => d.id === req.params.id && d.userId === uid);
-      if (!ds) return res.status(404).json({ error: 'Dataset not found or not owner.' });
+      if (!ds) {
+        cleanupUploadedFiles(req.files);
+        return res.status(404).json({ error: 'Dataset not found or not owner.' });
+      }
 
       const files = req.files || [];
       if (!files.length) return res.status(400).json({ error: 'No files uploaded.' });
@@ -267,21 +322,12 @@ router.post('/:id/upload-images', (req, res) => {
           catch {}
           try { fs.unlinkSync(path.join(DATASETS_DIR, f.filename)); } catch {}
         } else {
-          const fp = path.join(DATASETS_DIR, f.filename);
-          try { await compressDatasetImageInPlace(fp, quality); } catch {}
-          images.push({
-            id: uuidv4(),
-            filename: f.filename,
-            originalName: f.originalname,
-            size: fs.statSync(fp).size,
-            tags: [],
-            uploadedAt: new Date().toISOString(),
-            url: `/datasets-files/${f.filename}`,
-          });
+          try { images.push(await processUploadedImage(f, quality)); }
+          catch { try { fs.unlinkSync(path.join(DATASETS_DIR, f.filename)); } catch {} }
         }
       }
 
-      if (!images.length) return res.status(400).json({ error: 'No images found after processing.' });
+      if (!images.length) return res.status(400).json({ error: 'No valid raster images found after processing.' });
       ds.images = [...(ds.images || []), ...images];
       writeDatasets(all);
       res.status(201).json({ dataset: publicDataset(ds), added: images.length });
@@ -495,3 +541,5 @@ router.get('/:id/export-zip', (req, res) => {
 });
 
 module.exports = router;
+module.exports.validateDatasetRaster = validateDatasetRaster;
+module.exports.extractZipToDatasetImages = extractZipToDatasetImages;

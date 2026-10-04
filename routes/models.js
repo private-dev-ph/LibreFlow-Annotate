@@ -12,6 +12,7 @@ const {
   denyMissingOrForbidden,
 } = require('../lib/access-control');
 const { appendAuditEvent } = require('../lib/audit-log');
+const { shouldBlockPyTorchModel } = require('../lib/security-model-policy');
 
 const router = express.Router();
 const DATA_FILE    = dataPath('models.json');
@@ -35,6 +36,9 @@ const modelUpload = multer({
   limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB
   fileFilter(req, file, cb) {
     const ext = path.extname(file.originalname);
+    if (shouldBlockPyTorchModel(ext)) {
+      return cb(Object.assign(new Error('PyTorch .pt/.pth uploads are disabled in production because checkpoint deserialization can execute code.'), { code: 'UNSAFE_PICKLE_MODEL' }));
+    }
     if (ALLOWED_MODEL_EXT.test(ext) || ALLOWED_YAML_EXT.test(ext)) return cb(null, true);
     cb(Object.assign(new Error('Unsupported file format. Allowed: onnx, pt, pth, tflite, bin, pb, yaml, yml.'), { code: 'INVALID_TYPE' }));
   },
@@ -72,7 +76,9 @@ router.get('/', (req, res) => {
 router.post('/upload', (req, res) => {
   modelFields(req, res, (err) => {
     if (err) {
+      Object.values(req.files || {}).flat().forEach(file => { try { fs.unlinkSync(file.path); } catch {} });
       if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'File too large (max 500 MB).' });
+      if (err.code === 'UNSAFE_PICKLE_MODEL') return res.status(415).json({ error: err.message });
       return res.status(400).json({ error: err.message || 'Upload failed.' });
     }
 
@@ -236,6 +242,9 @@ router.post('/:id/infer', async (req, res) => {
   const models = readModels();
   const model  = models.find(m => m.id === req.params.id);
   if (!model) return res.status(404).json({ error: 'Model not found.' });
+  if (shouldBlockPyTorchModel(model)) {
+    return res.status(415).json({ error: 'PyTorch .pt/.pth inference is disabled in production because checkpoint deserialization can execute code.' });
+  }
 
   const { imageId, confThreshold = 0.25, goodBias = 0.5,
           clsModelId, clsFineModelId, clsCombinedModelId } = req.body;
@@ -264,6 +273,9 @@ router.post('/:id/infer', async (req, res) => {
   });
   if (invalidAuxiliary) {
     return res.status(400).json({ error: 'All auxiliary models must belong to the image project.' });
+  }
+  if (auxiliaryIds.some(id => shouldBlockPyTorchModel(modelById(id)))) {
+    return res.status(415).json({ error: 'PyTorch .pt/.pth inference is disabled in production.' });
   }
 
   function modelPathById(id) {
@@ -334,6 +346,9 @@ router.post('/:id/segment', async (req, res) => {
   const models = readModels();
   const model = models.find(m => m.id === req.params.id);
   if (!model) return res.status(404).json({ error: 'Model not found.' });
+  if (shouldBlockPyTorchModel(model)) {
+    return res.status(415).json({ error: 'PyTorch .pt/.pth inference is disabled in production because checkpoint deserialization can execute code.' });
+  }
 
   const { imageId, label, points, pointLabels, bboxes } = req.body;
   if (!imageId) return res.status(400).json({ error: 'imageId is required.' });

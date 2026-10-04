@@ -20,7 +20,7 @@
   if (!projectId) { window.location.href = '/dashboard'; return; }
 
   // Set annotator link
-  document.getElementById('btn-annotator').href = `/annotator?projectId=${projectId}`;
+  document.getElementById('btn-annotator').href = `/annotator?projectId=${encodeURIComponent(projectId)}`;
   document.getElementById('btn-dataset-lifecycle').href = `/dataset-lifecycle?sourceType=project&sourceId=${encodeURIComponent(projectId)}`;
 
   //─── Load project ──────────────────────────────────────────────────────────
@@ -1130,7 +1130,7 @@
     const data = await API.lookupUser(q);
     if (!lookupResult) return;
     if (data.error) {
-      lookupResult.innerHTML = data.error;
+      lookupResult.textContent = data.error;
       lookupResult.className = 'collab-lookup-result error';
       return;
     }

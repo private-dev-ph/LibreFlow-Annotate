@@ -3,10 +3,11 @@ const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const { dataFile, readJson, writeJson } = require('../lib/json-store');
 const { createAuthRateLimiter } = require('../lib/security-rate-limit');
 
 const router = express.Router();
-const USERS_FILE = path.join(__dirname, '..', 'data', 'users.json');
+const USERS_FILE = dataFile('users.json');
 const registerLimit = createAuthRateLimiter({ maxAttempts: 5 });
 const loginLimit = createAuthRateLimiter({ maxAttempts: 10 });
 
@@ -21,12 +22,11 @@ function establishSession(req, user) {
 }
 
 function readUsers() {
-  if (!fs.existsSync(USERS_FILE)) return [];
-  return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8'));
+  return readJson(USERS_FILE, []);
 }
 
 function writeUsers(users) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+  writeJson(USERS_FILE, users);
 }
 
 // POST /api/auth/register
@@ -41,17 +41,18 @@ router.post('/register', (req, _res, next) => {
     return res.status(400).json({ error: 'All fields are required.' });
   if (username.length > 64 || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     return res.status(400).json({ error: 'Enter a valid username and email.' });
-  if (typeof password !== 'string' || password.length < 12 || password.length > 128 ||
+  if (typeof password !== 'string' || password.length < 12 || Buffer.byteLength(password,'utf8') > 72 ||
       [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(pattern => pattern.test(password)).length < 3)
-    return res.status(400).json({ error: 'Password must be 12–128 characters and use at least three character types.' });
+    return res.status(400).json({ error: 'Password must be at least 12 characters, at most 72 UTF-8 bytes and use at least three character types.' });
 
+  const hash = await bcrypt.hash(password, 10);
+  // Re-read after asynchronous hashing; duplicate check and atomic write share one event-loop turn.
   const users = readUsers();
   if (users.find(u => String(u.email).trim().toLowerCase() === email))
     return res.status(409).json({ error: 'Email already registered.' });
   if (users.find(u => String(u.username).trim().toLowerCase() === username.toLowerCase()))
     return res.status(409).json({ error: 'Username already taken.' });
 
-  const hash = await bcrypt.hash(password, 10);
   const user = { id: uuidv4(), username, email, passwordHash: hash, createdAt: new Date().toISOString() };
   users.push(user);
   writeUsers(users);
@@ -71,7 +72,7 @@ router.post('/login', (req, _res, next) => {
 }, loginLimit, async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
   const password = req.body?.password;
-  if (!email || typeof password !== 'string' || !password || password.length > 128)
+  if (!email || typeof password !== 'string' || !password || Buffer.byteLength(password,'utf8') > 72)
     return res.status(400).json({ error: 'Email and password are required.' });
 
   const users = readUsers();
