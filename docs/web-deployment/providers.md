@@ -13,7 +13,7 @@ import {
 import { requestGoogleGISAccessToken, beginPkceRedirect, completePkceRedirect } from './oauth.mjs';
 ```
 
-`createGoogleDriveProvider`, `createGraphOneDriveProvider`, and `createDropboxProvider` take an optional `{ fetch }` for testing. The local exports are `createFileSystemProvider({ directoryHandle, picker })`, `createFileInputMemoryProvider(FileList)`, and `createMemoryProvider(files)`. S3 is deliberately unavailable: `createS3Provider()` reports `paired-companion-required` and rejects every operation, including connection. The browser must not receive permanent S3 credentials.
+`createGoogleDriveProvider`, `createGraphOneDriveProvider`, and `createDropboxProvider` take an optional `{ fetch }` for testing. The local exports are `createFileSystemProvider({ directoryHandle, picker })`, `createFileInputMemoryProvider(FileList)`, and `createMemoryProvider(files)`. The unpaired `createS3Provider()` stub refuses credentials. The UI uses `createS3CompanionProvider({ companion })` after pairing; [S3 setup](s3.md) describes its local credential chain and conditional-write requirements.
 
 ## Interactive authorization
 
@@ -55,4 +55,4 @@ When File System Access is unavailable, provide an `<input type="file" multiple>
 
 ## Current boundary
 
-These are bounded provider adapters, not a complete workspace UI or sync engine. The caller must define workspace manifests, encryption, import/export, retry policy, provider folder UX, and recovery. Do not persist a token, workspace passphrase, or folder selection to `localStorage` or plaintext `sessionStorage`. No server proxy is part of this contract.
+The static UI combines these adapters with the encrypted workspace/sync engine, folder selection and portable backup. Do not persist a token, workspace passphrase, or folder selection to `localStorage` or plaintext `sessionStorage`. No server proxy is part of this contract.
