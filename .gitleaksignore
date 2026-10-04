@@ -1,0 +1,3 @@
+# Reviewed synthetic webhook fixtures only; see docs/web-deployment/security-review.md.
+6e36050fe841c2d1b4ff55e2fa9c293b6dd78c1d:test/automation.test.js:generic-api-key:129
+6e36050fe841c2d1b4ff55e2fa9c293b6dd78c1d:test/automation.test.js:generic-api-key:288

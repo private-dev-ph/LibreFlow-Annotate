@@ -1,0 +1,8 @@
+# Reuse the companion's pinned runtime stack, including ONNX, NumPy, and OpenCV.
+-r requirements-companion.txt
+
+# Browser regression test dependency.
+playwright==1.62.0
+
+# Genuine ONNX fixture generation for isolated integration checks.
+onnx==1.23.1

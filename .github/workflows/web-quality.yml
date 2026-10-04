@@ -1,0 +1,89 @@
+name: Web quality
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Run Node tests
+        run: npm test
+
+      - name: Audit Node dependencies
+        run: npm audit
+
+      - name: Check web JavaScript syntax and security rules
+        run: |
+          node --check scripts/check-web-security.js
+          node --check scripts/build-web.js
+          node scripts/check-web-security.js
+
+      - name: Build static web assets
+        run: node scripts/build-web.js
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install companion test dependencies
+        run: python -m pip install -r py_scripts/requirements-test.txt
+
+      - name: Audit companion runtime and test dependencies
+        run: |
+          python -m pip install pip-audit==2.9.0
+          pip-audit -r py_scripts/requirements-companion.txt -r py_scripts/requirements-test.txt
+
+      - name: Check Python syntax
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          excluded = {".git", ".venv", "node_modules", "dist", "__pycache__"}
+          files = [p for p in Path(".").rglob("*.py") if not excluded.intersection(p.parts)]
+          if not files:
+              raise SystemExit("No Python files found to syntax-check")
+          for path in files:
+              ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+          print(f"Python syntax OK: {len(files)} files")
+          PY
+
+      - name: Test inference companion
+        run: python -m unittest discover -s py_scripts -p 'test_companion*.py' -v
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Test static web app in Chromium
+        run: python scripts/test_web_browser.py
+
+      - name: Build isolated companion worker
+        run: bash scripts/build-companion-worker.sh
+
+      - name: Verify HTTPS companion inference and privacy
+        run: python scripts/test_companion_browser.py
+
+      - name: Scan for secrets with Gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
