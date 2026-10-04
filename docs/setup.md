@@ -214,3 +214,8 @@ taskkill /PID <PID> /F
 
 ### Sessions expire immediately
 Set a persistent `SESSION_SECRET` environment variable so the signing key doesn't change between restarts.
+
+
+## Web and production deployment
+
+For static web hosting, follow [Web deployment](web-deployment/deployment.md), including OAuth registrations, explicit security headers and the local companion. Production self-hosted deployments must configure the independent secrets, durable sessions, Origin allowlist and cookie/proxy settings in [Self-hosted security](web-deployment/self-hosted-security.md). Use the [migration guide](web-deployment/migration.md) to copy existing projects into encrypted web workspaces without moving account or integration credentials.

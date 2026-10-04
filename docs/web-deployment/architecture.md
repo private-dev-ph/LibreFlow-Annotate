@@ -38,3 +38,7 @@ flowchart LR
 ```
 
 Do not expose arbitrary file paths or load untrusted pickle models in the companion control process. Do not silently emulate atomic writes for providers lacking conditional updates. Live-provider OAuth requires deployment-specific registered public client IDs and redirect URLs. Never ask for provider secrets in chat.
+
+## Integrated result
+
+The static runtime, encrypted storage/DAG/recovery, direct provider adapters, paired byte-only ONNX/S3 companion and independent self-hosted adapter are implemented. See [implementation report](implementation-report.md) for exact results and limitations. The companion worker uses fixed paths inside isolated tmpfs, receives only framed bytes and has no network/host mounts. Self-hosted URL fetching validates DNS at socket connection time; trusted Python inference is not published by Compose.

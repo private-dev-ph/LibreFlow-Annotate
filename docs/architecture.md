@@ -56,3 +56,8 @@ For development, run the Node and Python services locally. Docker Compose runs t
 | ML inference | Python, FastAPI, Uvicorn, Ultralytics YOLO, OpenCV, NumPy |
 | Automation | Node CLI, scoped Bearer keys, HMAC-SHA256 webhooks, optional AWS S3 SDK |
 | Packaging | Docker, Docker Compose; optional PostgreSQL 16 foundation |
+
+
+## Static web runtime
+
+Web mode shares the existing Canvas with a provider-neutral `WebAPI`, encrypted immutable workspace events, browser storage adapters and a paired byte-only loopback companion. It does not use Express persistence, sessions or PostgreSQL. [Web architecture](web-deployment/architecture.md) maps the original dependencies and the new data flow; [deployment](web-deployment/deployment.md) includes the diagram and limitations. [Workspace format](web-deployment/workspace-format.md) defines encryption, revisions, assets and portable backups.

@@ -16,6 +16,17 @@ Online sources are also too expensive and restrictive especially those with toke
 
 The project is deliberately local-first. The supported runtime stores application records and uploaded assets on the operator's machine, while model inference runs in a companion local Python service. That makes it a practical prototype for sensitive inspection imagery, laboratory work, and small teams that want control of their data. With this, the user has the power to run all of the inferences that they want with no token limitations as well as integrate their own automation workflows to use LibreFlow to automate the inference of datasets for model improvement.
 
+## Privacy-first web mode
+
+The new `web-deployment` implementation builds a static frontend with encrypted workspaces in user-selected Google Drive, OneDrive, Dropbox, local folders or S3 through a paired local companion. The LibreFlow host serves application assets only. The annotation Canvas is shared with the self-hosted application; server accounts, team collaboration and automation remain self-hosted features.
+
+```sh
+npm ci
+npm run build:web
+```
+
+Deploy only `dist/web` over HTTPS. Read [Web deployment and provider setup](docs/web-deployment/deployment.md), [Companion installation](docs/web-deployment/companion.md), [Migration](docs/web-deployment/migration.md) and [Security review](docs/web-deployment/security-review.md) before deployment. Live provider accounts and other browsers remain unverified; this work is not yet a production-certified release. Existing local setup below remains supported, with [required production security configuration](docs/web-deployment/self-hosted-security.md).
+
 ## Showcase
 
 | Area | What the current iteration demonstrates |
@@ -52,7 +63,7 @@ flowchart TB
     App -. optional future migration path .-> Postgres[(PostgreSQL schema)]
 ```
 
-The browser never calls the Python service directly. Express applies project access checks before serving protected files or proxying model work. The supported persistence mode is JSON-backed local storage; PostgreSQL is currently an opt-in schema/migration foundation and is not wired into the live application store.
+In self-hosted mode, the browser never calls the Python service directly. Express applies project access checks before serving protected files or proxying model work. The supported persistence mode is JSON-backed local storage; PostgreSQL is currently an opt-in schema/migration foundation and is not wired into the live application store.
 
 ## Quick start
 
@@ -75,7 +86,7 @@ Open `http://localhost:6767` and register a local account. The launcher starts t
 docker compose up --build
 ```
 
-Open `http://localhost:6767`. Compose preserves local runtime state through bind mounts for `data/`, `uploads/`, `models/`, `datasets/`, and `versions/`. Stop it with `docker compose down`.
+Compose defaults to local development, publishes the app on loopback, and keeps the trusted inference API inside its network. Set production security variables and HTTPS proxy configuration before using `NODE_ENV=production`; see [Self-hosted security](docs/web-deployment/self-hosted-security.md). Open `http://localhost:6767`. Compose preserves local runtime state through bind mounts for `data/`, `uploads/`, `models/`, `datasets/`, and `versions/`. Stop it with `docker compose down`.
 
 ## Use cases
 

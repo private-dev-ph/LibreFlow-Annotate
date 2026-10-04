@@ -56,3 +56,5 @@ When File System Access is unavailable, provide an `<input type="file" multiple>
 ## Current boundary
 
 The static UI combines these adapters with the encrypted workspace/sync engine, folder selection and portable backup. Do not persist a token, workspace passphrase, or folder selection to `localStorage` or plaintext `sessionStorage`. No server proxy is part of this contract.
+
+Existing Google Drive folders/images can be selected through the official Google Picker UI after authorization. Configure `googleProjectNumber` and a referrer/API-restricted public `googlePickerApiKey` alongside `googleClientId`, and enable Picker API in that same project. Picker receives the transient token directly and returns opaque IDs; application metadata is fetched through the Drive adapter. The selection contract is mocked in CI; live Google Picker loading/CSP remains a release check.
