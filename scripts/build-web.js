@@ -1,0 +1,12 @@
+const crypto=require('node:crypto');const fs=require('node:fs');const path=require('node:path');
+const root=path.resolve(__dirname,'..');const target=path.join(root,'dist','web');
+fs.rmSync(target,{recursive:true,force:true});fs.mkdirSync(target,{recursive:true});
+fs.cpSync(path.join(root,'public','web'),target,{recursive:true});
+fs.copyFileSync(path.join(root,'public','js','canvas.js'),path.join(target,'canvas.js'));
+fs.copyFileSync(path.join(root,'public','assets','libreflow-logo.svg'),path.join(target,'libreflow-logo.svg'));
+const csp="default-src 'none'; script-src 'self' https://accounts.google.com; style-src 'self'; img-src 'self' blob: data:; connect-src https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com https://graph.microsoft.com https://*.1drv.com https://*.sharepoint.com https://api.dropboxapi.com https://content.dropboxapi.com https://login.microsoftonline.com https://api.dropbox.com http://127.0.0.1:8787; worker-src 'self'; manifest-src 'self'; base-uri 'none'; frame-src https://accounts.google.com; form-action 'none'; frame-ancestors 'none'; object-src 'none'";
+fs.writeFileSync(path.join(target,'_headers'),`/*\n  Content-Security-Policy: ${csp}\n  Referrer-Policy: no-referrer\n  X-Content-Type-Options: nosniff\n  X-Frame-Options: DENY\n  Permissions-Policy: camera=(), microphone=(), geolocation=()\n  Cache-Control: no-cache\n`);
+const assets=[];function visit(directory,prefix=''){for(const entry of fs.readdirSync(directory,{withFileTypes:true})){const relative=prefix+entry.name;if(entry.isDirectory())visit(path.join(directory,entry.name),relative+'/');else if(entry.name!=='_headers'&&entry.name!=='service-worker.js')assets.push('./'+relative);}}visit(target);
+const digest=crypto.createHash('sha256');for(const file of assets.sort())digest.update(fs.readFileSync(path.join(target,file)));
+let worker=fs.readFileSync(path.join(target,'service-worker.js'),'utf8');worker=worker.replace("'__CACHE_NAME__'",JSON.stringify('libreflow-assets-'+digest.digest('hex').slice(0,16))).replace("['__ASSET_LIST__']",JSON.stringify(['./',...assets]));fs.writeFileSync(path.join(target,'service-worker.js'),worker);
+console.log('Built static assets in dist/web; deploy this directory only. Configure equivalent security headers on hosts that do not support _headers.');
