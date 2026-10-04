@@ -48,12 +48,12 @@ jobs:
           python-version: "3.12"
 
       - name: Install companion test dependencies
-        run: python -m pip install -r py_scripts/requirements-test.txt
+        run: python -m pip install -r py_scripts/requirements-test.txt -r py_scripts/requirements-s3.txt
 
       - name: Audit companion runtime and test dependencies
         run: |
           python -m pip install pip-audit==2.9.0
-          pip-audit -r py_scripts/requirements-companion.txt -r py_scripts/requirements-test.txt
+          pip-audit -r py_scripts/requirements-companion.txt -r py_scripts/requirements-test.txt -r py_scripts/requirements-s3.txt
 
       - name: Check Python syntax
         run: |
@@ -86,4 +86,4 @@ jobs:
         run: python scripts/test_companion_browser.py
 
       - name: Scan for secrets with Gitleaks
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        run: bash scripts/run-secret-scan.sh

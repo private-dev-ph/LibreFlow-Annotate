@@ -57,7 +57,7 @@ export class Workspace {
       this.status.state = fork ? 'conflict' : 'saved';
     } catch (e) { this.status.state = ['conflict','remote_deleted'].includes(e.code) ? 'conflict' : 'pending'; this.status.pending = (await this.cache.entries()).length; throw e; }
   }
-  async recover() { for (const record of await this.cache.entries()) { const node = await this.unpack(record); this.nodes.set(node.id, node); } this.status.pending = (await this.cache.entries()).length; this.status.state = this.status.pending ? 'pending' : 'saved'; }
+  async recover() { for (const record of await this.cache.entries()) { const node = await this.unpack(record); this.nodes.set(node.id, node); } this.status.pending = (await this.cache.entries()).length; this.status.state = [...this.nodes.values()].some(n=>this.heads(n.type,n.entityId).length>1) ? 'conflict' : this.status.pending ? 'pending' : 'saved'; }
   async put(type, entityId, value, { expectedHeads, resolve = false, sourceRevision = null } = {}) {
     if (!TYPES.has(type) || !UUID.test(entityId)) throw new WorkspaceError('invalid_record', 'Invalid entity identity/type');
     const heads = this.heads(type, entityId);
@@ -83,6 +83,7 @@ export class Workspace {
       signal?.throwIfAborted(); const plain = new Uint8Array(await file.slice(offset, offset + chunkSize).arrayBuffer()); const hash = await sha256(plain);
       const name = `asset-${hash}.json`; const existing = stored.get(name);
       let ref = existing;
+      if(ref){const verified=await open(this.key,JSON.parse(decode(await bytes(await this.provider.read(ref.id,{signal})))),`${this.manifest.id}:asset:${hash}`);if(verified.length!==plain.length||await sha256(verified)!==hash)throw new WorkspaceError('checksum','An existing managed chunk is corrupt; preserve a backup before repairing it');}
       if (!ref) {ref = await this.provider.write({ parentId: this.root, name, bytes: encode(await seal(this.key, plain, `${this.manifest.id}:asset:${hash}`)), signal });stored.set(name,ref);}
       chunks.push({ id: ref.id, hash, size: plain.length }); transfer.chunks=structuredClone(chunks);transfer.processed=Math.min(offset+plain.length,file.size);
       await this.transfers.put(transferId,{id:transferId,encrypted:await seal(this.key,encode(transfer),`${this.manifest.id}:transfer:${transferId}`)}); onProgress(Math.min(offset + plain.length, file.size), file.size);
@@ -112,10 +113,12 @@ export async function importPortable(provider, root, portable, passphrase) {
   if (!portable || portable.format !== 'libreflow-portable' || portable.schemaVersion !== 1 || !Array.isArray(portable.records) || portable.records.length > 100000) throw new WorkspaceError('invalid_manifest', 'Unsupported portable workspace');
   const manifest = validateManifest(portable.manifest); const key = await unlockKeys(passphrase, manifest.key, manifest.id);
   const workspace = new Workspace(provider, root, manifest, key); const names = new Set(); const idMap = new Map(); const decoded = [];
+  let totalBytes=0;
   for (const entry of portable.records) {
     if (!/^record-[0-9a-f-]{36}\.json$|^asset-[0-9a-f]{64}\.json$/i.test(entry.name) || names.has(entry.name) || !Array.isArray(entry.bytes) || entry.bytes.length > 8 * 1024 * 1024) throw new WorkspaceError('invalid_manifest', 'Malformed portable record');
+    totalBytes+=entry.bytes.length;if(totalBytes>128*1024*1024||entry.bytes.some(b=>!Number.isInteger(b)||b<0||b>255))throw new WorkspaceError('invalid_manifest','Portable bytes are invalid or exceed the 128 MiB limit');
     names.add(entry.name); const data = JSON.parse(decode(Uint8Array.from(entry.bytes)));
-    if (entry.name.startsWith('record-')) decoded.push(await workspace.unpack(data));
+    if (entry.name.startsWith('record-')) {if(data.id!==entry.name.slice(7,-5))throw new WorkspaceError('corrupt_record','Portable record filename and identity differ');decoded.push(await workspace.unpack(data));}
     else { const hash = entry.name.slice(6, -5); const plain = await open(key, data, `${manifest.id}:asset:${hash}`); if (await sha256(plain) !== hash) throw new WorkspaceError('checksum', 'Corrupt portable asset'); }
   }
   if ((await provider.list(root)).length) throw new WorkspaceError('conflict', 'Import requires an empty destination folder');

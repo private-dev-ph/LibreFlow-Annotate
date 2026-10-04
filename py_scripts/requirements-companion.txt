@@ -1,3 +1,4 @@
+-c requirements-companion.lock.txt
 # Separate, minimal runtime for the paired loopback inference companion.
 fastapi==0.142.2
 uvicorn==0.54.0
