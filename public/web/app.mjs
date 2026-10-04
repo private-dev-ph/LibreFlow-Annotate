@@ -8,6 +8,7 @@ import { createGraphOneDriveProvider } from './providers/graph-onedrive.mjs';
 import { createDropboxProvider } from './providers/dropbox.mjs';
 import { createInferenceCompanion } from './inference.mjs';
 const $=id=>document.getElementById(id);
+let googleToken=null;
 let provider, workspace, api, projectId, imageId, imageUrl, companion, abortInference, dirty=false, draftWrites=Promise.resolve();
 const status=message=>{$('status').textContent=message;};
 const describe=()=>{if(workspace)status(`${workspace.status.state} · ${workspace.status.pending} pending · last sync ${workspace.status.lastSync||'not yet'}`);};
@@ -21,7 +22,7 @@ async function initialize(){
   await workspace.recover();api=new WebAPI(workspace);globalThis.LibreFlowWeb={api,workspace};
   $('passphrase').value='';$('connect').hidden=true;$('workspace').hidden=false;
   Canvas.init($('canvas'),$('canvas-wrap'),shapes=>{showShapes(shapes);});
-  const session=await api.restoreSession();await refreshProjects(session?.projectId);describe();const transfers=await workspace.pendingTransfers();if(transfers.length)status(`${transfers.length} interrupted transfer(s). Reselect the same files to retry; verified uploaded chunks will be reused.`);
+  const session=await api.restoreSession();await refreshProjects(session?.projectId);if(session?.imageId && session.imageId!==imageId && workspace.get('image',session.imageId)?.projectId===projectId)await selectImage(session.imageId);describe();const transfers=await workspace.pendingTransfers();if(transfers.length)status(`${transfers.length} interrupted transfer(s). Reselect the same files to retry; verified uploaded chunks will be reused.`);
 }
 async function refreshProjects(selected){$('projects').replaceChildren();const projects=await api.getProjects();projects.forEach(p=>option($('projects'),p.id,p.name));projectId=projects.some(p=>p.id===selected)?selected:projects[0]?.id;$('projects').value=projectId||'';await refreshImages();}
 async function refreshImages(){imageId=null;dirty=false;$('image-list').replaceChildren();$('model-list').replaceChildren();if(!projectId)return;const images=await api.getImages(projectId);images.forEach(i=>option($('image-list'),i.id,i.originalName));(await api.getModels(projectId)).forEach(m=>option($('model-list'),m.id,m.name));if(images[0])await selectImage(images[0].id);}
@@ -38,7 +39,7 @@ async function selectStorage(){
  else if(type==='fallback'){provider=createMemoryProvider();await provider.connect();status('Browser workspace is temporary. Export an encrypted backup before closing.');}
  else if(type==='s3'){if(!companion)throw new Error('Pair the local companion before connecting S3');const {createS3CompanionProvider}=await import('./providers/s3-companion.mjs');provider=createS3CompanionProvider({companion});await provider.connect();}
  else {
-  const {authorizeProvider}=await import('./oauth-ui.mjs');const token=await authorizeProvider(type,configuration);provider=type==='google'?createGoogleDriveProvider():type==='onedrive'?createGraphOneDriveProvider():createDropboxProvider();await provider.connect({token});
+  const {authorizeProvider}=await import('./oauth-ui.mjs');const token=await authorizeProvider(type,configuration);provider=type==='google'?createGoogleDriveProvider():type==='onedrive'?createGraphOneDriveProvider():createDropboxProvider();await provider.connect({token});googleToken=type==='google'?token:null;
  }
  provider.name ||= type;await provider.selectWorkspace(type==='local'||type==='fallback'?'root':$('folder').value.trim()||($('provider').value==='dropbox'?'':'root'));return provider;
 }
@@ -46,16 +47,17 @@ const root=()=>$('folder').value.trim()||($('provider').value==='dropbox'?'':'ro
 $('authorize').onclick=()=>run(async()=>{await selectStorage();status('Storage connected. Choose a workspace folder, then open or create it.');});
 $('open').onclick=()=>run(async()=>{if(!provider)await selectStorage();workspace=await Workspace.connect(provider,root(),$('passphrase').value);await initialize();});
 $('create').onclick=()=>run(async()=>{if(!provider)await selectStorage();workspace=await Workspace.create(provider,root(),$('passphrase').value);await initialize();});
-$('provider').onchange=()=>run(async()=>{if(provider)await provider.disconnect();provider=null;$('provider-note').textContent=$('provider').value==='fallback'?'Temporary browser memory; use encrypted export/import for persistence.':$('provider').value==='local'?'Select a dedicated folder. Browsers without directory handles can use portable browser workspace.':'Authorization goes directly to your identity provider. This deployment must register a public OAuth client ID. Select a dedicated cloud folder; provider sharing controls access.';});
+$('provider').onchange=()=>run(async()=>{if(provider)await provider.disconnect();provider=null;googleToken=null;$('provider-note').textContent=$('provider').value==='fallback'?'Temporary browser memory; use encrypted export/import for persistence.':$('provider').value==='local'?'Select a dedicated folder. Browsers without directory handles can use portable browser workspace.':'Authorization goes directly to your identity provider. This deployment must register a public OAuth client ID. Select a dedicated cloud folder; provider sharing controls access.';});
 $('import').onchange=()=>run(async()=>{const file=$('import').files[0];if(!file)return;if(file.size>128*1024*1024)throw new Error('Portable backup exceeds the 128 MiB import limit');if(!provider)await selectStorage();workspace=await importPortable(provider,root(),JSON.parse(await file.text()),$('passphrase').value);await initialize();});
-$('new-project').onclick=()=>run(async()=>{const name=$('project-name').value.trim();if(!name)throw new Error('Enter a project name');const p=await api.createProject(name);$('project-name').value='';await refreshProjects(p.id);describe();});
+$('new-project').onclick=()=>run(async()=>{if(dirty)throw new Error('Save edits before creating a project');const name=$('project-name').value.trim();if(!name)throw new Error('Enter a project name');const p=await api.createProject(name);$('project-name').value='';await refreshProjects(p.id);describe();});
 $('projects').onchange=()=>run(async()=>{if(dirty)throw new Error('Save edits before switching projects');projectId=$('projects').value;await refreshImages();});
 $('images').onchange=()=>run(async()=>{if(!projectId)throw new Error('Create a project first');if(dirty)throw new Error('Save edits before adding images');await api.uploadImages(projectId,$('images').files,{onProgress:(done,total)=>{$('progress').hidden=false;$('progress').value=done/total*100;}});$('progress').hidden=true;await refreshImages();describe();});
 $('image-list').onchange=()=>run(()=>selectImage($('image-list').value));
 $('tool').onchange=()=>Canvas.setTool($('tool').value);
+$('classify').onclick=()=>{const label=$('label').value.trim();if(imageId&&label){Canvas.addClassification(label);dirty=true;}};
 $('undo').onclick=()=>{Canvas.undo();dirty=true;};$('redo').onclick=()=>{Canvas.redo();dirty=true;};$('delete-shape').onclick=()=>{Canvas.deleteSelected();dirty=true;};
 $('save').onclick=()=>run(async()=>{if(!imageId)throw new Error('Select an image');await draftWrites;await api.saveAnnotations(imageId,Canvas.getShapes());await workspace.clearDraft(imageId);dirty=false;await refreshHistory();describe();showConflict();});
-$('restore').onclick=()=>run(async()=>{await api.restoreAnnotationRevision(imageId,$('revisions').value);dirty=false;await selectImage(imageId);describe();});
+$('restore').onclick=()=>run(async()=>{if(dirty)throw new Error('Save edits before restoring a revision');await api.restoreAnnotationRevision(imageId,$('revisions').value);dirty=false;await selectImage(imageId);describe();});
 $('save-review').onclick=()=>run(async()=>{await api.updateImageReview(imageId,{status:$('review').value});describe();});
 $('add-comment').onclick=()=>run(async()=>{const value=$('review-comment').value.trim();if(!value)return;await api.addReviewComment(imageId,value);$('review-comment').value='';await refreshReview();describe();});
 $('retry').onclick=()=>run(async()=>{await workspace.sync();describe();showConflict();});
@@ -84,6 +86,10 @@ $('link-image').onclick=()=>run(async()=>{if(dirty)throw new Error('Save edits b
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('./service-worker.js').catch(()=>{ /* Offline asset caching is optional; workspace recovery remains available. */ });
 
-$('reauthorize').onclick=()=>run(async()=>{if(!['google','onedrive','dropbox'].includes($('provider').value))throw new Error('Reconnect local storage or the paired companion for this provider');await draftWrites;const {authorizeProvider}=await import('./oauth-ui.mjs');const token=await authorizeProvider($('provider').value,configuration);await provider.connect({token});await workspace.sync();describe();});
+$('reauthorize').onclick=()=>run(async()=>{if(!['google','onedrive','dropbox'].includes($('provider').value))throw new Error('Reconnect local storage or the paired companion for this provider');await draftWrites;const {authorizeProvider}=await import('./oauth-ui.mjs');const token=await authorizeProvider($('provider').value,configuration);await provider.connect({token});if($('provider').value==='google')googleToken=token;await workspace.sync();describe();});
 
 async function cachedObject(blob,kind,contentType,signal){const digest=await sha256(await blob.arrayBuffer());try{const existing=await companion.cacheExists(digest,{signal});if(existing.sha256!==digest||existing.kind!==kind)throw new Error('Companion cache identity mismatch');return existing;}catch(error){if(error.status!==404)throw error;}const ref=await companion.register(blob,kind,contentType,{signal});if(ref.sha256!==digest)throw new Error('Companion object checksum mismatch');return ref;}
+
+async function googleSelection(folder){if($('provider').value!=='google'||!googleToken)throw new Error('Authorize Google Drive first');const {chooseGoogleFiles}=await import('./google-picker.mjs');return chooseGoogleFiles({token:googleToken,appId:configuration.googleProjectNumber,developerKey:configuration.googlePickerApiKey,folder});}
+$('pick-google-folder').onclick=()=>run(async()=>{const docs=await googleSelection(true);if(docs[0]){$('folder').value=docs[0].id;status('Google folder selected. Open or create your encrypted workspace.');}});
+$('pick-google-images').onclick=()=>run(async()=>{if(dirty)throw new Error('Save edits before linking images');if(!projectId)throw new Error('Create a project first');for(const doc of await googleSelection(false))await api.linkImage(projectId,await provider.stat(doc.id));await refreshImages();describe();});
