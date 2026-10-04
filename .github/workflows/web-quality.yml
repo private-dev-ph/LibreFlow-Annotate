@@ -79,6 +79,11 @@ jobs:
       - name: Test static web app in Chromium
         run: python scripts/test_web_browser.py
 
+      - name: Verify read-only static container
+        run: |
+          docker build -f Dockerfile.web -t libreflow-web:development .
+          bash scripts/test-static-container.sh
+
       - name: Build isolated companion worker
         run: bash scripts/build-companion-worker.sh
 

@@ -1,2 +1,3 @@
+-c requirements-s3.lock.txt
 # Optional user-machine companion S3-compatible storage dependency.
 boto3==1.43.108
