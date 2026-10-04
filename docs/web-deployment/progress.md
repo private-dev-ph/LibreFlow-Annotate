@@ -19,3 +19,5 @@ Latest verified cloud integration: 9979299, 13/13 provider tests. Static privacy
 Verified milestone 3d1dfb4784c574b9e4ea1202bb146e7fe0032324: Merged 678b701 security followup; 16 security/runtime/migration tests passed.
 
 Verified milestone 8246d6ad5901a61ff9c634952db7a664745a6f48: Merged 8328a53 isolated companion; 24 Python tests and real HTTPS browser inference passed (19 host asset GETs, 2 uploads only to loopback).
+
+Verified milestone c9ddce7e722dc85f4492606db33588309568998b: Merged 82c15cc S3 provider; 2 Node contract tests and 6 Python S3 tests pass. Live S3 endpoints remain unverified.
