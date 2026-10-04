@@ -15,3 +15,5 @@ Most recent verified baseline commit: 27ceb593339ef444d6d85b5240d350ff13a7db5f.
 Verified integrations: storage-foundation e61cc51 → a675f6a (4 workspace tests); security-hardening e0b1d2d → 7ae5eee (19 security/automation tests). Current workspace suite 5 tests includes encrypted unsaved recovery drafts.
 
 Latest verified cloud integration: 9979299, 13/13 provider tests. Static privacy test now covers reload/crash recovery and 36 asset-only host requests. Node audit patched to 0 findings (dependency changes awaiting quality commit). Real self-hosted runtime auth/CSRF/session regeneration test passes.
+
+Verified milestone 3d1dfb4784c574b9e4ea1202bb146e7fe0032324: Merged 678b701 security followup; 16 security/runtime/migration tests passed.

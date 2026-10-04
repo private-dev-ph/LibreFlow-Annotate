@@ -1,14 +1,15 @@
-# Handoff
+# Current handoff
 
-Current branch: web-deployment. Baseline and integration parent: 27ceb593339ef444d6d85b5240d350ff13a7db5f.
-Completed: remote fetch, main ff-only update, architecture map, planning documents.
-Next: implement provider-neutral encrypted workspace foundation; delegate independent provider, companion and self-hosted security work.
-No implementation tests run yet. Baseline onboarding: npm test, 52/52 passed. No known baseline test failures.
-Merge status: no feature branches merged. Initial planning files currently uncommitted.
-Security decisions: static host never handles application payloads; memory-only OAuth credentials; companion fails closed on unsafe model formats; provider conflicts never silently overwrite; no central web accounts. Live provider/browser verification is required before production claims.
+Current branch: web-deployment. Integration SHA before this documentation commit: 3d1dfb4784c574b9e4ea1202bb146e7fe0032324.
+Baseline main: 27ceb593339ef444d6d85b5240d350ff13a7db5f (unchanged).
 
-Storage-foundation milestone: encrypted append-only event DAG, 4 MiB managed asset chunks, encrypted recovery, portable format implemented. Tests: node --test test/web-workspace.test.js, 4/4 pass. Next: integrate this branch into web-deployment, then implement static UI/build. Provider/companion/security agents are independently active. No feature work has yet been merged. Latest SHA is recorded by the milestone commit and Git log.
+Latest verified milestone: Merged 678b701 security followup; 16 security/runtime/migration tests passed.
 
-Current active branch: stateless-web; integration branch web-deployment SHA 7ae5eee. Two verified feature merges completed: a675f6a storage foundation and 7ae5eee self-hosted security. Current static browser test passes (18 host asset GETs, no user payloads). Uncommitted stateless/provider/companion/CI changes remain while agents work disjoint scopes. Next: freeze and commit cloud-storage-support, integrate, then commit stateless-web. Shared-agent checkout means only the orchestrator performs Git operations. S3 adapter and remaining archive guard agent active.
+Completed: architecture, storage/encryption, provider adapters, encrypted drafts/transfers, offline conflict preservation, self-hosted sessions/CSRF/uploads/model policy. Uncommitted companion/static/quality/migration work is being integrated in dependency order.
+Next action: verify and commit the remaining feature scopes, merge to web-deployment, then run integrated security review and full tests. Main alone performs Git operations; all agents are frozen.
 
-Latest verified integration web-deployment: 9979299 (cloud-storage-support). Active stateless-web currently also contains uncommitted static frontend, encrypted draft recovery, stronger remote-record checks; browser test passed including reload. Companion agent adding Docker sandbox fallback because bubblewrap is unavailable but Docker daemon is usable. S3 agent implements local credential-holder adapter. Security follow-up audit covers all dataset ZIP entry paths and legacy rendering. Quality agent files frozen; dependency audit is zero after lock updates and nodemon removal. Next: finish and verify companion sandbox, integrate companion branch, then stateless UI and quality branches.
+Decisions: static host serves assets only; OAuth/keys are memory-only; append-only revisions preserve forks; companion accepts bytes/opaque IDs only and fails closed without isolation; production blocks pickle; S3 credentials remain on the user's machine. Live provider credentials, other browsers and large-scale behavior remain unverified.
+
+Tests already run: 97 Node tests; 24 Python unit tests; 38-request static privacy browser test; real Docker ONNX inference. Paired HTTPS browser test is being finalized after correcting hidden-control/duplicate-shape/blob-network assertions. Dependency audits show no known vulnerabilities after updates; rerun after final dependencies.
+
+No merges into main. Use git status and git log --oneline --first-parent web-deployment for exact commit/uncommitted state; docs SHA names the verified parent, avoiding a self-referential commit hash.
