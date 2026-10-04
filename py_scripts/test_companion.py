@@ -6,6 +6,7 @@ import json
 import sys
 import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -143,6 +144,31 @@ class CompanionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 504)
         self.assertEqual(response.json()["error"]["code"], "inference_timeout")
         self.assertNotIn(str(self.state.root), response.text)
+
+    def test_overlapping_inference_is_rejected_until_worker_finishes(self):
+        self.pair()
+        model = self.register("model", b"model", "application/onnx").json()
+        image = self.register("image", b"image").json()
+        entered, release = threading.Event(), threading.Event()
+        results = []
+        def runner(*args):
+            entered.set()
+            if not release.wait(5): raise RuntimeError("inference_timeout")
+            return {"results": []}
+        self.state.inference_runner = runner
+        payload = {"model_id": model["id"], "image_id": image["id"]}
+        with self.client, patch.object(companion, "sandbox_available", return_value=True):
+            request = threading.Thread(target=lambda: results.append(self.client.post("/infer",headers=self.headers,json=payload)))
+            request.start()
+            try:
+                self.assertTrue(entered.wait(5))
+                overlapping=self.client.post("/infer",headers=self.headers,json=payload)
+                self.assertEqual(overlapping.status_code,429)
+                self.assertEqual(overlapping.json()["error"]["code"],"inference_busy")
+            finally:
+                release.set();request.join(5)
+            self.assertFalse(request.is_alive())
+            self.assertEqual(results[0].status_code,200)
 
     def test_health_reports_capabilities_without_claiming_s3(self):
         with patch.object(companion, "sandbox_available", return_value=False):
