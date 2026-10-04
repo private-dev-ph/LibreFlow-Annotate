@@ -21,3 +21,5 @@ Verified milestone 3d1dfb4784c574b9e4ea1202bb146e7fe0032324: Merged 678b701 secu
 Verified milestone 8246d6ad5901a61ff9c634952db7a664745a6f48: Merged 8328a53 isolated companion; 24 Python tests and real HTTPS browser inference passed (19 host asset GETs, 2 uploads only to loopback).
 
 Verified milestone c9ddce7e722dc85f4492606db33588309568998b: Merged 82c15cc S3 provider; 2 Node contract tests and 6 Python S3 tests pass. Live S3 endpoints remain unverified.
+
+Verified milestone bbf2f3d83dc139ae36afb0cb196e5749a6a999a6: Merged e5e2d9a local migration; 7 positive and negative migration tests pass.

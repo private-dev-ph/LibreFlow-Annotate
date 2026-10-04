@@ -1,9 +1,9 @@
 # Current handoff
 
-Current branch: web-deployment. Integration SHA before this documentation commit: c9ddce7e722dc85f4492606db33588309568998b.
+Current branch: web-deployment. Integration SHA before this documentation commit: bbf2f3d83dc139ae36afb0cb196e5749a6a999a6.
 Baseline main: 27ceb593339ef444d6d85b5240d350ff13a7db5f (unchanged).
 
-Latest verified milestone: Merged 82c15cc S3 provider; 2 Node contract tests and 6 Python S3 tests pass. Live S3 endpoints remain unverified.
+Latest verified milestone: Merged e5e2d9a local migration; 7 positive and negative migration tests pass.
 
 Completed: architecture, storage/encryption, provider adapters, encrypted drafts/transfers, offline conflict preservation, self-hosted sessions/CSRF/uploads/model policy. Uncommitted companion/static/quality/migration work is being integrated in dependency order.
 Next action: verify and commit the remaining feature scopes, merge to web-deployment, then run integrated security review and full tests. Main alone performs Git operations; all agents are frozen.
