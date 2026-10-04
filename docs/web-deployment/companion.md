@@ -4,7 +4,7 @@ The static web client can send image and ONNX model bytes to a separate Python c
 
 ## Install and launch
 
-From `py_scripts`, install the isolated companion dependencies and run the service:
+Using Python 3.12+, from `py_scripts`, install the isolated companion dependencies and run the service:
 
 ```sh
 python -m venv .venv-companion

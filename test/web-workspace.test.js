@@ -28,6 +28,7 @@ test('encrypted records are partitioned per entity, forked saves preserve both s
  await w.put('annotation',id,[{label:'first client'}]);
  await other.put('annotation',id,[{label:'second client'}]);
  assert.equal(other.status.state,'conflict'); assert.throws(()=>other.get('annotation',id),/Concurrent/);
+ await other.recover();assert.equal(other.status.state,'conflict');
  assert.equal(other.history('annotation',id).length,3);
  await other.put('annotation',id,[{label:'resolved'}],{resolve:true}); assert.equal(other.get('annotation',id)[0].label,'resolved');
  assert.ok([...p.files.values()].every(f=>!new TextDecoder().decode(f.data).includes('secret label')));
@@ -67,4 +68,11 @@ test('interrupted encrypted transfers expose a recovery queue and reuse verified
  const controller=new AbortController();await assert.rejects(w.manageAsset(file,{signal:controller.signal,onProgress:()=>controller.abort()}),/abort/i);
  assert.equal((await w.pendingTransfers()).length,1);assert.equal((await w.pendingTransfers())[0].processed,4*1024*1024);const before=[...p.files.values()].filter(f=>f.name.startsWith('asset-')).length;
  const asset=await w.manageAsset(file);assert.equal((await w.pendingTransfers()).length,0);assert.equal([...p.files.values()].filter(f=>f.name.startsWith('asset-')).length,before+1);assert.equal(asset.chunks.length,2);
+});
+test('deduplicated chunks and portable identities are verified before reuse or destination writes',async()=>{
+ const [{Workspace,importPortable}]=await setup();const p=new MemoryProvider();const w=await Workspace.create(p,'root',password);
+ const file=new Blob(['bounded private asset'],{type:'image/png'});file.name='fixture.png';await w.manageAsset(file);
+ const asset=[...p.files.values()].find(f=>f.name.startsWith('asset-'));asset.data=new TextEncoder().encode('{}');await assert.rejects(w.manageAsset(file),/Unsupported encryption/);
+ const project=crypto.randomUUID();await w.put('project',project,{name:'fixture'});const backup=await w.exportPortable();backup.records=backup.records.filter(r=>r.name.startsWith('record-'));backup.records[0].name=`record-${crypto.randomUUID()}.json`;
+ const destination=new MemoryProvider();await assert.rejects(importPortable(destination,'root',backup,password),/filename and identity/);assert.equal(destination.files.size,0);
 });

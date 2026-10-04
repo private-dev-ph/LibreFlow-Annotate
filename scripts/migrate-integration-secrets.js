@@ -39,8 +39,8 @@ function migrate(directory, apply = false) {
   // Exclusive backups precede every replacement; keep them private and offline.
   for (const item of prepared) {
     const backup = item.file + suffix;
-    fs.copyFileSync(item.file, backup, fs.constants.COPYFILE_EXCL);
-    fs.chmodSync(backup, 0o600);
+    const descriptor=fs.openSync(backup,'wx',0o600);
+    try {fs.writeFileSync(descriptor,fs.readFileSync(item.file));} finally {fs.closeSync(descriptor);}
   }
   for (const item of prepared) writeJson(item.file, item.migrated);
   return { files: prepared.length, records: prepared.reduce((n, item) => n + item.changed, 0), applied: true };
