@@ -562,7 +562,7 @@ def create_app(state: CompanionState | None = None) -> FastAPI:
                 try:
                     result = await asyncio.wait_for(asyncio.to_thread(
                         state.inference_runner, model_path, image_path, INFER_TIMEOUT,
-                        payload.conf_threshold), timeout=INFER_TIMEOUT + 26)
+                    payload.conf_threshold), timeout=INFER_TIMEOUT + 45)
                 except asyncio.TimeoutError:
                     raise HTTPException(504, {"code": "inference_timeout", "message": "Inference exceeded its time limit"})
                 except RuntimeError as exc:
