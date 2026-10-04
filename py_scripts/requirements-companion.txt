@@ -1,0 +1,9 @@
+# Separate, minimal runtime for the paired loopback inference companion.
+fastapi==0.142.2
+uvicorn==0.54.0
+onnxruntime==1.30.0
+numpy==2.5.2
+opencv-python-headless==5.0.0.93
+httpx==0.28.1  # unittest FastAPI client
+flatbuffers==25.12.19
+protobuf==7.36.2

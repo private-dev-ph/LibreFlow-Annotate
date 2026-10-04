@@ -24,3 +24,8 @@ runs
 # OS/editor noise
 .DS_Store
 Thumbs.db
+
+# Immutable versions and generated static artifacts are not build input data.
+versions
+dist
+py_scripts/:memory:.ses

@@ -1,0 +1,22 @@
+FROM python:3.12-slim AS worker-base
+ENV PYTHONUNBUFFERED=1 PYTHONNOUSERSITE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+COPY --chmod=0444 py_scripts/companion_worker.py /opt/companion-worker.py
+RUN mkdir /work && chown 65534:65534 /work
+WORKDIR /work
+ENTRYPOINT ["python", "/opt/companion-worker.py"]
+
+# Default build uses verified HTTPS package downloads.
+FROM worker-base AS worker-online
+RUN python -m pip install --no-cache-dir 'pip==26.2.1' \
+    && python -m pip install --no-cache-dir 'onnxruntime==1.30.0' 'numpy==2.5.2' 'opencv-python-headless==5.0.0.93' 'flatbuffers==25.12.19' 'protobuf==7.36.2'
+USER 65534:65534
+
+# Optional BuildKit wheelhouse context for machines whose Docker build has no egress.
+# scripts/build-companion-worker.sh verifies the wheel hashes before using this target.
+FROM worker-base AS worker-offline
+COPY --from=wheelhouse / /wheels/
+RUN python -m pip install --no-cache-dir --no-index --find-links=/wheels --require-hashes -r /wheels/requirements.txt \
+    && rm -rf /wheels
+USER 65534:65534
+
+FROM worker-online AS final
