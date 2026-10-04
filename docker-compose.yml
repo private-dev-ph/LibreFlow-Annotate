@@ -5,10 +5,19 @@ services:
       dockerfile: Dockerfile
     image: libreflow-annotate-app:local
     ports:
-      - "${PORT:-6767}:6767"
+      - "127.0.0.1:${PORT:-6767}:6767"
     environment:
       PORT: "6767"
-      SESSION_SECRET: "${SESSION_SECRET:-change-this-session-secret-for-docker}"
+      NODE_ENV: "${NODE_ENV:-development}"
+      SESSION_SECRET: "${SESSION_SECRET:-}"
+      AUTOMATION_SECRET_KEY: "${AUTOMATION_SECRET_KEY:-}"
+      AUTOMATION_SECRET_KEY_ID: "${AUTOMATION_SECRET_KEY_ID:-}"
+      AUTOMATION_SECRET_KEYS: "${AUTOMATION_SECRET_KEYS:-}"
+      AUTOMATION_LEGACY_KEY: "${AUTOMATION_LEGACY_KEY:-}"
+      SESSION_STORE_DIR: "/app/data/sessions"
+      APP_ORIGINS: "${APP_ORIGINS:-}"
+      COOKIE_SAME_SITE: "${COOKIE_SAME_SITE:-lax}"
+      TRUST_PROXY: "${TRUST_PROXY:-loopback}"
       INFER_SERVER_URL: "http://inference:7878"
     volumes:
       - ./data:/app/data
@@ -35,7 +44,7 @@ services:
       POSTGRES_USER: "${POSTGRES_USER:-libreflow}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-libreflow-dev-password}"
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - libreflow-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -52,8 +61,9 @@ services:
     image: libreflow-annotate-inference:local
     environment:
       YOLO_CONFIG_DIR: "/tmp/ultralytics"
-    ports:
-      - "${INFER_PORT:-7878}:7878"
+    # The path-based trusted inference API is accessible only inside Compose.
+    expose:
+      - "7878"
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
