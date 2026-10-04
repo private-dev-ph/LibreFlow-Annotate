@@ -1,9 +1,9 @@
 # Current handoff
 
-Current branch: web-deployment. Integration SHA before this documentation commit: 3d1dfb4784c574b9e4ea1202bb146e7fe0032324.
+Current branch: web-deployment. Integration SHA before this documentation commit: 8246d6ad5901a61ff9c634952db7a664745a6f48.
 Baseline main: 27ceb593339ef444d6d85b5240d350ff13a7db5f (unchanged).
 
-Latest verified milestone: Merged 678b701 security followup; 16 security/runtime/migration tests passed.
+Latest verified milestone: Merged 8328a53 isolated companion; 24 Python tests and real HTTPS browser inference passed (19 host asset GETs, 2 uploads only to loopback).
 
 Completed: architecture, storage/encryption, provider adapters, encrypted drafts/transfers, offline conflict preservation, self-hosted sessions/CSRF/uploads/model policy. Uncommitted companion/static/quality/migration work is being integrated in dependency order.
 Next action: verify and commit the remaining feature scopes, merge to web-deployment, then run integrated security review and full tests. Main alone performs Git operations; all agents are frozen.
