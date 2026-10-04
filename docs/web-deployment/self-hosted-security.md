@@ -19,7 +19,7 @@ Generate independent values with a password manager or a cryptographically secur
 
 `TRUST_PROXY` is an Express trusted-proxy value such as `loopback`, a specific proxy address or subnet, or `false` for direct TLS termination by the application. Set it to the narrowest value that describes the actual proxy. The application always marks production cookies `Secure`; correctly trusted HTTPS forwarding is needed when TLS ends at a proxy. `COOKIE_SAME_SITE` accepts `lax`, `strict`, or `none`; `none` requires HTTPS. Set `APP_ORIGINS` to exact browser origins separated by commas, with no path component. It controls credentialed CORS and browser mutation requests, including login and registration.
 
-Sessions are regenerated after successful login and registration. Login and registration limits are applied by client address and normalized email or username. Registration requires 12–128 characters with at least three of lowercase, uppercase, digits, and symbols. Existing accounts with shorter passwords can still sign in; change them through your account process before enabling a future password policy that requires rehashing.
+Sessions are regenerated after successful login and registration. Login and registration limits are applied by client address and normalized email or username. Registration requires at least 12 characters and at most 72 UTF-8 bytes (bcrypt input limit) with at least three of lowercase, uppercase, digits, and symbols. Existing accounts with shorter passwords can still sign in; change them through your account process before enabling a future password policy that requires rehashing.
 
 ## Automation encryption keys and rotation
 

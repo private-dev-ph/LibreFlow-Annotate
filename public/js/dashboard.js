@@ -99,15 +99,15 @@
         <div class="card-footer">
           <span class="card-date">Created ${date}</span>
           <div class="card-actions">
-            ${isOwner ? `<button class="card-btn danger btn-delete-card" data-id="${p.id}">Delete</button>` : ''}
-            <button class="card-btn primary btn-open-card" data-id="${p.id}">Open ${LibreFlowIcons.icon('arrowRight')}</button>
+            ${isOwner ? `<button class="card-btn danger btn-delete-card" data-id="${escHtml(p.id)}">Delete</button>` : ''}
+            <button class="card-btn primary btn-open-card" data-id="${escHtml(p.id)}">Open ${LibreFlowIcons.icon('arrowRight')}</button>
           </div>
         </div>
       `;
 
       card.querySelector('.btn-open-card').addEventListener('click', e => {
         e.stopPropagation();
-        window.location.href = `/project?projectId=${p.id}`;
+        window.location.href = `/project?projectId=${encodeURIComponent(p.id)}`;
       });
       if (isOwner) {
         card.querySelector('.btn-delete-card')?.addEventListener('click', e => {
@@ -116,7 +116,7 @@
         });
       }
       card.addEventListener('click', () => {
-        window.location.href = `/project?projectId=${p.id}`;
+        window.location.href = `/project?projectId=${encodeURIComponent(p.id)}`;
       });
 
       grid.appendChild(card);
@@ -124,7 +124,9 @@
   }
 
   function escHtml(str) {
-    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(str ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[char]);
   }
 
   // ── Search ─────────────────────────────────────────────────────────────────

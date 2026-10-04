@@ -90,7 +90,7 @@
   function renderReview(revisions) {
     const statuses = review.allowedStatuses || review.statuses || Object.keys(statusLabels);
     statusSelect.innerHTML = statuses.map(status =>
-      `<option value="${status}" ${status === review.status ? 'selected' : ''}>${statusLabels[status] || status}</option>`
+      `<option value="${escapeHtml(status)}" ${status === review.status ? 'selected' : ''}>${escapeHtml(statusLabels[status] || status)}</option>`
     ).join('');
     badge.textContent = statusLabels[review.status] || review.status;
     badge.dataset.status = review.status;

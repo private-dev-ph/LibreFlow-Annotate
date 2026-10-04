@@ -22,7 +22,9 @@
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function esc(s) {
-    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(s ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[char]);
   }
 
   function timeAgo(iso) {
@@ -142,7 +144,7 @@
 
         closeDropdown();
         updateBadge();
-        if (projId) window.location.href = `/project?projectId=${projId}`;
+        if (projId) window.location.href = `/project?projectId=${encodeURIComponent(projId)}`;
       });
     });
 
