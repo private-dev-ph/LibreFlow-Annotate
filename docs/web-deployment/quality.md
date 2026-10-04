@@ -31,7 +31,7 @@ The JavaScript check rejects `innerHTML`, `eval()`, `localStorage`, persisted OA
 
 The local Node, Python, Chromium, read-only Docker and actual isolated worker checks passed. GitHub CI has not run because this branch has not been pushed. The local web security checker and workflow YAML structure were validated; the workflow result on GitHub remains pending.
 
-Workflow action references use SHAs verified locally against upstream refs with `git ls-remote`: checkout `11d5960a326750d5838078e36cf38b85af677262` (v4), setup-node `49933ea5288caeca8642d1e84afbd3f7d6820020` (v4), setup-python `a26af69be951a213d495a4c3e4e4022e16d87065` (v5), and the official Gitleaks action `ff98106e4c7b2bc287b24eaf42907196329070c7` (v2.3.9). These refs were checked locally; cloud CI has not yet confirmed a workflow run.
+Workflow action references use SHAs verified locally against upstream refs with `git ls-remote`: checkout `11d5960a326750d5838078e36cf38b85af677262` (v4), setup-node `49933ea5288caeca8642d1e84afbd3f7d6820020` (v4), setup-python `a26af69be951a213d495a4c3e4e4022e16d87065` (v5), and the formerly investigated Gitleaks action `ff98106e4c7b2bc287b24eaf42907196329070c7` (v2.3.9). The final workflow uses the checksum-pinned OSS CLI instead. These refs were checked locally; cloud CI has not yet confirmed a workflow run.
 
 The two reviewed historical Gitleaks matches are synthetic webhook test fixtures. `.gitleaksignore` records their exact fingerprint-qualified findings; it contains no wildcard suppressions. Dependency audits have no vulnerability allowlist or blanket suppression; findings fail the workflow and require dependency review.
 
