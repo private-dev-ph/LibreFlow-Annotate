@@ -59,6 +59,8 @@
   const annotationList = document.getElementById('annotation-list');
   const annCountEl     = document.getElementById('ann-count');
   const labelsContainer= document.getElementById('labels-container');
+  const labelsEmpty    = document.getElementById('labels-empty');
+  const annotationsEmpty = document.getElementById('annotations-empty');
   const saveIndicator  = document.getElementById('save-indicator');
   const toast          = document.getElementById('toast');
   const canvasEmpty    = document.getElementById('canvas-empty');
@@ -92,12 +94,16 @@
 
   function renderLabels() {
     labelsContainer.innerHTML = '';
+    labelsEmpty?.classList.toggle('hidden', labelClasses.length > 0);
     labelClasses.forEach((lc, i) => {
-      const chip = document.createElement('div');
+      const chip = document.createElement('button');
+      chip.type = 'button';
       chip.className = 'label-chip' + (i === activeLabel ? ' selected' : '');
       chip.style.background = lc.color;
       chip.style.color = contrastColor(lc.color);
       chip.title = lc.name;
+      chip.setAttribute('aria-label', `Use label ${lc.name}`);
+      chip.setAttribute('aria-pressed', String(i === activeLabel));
       chip.textContent = lc.name;
       chip.dataset.idx = i;
       chip.addEventListener('click', () => {
@@ -152,11 +158,17 @@
 
   // -- Image view mode --------------------------------------------------------
   document.querySelectorAll('.view-mode-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.mode === viewMode);
+    const active = btn.dataset.mode === viewMode;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', String(active));
     btn.addEventListener('click', () => {
       viewMode = btn.dataset.mode;
       localStorage.setItem('annotator_view_mode', viewMode);
-      document.querySelectorAll('.view-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === viewMode));
+      document.querySelectorAll('.view-mode-btn').forEach(b => {
+        const active = b.dataset.mode === viewMode;
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-pressed', String(active));
+      });
       renderImageList();
     });
   });
@@ -275,9 +287,11 @@
   function updateNullButton(img) {
     if (!img) { btnMarkNull.classList.remove('is-null'); btnMarkNull.textContent = ''; return; }
     btnMarkNull.innerHTML = img.isNull
-      ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="9"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Unmark Null`
-      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="9"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Mark as Null`;
+      ? `${LibreFlowIcons.icon('circleSlash')} Unmark Null`
+      : `${LibreFlowIcons.icon('circleSlash')} Mark as Null`;
     btnMarkNull.classList.toggle('is-null', Boolean(img.isNull));
+    btnMarkNull.setAttribute('aria-pressed', String(Boolean(img.isNull)));
+    btnMarkNull.setAttribute('aria-label', img.isNull ? 'Unmark image as null' : 'Mark image as null');
   }
 
   async function loadImage(idx) {
@@ -360,6 +374,7 @@
   function renderAnnotationList(shapes, selectedId) {
     annotationList.innerHTML = '';
     annCountEl.textContent = shapes.length;
+    annotationsEmpty?.classList.toggle('hidden', shapes.length > 0);
     shapes.forEach(s => {
       const li = document.createElement('li');
       if (s.id === selectedId) li.classList.add('selected');
@@ -368,7 +383,7 @@
         <span class="ann-label-text">${esc(s.label)}</span>
         <span class="ann-type">${s.type}</span>
         ${s.source && s.source !== 'manual' ? `<span class="ann-source" title="Source: ${esc(s.source)}">${esc(s.source)}</span>` : ''}
-        ${Number.isFinite(Number(s.confidence)) ? `<span class="ann-confidence">${Math.round(Number(s.confidence)*100)}%</span>` : ''}
+        ${s.confidence != null && s.confidence !== '' && Number.isFinite(Number(s.confidence)) ? `<span class="ann-confidence">${Math.round(Number(s.confidence)*100)}%</span>` : ''}
         <button class="ann-del-btn" title="Delete" aria-label="Delete annotation">${LibreFlowIcons.icon('trash')}</button>`;
       li.querySelector('.ann-del-btn').addEventListener('click', e => {
         e.stopPropagation();
@@ -563,7 +578,10 @@
     const img = images[currentIndex];
     const statusEl = document.getElementById('auto-status');
     const btn = document.getElementById('btn-auto-infer');
-    btn.disabled = true; btn.textContent = 'Running...';
+    const setInferenceButton = (iconName, label) => {
+      btn.innerHTML = `${LibreFlowIcons.icon(iconName)} <span class="infer-button-label">${label}</span>`;
+    };
+    btn.disabled = true; setInferenceButton('loader', 'Running...');
     if (statusEl) { statusEl.textContent = ''; statusEl.className = 'auto-status'; }
 
     const confThreshold = parseFloat(document.getElementById('infer-conf-slider')?.value || '0.25');
@@ -605,7 +623,7 @@
       showToast('Inference failed - check console', 'warn');
       console.error('[Auto-Annotate]', e);
     } finally {
-      btn.disabled = false; btn.textContent = '▶ Run Inference';
+      btn.disabled = false; setInferenceButton('play', 'Run Inference');
     }
   });
 
@@ -681,19 +699,48 @@
     'tool-point':'point', 'tool-mask':'mask', 'tool-line':'line', 'tool-skeleton':'skeleton', 'tool-smart':'smart',
   };
   const toolBtnId = Object.fromEntries(Object.entries(toolBtns).map(([id, name]) => [name, id]));
+  const toolContext = {
+    select: ['Select / Move', 'Click an annotation to select it, then drag to move.'],
+    bbox: ['Bounding box', 'Drag a rectangle around an object.'],
+    rbox: ['Rotated box', 'Drag a box; use [ and ] to rotate 5°.'],
+    polygon: ['Polygon', 'Click points; press Enter or double-click to finish.'],
+    point: ['Point', 'Click once to place a point.'],
+    mask: ['Freehand mask', 'Drag to paint; hold Alt while dragging to subtract.'],
+    line: ['Polyline', 'Click points; double-click to finish.'],
+    skeleton: ['Keypoint skeleton', 'Click keypoints; double-click to finish.'],
+    smart: ['Smart mask', 'Click foreground; Shift background; Ctrl refines the current mask.'],
+  };
+
+  function updateToolContext(t) {
+    const [name, hint] = toolContext[t] || toolContext.select;
+    const nameEl = document.getElementById('active-tool-name');
+    const hintEl = document.getElementById('active-tool-hint');
+    if (nameEl) nameEl.textContent = name;
+    if (hintEl) hintEl.textContent = hint;
+  }
 
   function switchTool(t) {
-    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-    if (toolBtnId[t]) document.getElementById(toolBtnId[t]).classList.add('active');
+    Object.keys(toolBtns).forEach(id => {
+      const b = document.getElementById(id);
+      const active = toolBtnId[t] === id;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-pressed', String(active));
+    });
     Canvas.setTool(t);
+    updateToolContext(t);
     // Shift is a negative prompt modifier in Smart Mask mode, never a visibility toggle.
     Canvas.setAnnotationsVisible(true);
     document.getElementById('smart-mask-help')?.classList.toggle('hidden', t !== 'smart');
   }
 
   Object.entries(toolBtns).forEach(([id, t]) => {
-    document.getElementById(id).addEventListener('click', () => switchTool(t));
+    const button = document.getElementById(id);
+    button.type = 'button';
+    button.setAttribute('aria-label', button.title.split(' (')[0]);
+    button.setAttribute('aria-pressed', String(t === 'select'));
+    button.addEventListener('click', () => switchTool(t));
   });
+  updateToolContext('select');
 
   document.getElementById('tool-delete').addEventListener('click', () => Canvas.deleteSelected());
   document.getElementById('tool-undo').addEventListener('click',   () => Canvas.undo());
@@ -714,8 +761,38 @@
     });
   });
 
+  // -- Keyboard help ---------------------------------------------------------
+  const shortcutsDialog = document.getElementById('shortcuts-dialog');
+  const shortcutsButton = document.getElementById('btn-shortcuts');
+  let shortcutsOpener = null;
+  function openShortcuts() {
+    if (!shortcutsDialog) return;
+    shortcutsOpener = document.activeElement;
+    if (typeof shortcutsDialog.showModal === 'function') shortcutsDialog.showModal();
+    else shortcutsDialog.setAttribute('open', '');
+    document.getElementById('btn-close-shortcuts')?.focus();
+  }
+  function closeShortcuts() {
+    if (!shortcutsDialog) return;
+    if (typeof shortcutsDialog.close === 'function' && shortcutsDialog.open) shortcutsDialog.close();
+    else shortcutsDialog.removeAttribute('open');
+  }
+  shortcutsButton?.addEventListener('click', openShortcuts);
+  document.getElementById('btn-close-shortcuts')?.addEventListener('click', closeShortcuts);
+  document.getElementById('btn-close-shortcuts-footer')?.addEventListener('click', closeShortcuts);
+  shortcutsDialog?.addEventListener('close', () => shortcutsOpener?.focus?.());
+  // Keep dialog typing and Escape out of canvas, navigation and delete handlers.
+  shortcutsDialog?.addEventListener('keydown', e => e.stopPropagation());
+
+  function keyboardExcluded(target) {
+    const el = target instanceof Element ? target : null;
+    return Boolean(shortcutsDialog?.open)
+      || Boolean(el?.closest('input, textarea, select, [contenteditable="true"], dialog'));
+  }
+
   // -- Shift: hold to hide all annotations ------------------------------------
   document.addEventListener('keydown', e => {
+    if (keyboardExcluded(e.target)) return;
     if (e.key !== 'Shift' || e.repeat) return;
     if (Canvas.getCurrentTool() === 'smart') {
       Canvas.setAnnotationsVisible(true);
@@ -730,12 +807,14 @@
   window.addEventListener('blur', () => Canvas.setAnnotationsVisible(true));
   // Also restore when any modifier combo is pressed while Shift is down
   document.addEventListener('keydown', e => {
+    if (keyboardExcluded(e.target)) return;
     if (e.shiftKey && (e.ctrlKey || e.metaKey || e.altKey)) Canvas.setAnnotationsVisible(true);
   });
 
   // -- Ctrl: hold to temporarily swap to Select tool -------------------------
   let ctrlSwapTool = null; // tool to return to when Ctrl is released
   document.addEventListener('keydown', e => {
+    if (keyboardExcluded(e.target)) return;
     const tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     if ((e.key === 'Control' || e.key === 'Meta') && !e.repeat && !e.shiftKey && !e.altKey) {
@@ -760,8 +839,7 @@
 
   // -- Keyboard shortcuts -----------------------------------------------------
   document.addEventListener('keydown', e => {
-    const tag = e.target.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (keyboardExcluded(e.target)) return;
     const map = {
       v:'tool-select', b:'tool-bbox', r:'tool-rbox', p:'tool-polygon', k:'tool-point',
       u:'tool-mask', l:'tool-line', j:'tool-skeleton', s:'tool-smart', c:'tool-classification',
