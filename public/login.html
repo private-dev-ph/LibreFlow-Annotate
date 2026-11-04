@@ -42,7 +42,7 @@
         </div>
 
         <!-- Error banner -->
-        <div id="auth-error" class="auth-error hidden"></div>
+        <div id="auth-error" class="auth-error hidden" role="alert"></div>
 
         <!-- Login Form -->
         <form id="form-login" class="auth-form" autocomplete="on">
@@ -74,8 +74,10 @@
             <input id="reg-email" type="email" placeholder="you@example.com" autocomplete="email" required />
           </div>
           <div class="field-group">
-            <label for="reg-password">Password <small>(min. 6 characters)</small></label>
-            <input id="reg-password" type="password" placeholder="••••••••" autocomplete="new-password" required />
+            <label for="reg-password">Password</label>
+            <input id="reg-password" type="password" placeholder="••••••••" autocomplete="new-password" required aria-describedby="reg-password-guidance reg-password-error" />
+            <p id="reg-password-guidance" class="password-guidance">Use 8–72 characters, including at least one number and one symbol (such as !, @ or #).</p>
+            <p id="reg-password-error" class="field-error hidden" role="alert"></p>
           </div>
           <button type="submit" class="btn-primary" id="btn-register">
             <span class="btn-label">Create Account</span>
@@ -90,6 +92,7 @@
 
   </div>
   <script src="/js/icons.js"></script>
+  <script src="/js/password-policy.js"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/theme.js"></script>
 </body>
