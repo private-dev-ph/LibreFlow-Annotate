@@ -149,6 +149,29 @@ test('bounding-box operations leave pixels outside original boxes unchanged', as
   assert.equal(out.annotations[0].data.x, 4);
 });
 
+test('RGBA box replacement preserves alpha and untouched pixels', async () => {
+  const f = await fixture(12, 8);
+  const rgba = Buffer.alloc(12 * 8 * 4);
+  for (let y = 0; y < 8; y += 1) for (let x = 0; x < 12; x += 1) {
+    const offset = (y * 12 + x) * 4;
+    rgba[offset] = 20; rgba[offset + 1] = 40; rgba[offset + 2] = 60; rgba[offset + 3] = (x * 17 + y * 13) % 256;
+  }
+  await sharp(rgba, { raw: { width: 12, height: 8, channels: 4 } }).png().toFile(f.input);
+  const image = sourceImage(f, [{ id: 'box', type: 'bbox', data: { x: 3, y: 2, width: 4, height: 3 } }]);
+  const out = await augmentImage({ image, helpers, rng: () => 0, config: normalizeAugmentation({ boundingBox: { enabled: true, brightness: { enabled: true, mode: 'additive', min: 10, max: 10 } } }), workDir: path.join(f.root, 'rgba') });
+  const before = await pixels(image.path); const after = await pixels(out.path);
+  assert.equal(after.info.channels, 4);
+  for (let y = 0; y < 8; y += 1) for (let x = 0; x < 12; x += 1) {
+    if (x >= 3 && x < 7 && y >= 2 && y < 5) continue;
+    const offset = (y * 12 + x) * 4;
+    assert.deepEqual([...after.data.subarray(offset, offset + 4)], [...before.data.subarray(offset, offset + 4)]);
+  }
+  for (let y = 2; y < 5; y += 1) for (let x = 3; x < 7; x += 1) {
+    const offset = (y * 12 + x) * 4;
+    assert.equal(after.data[offset + 3], before.data[offset + 3]);
+  }
+});
+
 test('box geometric augmentation rejects intersecting spatial annotations', async () => {
   const f = await fixture(20, 16);
   const image = sourceImage(f, [
@@ -159,19 +182,33 @@ test('box geometric augmentation rejects intersecting spatial annotations', asyn
   await assert.rejects(() => augmentImage({ image, config, helpers, rng: () => 0.5, workDir: f.root }), /intersects a spatial annotation/);
 });
 
-test('shear maps asymmetric bbox coordinates consistently for both signs', async () => {
-  const f = await fixture(20, 20, [[20, 80, 140], [220, 100, 30]]);
-  const image = sourceImage(f, [{ id: 'box', type: 'bbox', data: { x: 2, y: 4, width: 4, height: 4 } }]);
-  const negative = await augmentImage({ image, helpers, rng: () => 0.25, config: normalizeAugmentation({ shear: { enabled: true, x: 20, y: 0 } }), workDir: path.join(f.root, 'negative') });
-  const positive = await augmentImage({ image, helpers, rng: () => 0.75, config: normalizeAugmentation({ shear: { enabled: true, x: 20, y: 0 } }), workDir: path.join(f.root, 'positive') });
-  assert.equal(negative.width, positive.width); assert.equal(negative.height, positive.height);
-  const tangent = Math.tan(10 * Math.PI / 180);
-  assert.ok(Math.abs(positive.annotations[0].data.x - (2 - tangent * 6)) < 1e-6);
-  assert.ok(Math.abs(negative.annotations[0].data.x - (2 + tangent * 2)) < 1e-6);
-  assert.ok(Math.abs(positive.annotations[0].data.width - (4 + tangent * 4)) < 1e-6);
-  assert.ok(Math.abs(negative.annotations[0].data.width - (4 + tangent * 4)) < 1e-6);
-  assert.ok(negative.transforms.find(item => item.type === 'shear').x < 0);
-  assert.ok(positive.transforms.find(item => item.type === 'shear').x > 0);
+test('shear maps asymmetric colored foreground inside bbox for both axes and signs', async () => {
+  const f = await fixture(20, 20, [[0, 0, 0]]);
+  const sourcePixels = Buffer.alloc(20 * 20 * 3);
+  for (let y = 5; y < 11; y += 1) for (let x = 4; x < 10; x += 1) {
+    const offset = (y * 20 + x) * 3;
+    sourcePixels[offset] = 255; sourcePixels[offset + 1] = 20; sourcePixels[offset + 2] = 20;
+  }
+  await sharp(sourcePixels, { raw: { width: 20, height: 20, channels: 3 } }).png().toFile(f.input);
+  const image = sourceImage(f, [{ id: 'box', type: 'bbox', data: { x: 4, y: 5, width: 6, height: 6 } }]);
+  const cases = [{ rng: () => 0.25, dir: -1 }, { rng: () => 0.75, dir: 1 }];
+  for (const [index, current] of cases.entries()) {
+    const result = await augmentImage({ image, helpers, rng: current.rng, config: normalizeAugmentation({ shear: { enabled: true, x: 20, y: 20 } }), workDir: path.join(f.root, `shear-${index}`) });
+    const raw = await pixels(result.path);
+    const foreground = [];
+    for (let y = 0; y < raw.info.height; y += 1) for (let x = 0; x < raw.info.width; x += 1) {
+      const offset = (y * raw.info.width + x) * raw.info.channels;
+      if (raw.data[offset] > 180 && raw.data[offset + 1] < 100) foreground.push({ x, y });
+    }
+    const geometry = result.annotations[0].data;
+    assert.ok(foreground.length > 0);
+    assert.ok(Math.min(...foreground.map(point => point.x)) >= geometry.x - 1);
+    assert.ok(Math.max(...foreground.map(point => point.x)) <= geometry.x + geometry.width + 1);
+    assert.ok(Math.min(...foreground.map(point => point.y)) >= geometry.y - 1);
+    assert.ok(Math.max(...foreground.map(point => point.y)) <= geometry.y + geometry.height + 1);
+    const shear = result.transforms.find(item => item.type === 'shear');
+    assert.equal(Math.sign(shear.x), current.dir); assert.equal(Math.sign(shear.y), current.dir);
+  }
 });
 
 test('mosaic uses only train sources, remaps annotations and records all source IDs', async () => {
