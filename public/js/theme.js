@@ -32,6 +32,7 @@
 
   const root = document.documentElement;
   const button = document.getElementById('btn-theme-settings');
+  const renderIcon = (name, label = '') => window.LibreFlowIcons?.icon(name, label) || '';
 
   const getTheme = id => themes.find(theme => theme.id === id) || themes[0];
   const savedTheme = localStorage.getItem(STORAGE_KEY);
@@ -92,14 +93,14 @@
             <h2 id="theme-modal-title">Appearance</h2>
             <p>Choose a palette, then switch between light and dark mode.</p>
           </div>
-          <button class="theme-close" type="button" aria-label="Close theme settings">×</button>
+          <button class="theme-close" type="button" aria-label="Close theme settings">${renderIcon('close')}</button>
         </div>
         <div class="theme-mode-row">
-          <span class="theme-mode-caption">Light</span>
+          <span class="theme-mode-caption">${renderIcon('sun')}<span>Light</span></span>
           <button class="theme-mode-toggle" id="theme-mode-toggle" type="button" role="switch" aria-label="Toggle dark mode" aria-checked="false">
             <span class="theme-mode-track" aria-hidden="true"><span class="theme-mode-knob"></span></span>
           </button>
-          <span class="theme-mode-caption">Dark</span>
+          <span class="theme-mode-caption">${renderIcon('moon')}<span>Dark</span></span>
         </div>
         <div class="theme-options" role="radiogroup" aria-label="Color themes">
           ${themes.map(theme => `
@@ -110,7 +111,7 @@
               <span class="theme-option-name">${theme.name}</span>
               <span class="theme-option-desc">${theme.description}</span>
               <span class="theme-option-hex">${theme.colors.join(' · ')}</span>
-              <span class="theme-check" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg></span>
+              <span class="theme-check" aria-hidden="true">${renderIcon('check')}</span>
             </button>
           `).join('')}
         </div>

@@ -1,0 +1,37 @@
+/* Shared icon presentation. Glyphs inherit the surrounding theme color. */
+.lf-icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
+  vertical-align: -0.15em;
+}
+
+[data-lf-icon] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-close .lf-icon,
+.theme-check .lf-icon { width: 14px; height: 14px; }
+
+.theme-mode-caption {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.theme-mode-caption .lf-icon { width: 13px; height: 13px; }
+
+.lf-icon-spin {
+  animation: lf-icon-spin 0.9s linear infinite;
+}
+
+@keyframes lf-icon-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lf-icon-spin { animation: none; }
+}

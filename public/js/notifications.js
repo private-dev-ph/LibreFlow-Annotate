@@ -64,11 +64,15 @@ const Notify = (() => {
       gap: 10px;
     }
     .notify-icon {
-      font-size: 16px;
-      line-height: 1;
+      display: inline-flex;
+      width: 20px;
+      height: 20px;
+      align-items: center;
+      justify-content: center;
       flex-shrink: 0;
       margin-top: 1px;
     }
+    .notify-icon .lf-icon { width: 18px; height: 18px; }
     .notify-body { flex: 1; min-width: 0; }
     .notify-title {
       font-size: 13px;
@@ -132,7 +136,7 @@ const Notify = (() => {
     error:   LibreFlowIcons.icon('close', 'Error'),
     warn:    LibreFlowIcons.icon('warning', 'Warning'),
     info:    LibreFlowIcons.icon('info', 'Information'),
-    progress: LibreFlowIcons.icon('clock', 'In progress'),
+    progress: LibreFlowIcons.icon('loader', 'In progress').replace('lf-icon-loader', 'lf-icon-loader lf-icon-spin'),
   };
 
   const AUTO_DISMISS = { success: 4000, info: 5000, warn: 6000, error: 8000, progress: 0 };
