@@ -30,6 +30,7 @@ const Canvas = (() => {
   let onSmartPrompt  = null; // optional async smart-segmentation prompt callback
   let hoveredId = null;      // annotation list hover highlight
   let annotationsHidden = false; // Shift-hold to temporarily hide all shapes
+  let labelsVisible = true;      // Persistent preference to hide annotation text only
   let smartShapeId = null;
   let lastCtrlMiddleDownAt = 0;
 
@@ -186,12 +187,14 @@ const Canvas = (() => {
       ctx.fillRect(x, y, width, height);
       ctx.strokeRect(x, y, width, height);
       // Label tag
-      ctx.fillStyle = color;
-      const tagH = 16 / scale;
-      ctx.fillRect(x, y - tagH, s.label.length * 7 / scale + 6 / scale, tagH);
-      ctx.fillStyle = '#fff';
-      ctx.font = `${11 / scale}px sans-serif`;
-      ctx.fillText(s.label, x + 3 / scale, y - 4 / scale);
+      if (labelsVisible) {
+        ctx.fillStyle = color;
+        const tagH = 16 / scale;
+        ctx.fillRect(x, y - tagH, s.label.length * 7 / scale + 6 / scale, tagH);
+        ctx.fillStyle = '#fff';
+        ctx.font = `${11 / scale}px sans-serif`;
+        ctx.fillText(s.label, x + 3 / scale, y - 4 / scale);
+      }
 
       if (selected) drawHandles(x, y, width, height, color);
     } else if (s.type === 'rbox') {
@@ -210,9 +213,11 @@ const Canvas = (() => {
         }
       }
       ctx.restore();
-      ctx.fillStyle = color;
-      ctx.font = `${11 / scale}px sans-serif`;
-      ctx.fillText(`${s.label} ${Math.round(angle)}°`, cx - width / 2, cy - height / 2 - 4 / scale);
+      if (labelsVisible) {
+        ctx.fillStyle = color;
+        ctx.font = `${11 / scale}px sans-serif`;
+        ctx.fillText(`${s.label} ${Math.round(angle)}°`, cx - width / 2, cy - height / 2 - 4 / scale);
+      }
     } else if (s.type === 'polygon') {
       const pts = s.data;
       if (!pts || pts.length < 2) return;
@@ -224,9 +229,11 @@ const Canvas = (() => {
       ctx.fill();
       ctx.strokeStyle = color;
       ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.font = `${11 / scale}px sans-serif`;
-      ctx.fillText(s.label, pts[0].x + 3 / scale, pts[0].y - 4 / scale);
+      if (labelsVisible) {
+        ctx.fillStyle = color;
+        ctx.font = `${11 / scale}px sans-serif`;
+        ctx.fillText(s.label, pts[0].x + 3 / scale, pts[0].y - 4 / scale);
+      }
     } else if (s.type === 'mask') {
       const contours = Array.isArray(s.data) ? [{ operation: 'add', points: s.data }] : (s.data?.contours || []);
       if (!contours.length) return;
@@ -243,7 +250,7 @@ const Canvas = (() => {
       ctx.strokeStyle = color;
       ctx.stroke();
       const anchor = contours[0]?.points?.[0];
-      if (anchor) {
+      if (anchor && labelsVisible) {
         ctx.fillStyle = color;
         ctx.font = `${11 / scale}px sans-serif`;
         ctx.fillText(s.label, anchor.x + 3 / scale, anchor.y - 4 / scale);
@@ -254,8 +261,10 @@ const Canvas = (() => {
       ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
       ctx.strokeStyle = color; ctx.stroke();
-      ctx.fillStyle = color; ctx.font = `${11 / scale}px sans-serif`;
-      ctx.fillText(s.label, pts[0].x + 3 / scale, pts[0].y - 4 / scale);
+      if (labelsVisible) {
+        ctx.fillStyle = color; ctx.font = `${11 / scale}px sans-serif`;
+        ctx.fillText(s.label, pts[0].x + 3 / scale, pts[0].y - 4 / scale);
+      }
     } else if (s.type === 'skeleton') {
       const points = s.data?.points || [];
       const edges = s.data?.edges || points.slice(1).map((_, i) => [i, i + 1]);
@@ -268,7 +277,7 @@ const Canvas = (() => {
         ctx.beginPath(); ctx.arc(p.x, p.y, 5 / scale, 0, Math.PI * 2);
         ctx.fillStyle = p.visible === false ? '#777' : color + 'cc'; ctx.fill();
       }
-      if (points[0]) {
+      if (points[0] && labelsVisible) {
         ctx.fillStyle = color; ctx.font = `${11 / scale}px sans-serif`;
         ctx.fillText(s.label, points[0].x + 7 / scale, points[0].y - 5 / scale);
       }
@@ -280,9 +289,11 @@ const Canvas = (() => {
       ctx.fill();
       ctx.strokeStyle = color;
       ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.font = `${11 / scale}px sans-serif`;
-      ctx.fillText(s.label, x + 8 / scale, y + 4 / scale);
+      if (labelsVisible) {
+        ctx.fillStyle = color;
+        ctx.font = `${11 / scale}px sans-serif`;
+        ctx.fillText(s.label, x + 8 / scale, y + 4 / scale);
+      }
     }
   }
 
@@ -1074,6 +1085,8 @@ const Canvas = (() => {
     clearHighlight()   { hoveredId = null; draw(); },
 
     setAnnotationsVisible(visible) { annotationsHidden = !visible; draw(); },
+    setLabelsVisible(visible) { labelsVisible = Boolean(visible); draw(); },
+    getLabelsVisible() { return labelsVisible; },
 
     undo() {
       if (!undoStack.length) return;

@@ -29,6 +29,9 @@
   let imageStatusFilter = localStorage.getItem('annotator_status_filter') || 'all';
   let imageSearchQuery = '';
   let autoSaveEnabled = localStorage.getItem('annotator_autosave') === 'true';
+  let showLabelsEnabled = true;
+  try { showLabelsEnabled = localStorage.getItem('annotator_show_labels') !== 'false'; }
+  catch (e) { /* use the visible default when storage is unavailable */ }
 
   // -- Labels -- load from project (merge with local additions) ---------------
   let labelClasses = [];
@@ -403,6 +406,18 @@
     autoSaveToggle.addEventListener('change', () => {
       autoSaveEnabled = autoSaveToggle.checked;
       localStorage.setItem('annotator_autosave', String(autoSaveEnabled));
+    });
+  }
+
+  const showLabelsToggle = document.getElementById('show-labels-toggle');
+  if (showLabelsToggle) {
+    showLabelsToggle.checked = showLabelsEnabled;
+    Canvas.setLabelsVisible(showLabelsEnabled);
+    showLabelsToggle.addEventListener('change', () => {
+      showLabelsEnabled = showLabelsToggle.checked;
+      Canvas.setLabelsVisible(showLabelsEnabled);
+      try { localStorage.setItem('annotator_show_labels', String(showLabelsEnabled)); }
+      catch (e) { /* preference remains in-memory for this session */ }
     });
   }
 
