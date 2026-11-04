@@ -37,6 +37,7 @@ test('scrypt hashes round-trip with random salts and reject wrong passwords', as
   assert.notEqual(first, second);
   assert.equal(await verifyPassword(password, first), true);
   assert.equal(await verifyPassword(password + 'x', first), false);
+  assert.equal(await verifyPassword(password, first + '\n'), false);
 });
 
 test('scrypt does not truncate passwords after 72 UTF-8 bytes', async () => {
@@ -57,6 +58,7 @@ test('legacy bcrypt hashes remain compatible but reject overlong UTF-8 input', a
   const legacyHash = await bcrypt.hash(legacyPrefix + 'x', 4);
   assert.equal(await verifyPassword(legacyPrefix + 'x', legacyHash), true);
   assert.equal(await verifyPassword(legacyPrefix + 'y', legacyHash), false);
+  assert.equal(await verifyPassword(legacyPrefix + 'x' + 'extra', legacyHash), false);
   assert.equal(await verifyPassword('😀'.repeat(19) + 'a', legacyHash), false);
 });
 
