@@ -17,7 +17,13 @@ The project page also has a **Versions** tab (`/project?projectId=<id>#versions`
 
 Use the two handles to set the train/valid and valid/test boundaries, or type any of the three percentages. Editing one percentage distributes the remainder proportionally between the other two; the total remains 100%. Keyboard arrow keys work on both handles. **Check image counts** computes actual source assignments after tag/class/background filtering; exact duplicate images remain together, so small datasets may not exactly match the percentages.
 
-Splits are assigned **before** preprocessing and augmentation. Tiles and isolated objects inherit their source split. Augmentation and mosaic sources use training images only. The history shows both source and final counts. Identical generated variants with identical labels are skipped.
+Splits are assigned **before** preprocessing and augmentation. Tiles and isolated objects inherit their source split. Augmentation and mosaic sources use training images only. The history shows both source and final counts.
+
+The **Training image multiplier** selects **2×–15×**, including the original. For example, 50 training images at 2× produce 50 originals plus 50 generated copies; at 15× they produce 50 originals plus 700 copies. Validation and test images are not augmented. The multiplier applies to training images after preprocessing, so tiling, object isolation and background filters can change the starting count. Turn off **Generate augmented images** for a preprocessing-only version.
+
+Each copy combines enabled effects with sampled values; selecting more effects does not increase the multiplier. Horizontal and vertical flips have separate toggles, each starting at a probability of **0.5** when enabled. Disabled flips have probability zero. Custom probabilities are retained when the toggle is switched off and on.
+
+Multiplier-based creation retains the requested copies even if sampled results match an original or another copy. `stats.duplicateVariantsKept` reports these repetitions. Saved versions remain unchanged. Legacy API requests using only `augmentation.count` retain their duplicate-skipping behavior (`stats.duplicateVariantsSkipped`).
 
 Preprocessing supports auto-orientation, percentage static crop, object isolation into classification crops, grayscale, class rename/merge/omission, tag requirements/exclusions, and a maximum background-image share. Resizing supports stretch, center crop, fit within, and reflected/black/white padding. Tiling runs before resizing and supports a grid, fixed pixel size, or fixed aspect ratio with overlap and padding. Contrast supports percentile stretching, histogram equalization, and adaptive equalization (CLAHE). Explicit fixed/aspect tiles cannot be combined with object isolation.
 
@@ -30,6 +36,8 @@ Each preprocessing and augmentation control has a **Preview effect** button. It 
 Exports retain split folders, lossless LibreFlow annotation metadata, the unchanged original `manifest.json` and checksums. `export-manifest.json` identifies the selected subset and its counts separately from the original snapshot. Object-isolation output also includes `classification/<split>/<class-folder>/`, with `classification/classes.json` mapping folder names back to labels. No model training service or paid augmentation feature is required.
 
 `GET .../versions/:versionId/download?format=roboflow&images=true&includeNull=false` accepts the five formats above. Omitting `format` preserves the complete legacy archive. `POST .../versions/sample-preview` accepts `{operation, processing, seed}` and requires the same source access and `versions:read` scope as other previews; it returns PNG thumbnails and geometry, without persisted files.
+
+For new API clients, set `processing.augmentation.multiplier` to an integer from 2 through 15. The saved configuration also records the derived additional-copy count (`multiplier - 1`). If both fields are supplied, they must agree. To disable augmentation, omit `multiplier` and use `count: 0`. The 50,000-image version limit still applies, and multiplier requests exceeding it are rejected before generating augmented copies.
 
 The controls follow these reference option families; this is an independent implementation, not a claim of byte-identical output to Roboflow:
 

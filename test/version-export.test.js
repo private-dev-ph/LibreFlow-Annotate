@@ -152,9 +152,15 @@ test('subset metrics count unique sources and generated variants', t => {
 test('null selection honors explicit null override and includeImages removes every image payload', t => {
   const { root, manifest } = fixture();
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  manifest.stats.duplicateVariantsKept = 2;
+  manifest.stats.duplicateVariantsSkipped = 3;
   const noNull = buildVersionExport({ manifest, versionDir: root, format: 'all', includeNull: false, includeImages: false });
   const noNullZip = new AdmZip(noNull);
   const selected = zipJson(noNull, 'export-manifest.json');
+  assert.equal(selected.stats.duplicateVariantsKept, undefined);
+  assert.equal(selected.stats.duplicateVariantsSkipped, undefined);
+  assert.equal(selected.sourceStats.duplicateVariantsKept, 2);
+  assert.equal(selected.sourceStats.duplicateVariantsSkipped, 3);
   assert.deepEqual(selected.images.map(image => image.id), ['image-one']);
   assert.ok(noNullZip.getEntries().every(entry => !entry.entryName.match(/\.(png|jpe?g|gif|webp|bmp|tiff?)$/i)));
   assert.ok(!noNullZip.getEntry('classification/valid'));

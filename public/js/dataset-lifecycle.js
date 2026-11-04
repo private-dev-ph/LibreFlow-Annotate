@@ -45,6 +45,22 @@
   function number(id) { return Number(document.getElementById(id).value); }
   function checked(id) { return document.getElementById(id).checked; }
 
+  function syncAugmentationControls() {
+    const enabled = checked('aug-enabled');
+    const multiplier = number('aug-multiplier');
+    const slider = document.getElementById('aug-multiplier');
+    slider.disabled = !enabled;
+    slider.setAttribute('aria-valuetext', `${multiplier} times, including the original`);
+    document.getElementById('aug-multiplier-value').textContent = `${multiplier}×`;
+    document.getElementById('aug-multiplier-help').textContent = enabled
+      ? `${multiplier}× keeps each training original and adds ${multiplier - 1} ${multiplier === 2 ? 'copy' : 'copies'}. For 50 training images: 50 originals + ${50 * (multiplier - 1)} copies = ${50 * multiplier} images. Validation and test images are not augmented.`
+      : 'Augmentation is off. Only preprocessed originals will be saved.';
+    for (const axis of ['hflip', 'vflip']) document.getElementById(`aug-${axis}`).disabled = !checked(`aug-${axis}-enabled`);
+  }
+  ['aug-enabled', 'aug-hflip-enabled', 'aug-vflip-enabled'].forEach(id => document.getElementById(id).addEventListener('change', syncAugmentationControls));
+  document.getElementById('aug-multiplier').addEventListener('input', syncAugmentationControls);
+  syncAugmentationControls();
+
   async function loadSource() {
     const source = await jsonRequest(`/api/${sourceType === 'project' ? 'projects' : 'datasets'}/${encodeURIComponent(sourceId)}`);
     document.getElementById('source-title').textContent = source.name || 'Untitled dataset';
@@ -77,8 +93,9 @@
         tile: { enabled: checked('pre-tile-enabled'), width: number('pre-tile-width'), height: number('pre-tile-height'), overlap: number('pre-tile-overlap') },
       },
       augmentation: {
-        count: number('aug-count'), seed: document.getElementById('aug-seed').value,
-        horizontalFlip: number('aug-hflip'), verticalFlip: number('aug-vflip'),
+        ...(checked('aug-enabled') ? { multiplier: number('aug-multiplier') } : { count: 0 }), seed: document.getElementById('aug-seed').value,
+        horizontalFlip: checked('aug-hflip-enabled') ? number('aug-hflip') : 0,
+        verticalFlip: checked('aug-vflip-enabled') ? number('aug-vflip') : 0,
         rotate: [...document.querySelectorAll('.aug-rotate:checked')].map(input => Number(input.value)),
         brightness: { enabled: checked('aug-brightness-enabled'), min: number('aug-brightness-min'), max: number('aug-brightness-max') },
         noise: { enabled: checked('aug-noise-enabled'), sigma: number('aug-noise-sigma'), probability: number('aug-noise-probability') },
@@ -112,6 +129,7 @@
         <div class="version-top"><div><div class="version-name"><span class="version-number">v${version.sequence}</span>${esc(version.name)}</div><div class="version-date">${new Date(version.createdAt).toLocaleString()}</div></div><span class="status-pill valid">Immutable</span></div>
         ${version.description ? `<div class="version-description">${esc(version.description)}</div>` : ''}
         <div class="version-stats"><span>${stats.images || 0} images</span><span>${stats.annotations || 0} annotations</span><span>${bytes(stats.bytes)}</span><span>train ${splits.train || 0}</span><span>valid ${splits.valid || 0}</span><span>test ${splits.test || 0}</span>${processed ? `<span>${stats.generatedImages || 0} generated</span>` : ''}</div>
+        ${version.processing?.augmentation?.multiplier ? `<p class="help">${esc(version.processing.augmentation.multiplier)}× training multiplier, including originals.${stats.duplicateVariantsKept ? ` ${stats.duplicateVariantsKept} copies repeat an earlier result.` : ''}</p>` : ''}
         <div class="hash-row"><span>Content</span><code title="${esc(version.contentHash)}">${esc(version.contentHash)}</code></div>
         <div class="hash-row"><span>Manifest</span><code title="${esc(version.manifestHash)}">${esc(version.manifestHash)}</code></div>
         <div class="version-actions">
@@ -154,7 +172,7 @@
     try { reproducibility = document.getElementById('repro-metadata').value.trim() ? JSON.parse(document.getElementById('repro-metadata').value) : {}; }
     catch (_) { return toast('Reproducibility metadata must be valid JSON.', true); }
     const rotations = [...document.querySelectorAll('.aug-rotate:checked')];
-    if (number('aug-count') > 0 && !rotations.length) return toast('Select at least one rotation choice for augmentation.', true);
+    if (checked('aug-enabled') && !rotations.length) return toast('Select at least one rotation choice for augmentation.', true);
     button.disabled = true;
     button.textContent = 'Materializing version…';
     try {

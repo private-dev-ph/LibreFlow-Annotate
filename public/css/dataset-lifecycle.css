@@ -2,6 +2,11 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, "Segoe UI", sans-serif; }
 .hidden { display: none !important; }
+#aug-multiplier { min-height: 44px; padding: 0; accent-color: var(--accent); cursor: pointer; }
+#aug-multiplier:disabled { opacity: .5; cursor: default; }
+#aug-multiplier:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+#aug-multiplier-value { font-size: 20px; color: var(--accent-strong); }
+#aug-multiplier-help { min-width: 0; overflow-wrap: anywhere; }
 .lifecycle-page { max-width: 1240px; margin: 0 auto; padding: 88px 28px 80px; }
 .lifecycle-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 28px; }
 .lifecycle-header h1 { margin: 4px 0 7px; font-size: 30px; letter-spacing: -.03em; }

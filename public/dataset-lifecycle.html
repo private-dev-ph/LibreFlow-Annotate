@@ -89,13 +89,16 @@
               <label>Overlap<input id="pre-tile-overlap" type="number" min="0" value="0" /></label>
             </div>
             <div class="processing-divider"></div>
+            <label class="check section-toggle"><input id="aug-enabled" type="checkbox" checked /> Generate augmented images</label>
             <div class="processing-grid">
-              <label>Extra variants / image<input id="aug-count" type="number" min="0" max="10" value="0" /></label>
+              <label>Training image multiplier <output id="aug-multiplier-value" for="aug-multiplier">2×</output><input id="aug-multiplier" type="range" min="2" max="15" step="1" value="2" aria-describedby="aug-multiplier-help" /></label>
               <label>Augmentation seed<input id="aug-seed" type="text" value="libreflow-augmentation" /></label>
             </div>
+            <p id="aug-multiplier-help" class="help" role="status">2× keeps each training original and adds 1 copy. Validation and test images are not augmented.</p>
+            <p class="help">Choose effects below to change the copies. Matching results are kept to preserve the multiplier. Tiling or object crops change how many images are multiplied.</p>
             <div class="processing-grid">
-              <label>Horizontal flip chance<input id="aug-hflip" type="number" min="0" max="1" step="0.05" value="0.5" /></label>
-              <label>Vertical flip chance<input id="aug-vflip" type="number" min="0" max="1" step="0.05" value="0" /></label>
+              <div><label class="check"><input id="aug-hflip-enabled" type="checkbox" /> Horizontal flip</label><label>Probability (0–1)<input id="aug-hflip" type="number" min="0" max="1" step="0.05" value="0.5" disabled /></label></div>
+              <div><label class="check"><input id="aug-vflip-enabled" type="checkbox" /> Vertical flip</label><label>Probability (0–1)<input id="aug-vflip" type="number" min="0" max="1" step="0.05" value="0.5" disabled /></label></div>
             </div>
             <fieldset class="rotation-fieldset"><legend>Rotation choices</legend>
               <label class="check"><input class="aug-rotate" type="checkbox" value="0" checked /> 0°</label>
