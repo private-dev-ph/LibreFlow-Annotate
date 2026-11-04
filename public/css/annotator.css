@@ -411,6 +411,8 @@ html, body { height: 100%; overflow: hidden; }
   transition: opacity .15s, color .15s; flex-shrink: 0;
 }
 #annotation-list li:hover .ann-del-btn { opacity: 1; }
+#annotation-list li:focus-within .ann-del-btn { opacity: 1; }
+@media (hover: none) { .ann-del-btn { opacity: 1; } }
 .ann-del-btn:hover { color: #e05c5c !important; }
 
 .ann-count {
