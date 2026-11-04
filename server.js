@@ -78,7 +78,7 @@ app.use('/uploads', requireAuth, requireUploadedImageAccess, express.static(path
 app.use('/models-static', requireAuth, requireModelFileAccess, express.static(path.join(__dirname, 'models')));
 app.use('/datasets-files', requireAuth, requireDatasetFileAccess, express.static(path.join(__dirname, 'datasets')));
 app.use('/docs', express.static(path.join(__dirname, 'docs')));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // ── Auth routes (public) ──────────────────────────────────────────────────────
 app.use('/api/auth', authRouter);
