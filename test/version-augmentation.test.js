@@ -60,10 +60,11 @@ test('augmentation multipliers normalize to count copies and reject invalid or m
   assert.equal(normalized.multiplier, 15);
   assert.deepEqual(normalizeAugmentation(normalized), normalized);
   assert.deepEqual(normalizeAugmentation({ multiplier: 2, count: 1 }).count, 1);
-  for (const multiplier of [null, 1, 1.5, 16, 'invalid']) {
+  for (const multiplier of [null, 1, 1.5, 16, 'invalid', [], [2], {}, true, false]) {
     assert.throws(() => normalizeAugmentation({ multiplier }), /multiplier must be an integer between 2 and 15/);
   }
   assert.throws(() => normalizeAugmentation({ multiplier: 2, count: 2 }), /count must equal multiplier - 1/);
+  assert.throws(() => normalizeAugmentation({ multiplier: 2, count: 1.4 }), /count must equal multiplier - 1/);
 });
 
 test('augmentImage requires injected helpers and seeded rng', async () => {

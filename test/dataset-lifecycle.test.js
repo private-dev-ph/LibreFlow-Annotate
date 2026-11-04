@@ -25,6 +25,7 @@ const {
   resizeAnnotations,
   transformAugmentedAnnotation,
   normalizeProcessingConfig,
+  materializeVersionInputs,
 } = require('../lib/version-processing');
 const { createCocoDocument, appendCocoAnnotation } = require('../lib/coco-export');
 
@@ -304,24 +305,39 @@ test('processed versions materialize deterministic resize and augmentation linea
 test('multiplier mode keeps duplicate train variants and leaves other splits unchanged', async t => {
   const dir = tempDir(t);
   const sourceFile = path.join(dir, 'tiny.png');
+  const validFile = path.join(dir, 'valid.png');
+  const testFile = path.join(dir, 'test.png');
   await sharp({ create: { width: 2, height: 2, channels: 3, background: '#778899' } }).png().toFile(sourceFile);
+  await sharp({ create: { width: 2, height: 2, channels: 3, background: '#112233' } }).png().toFile(validFile);
+  await sharp({ create: { width: 2, height: 2, channels: 3, background: '#aabbcc' } }).png().toFile(testFile);
   const images = Array.from({ length: 50 }, (_, index) => ({
     id: `train-${index + 1}`, originalName: `tiny-${index + 1}.png`, sourcePath: sourceFile, split: 'train',
+  })).concat([
+    { id: 'valid-1', originalName: 'valid.png', sourcePath: validFile, split: 'valid' },
+    { id: 'test-1', originalName: 'test.png', sourcePath: testFile, split: 'test' },
+  ]);
+  const annotations = Array.from({ length: 50 }, (_, index) => ({
+    id: `box-${index + 1}`, imageId: `train-${index + 1}`, label: 'object', type: 'bbox', data: { x: 0, y: 0, width: 1, height: 1 },
   }));
   const manifest = await createImmutableVersion({
     versionsRoot: path.join(dir, 'versions'), indexFile: path.join(dir, 'index.json'), id: 'multiplier-version',
-    sourceType: 'project', source: { id: 'project-multiplier', name: 'Multiplier', labelClasses: [] }, images,
+    sourceType: 'project', source: { id: 'project-multiplier', name: 'Multiplier', labelClasses: ['object'] }, images, annotations,
     processing: { augmentation: { multiplier: 2, rotate: [0] } },
   });
   assert.equal(manifest.processing.augmentation.multiplier, 2);
   assert.equal(manifest.processing.augmentation.count, 1);
-  assert.equal(manifest.stats.images, 100);
+  assert.equal(manifest.stats.images, 102);
   assert.equal(manifest.stats.generatedImages, 50);
   assert.equal(manifest.stats.augmentationVariants, 50);
   assert.equal(manifest.stats.duplicateVariantsKept, 50);
   assert.equal(manifest.stats.duplicateVariantsSkipped, 0);
-  assert.equal(new Set(manifest.images.map(image => image.id)).size, 100);
+  assert.equal(new Set(manifest.images.map(image => image.id)).size, 102);
   assert.equal(manifest.images.filter(image => image.split === 'train').length, 100);
+  assert.equal(manifest.images.filter(image => image.split === 'valid').length, 1);
+  assert.equal(manifest.images.filter(image => image.split === 'test').length, 1);
+  assert.equal(manifest.images.filter(image => image.split !== 'train').every(image => image.lineage.variant === 'base'), true);
+  assert.equal(new Set(manifest.annotations.map(annotation => annotation.id)).size, manifest.annotations.length);
+  assert.equal(manifest.annotations.length, 100);
 });
 
 test('maximum multiplier creates fourteen copies per train image', async t => {
@@ -339,6 +355,41 @@ test('maximum multiplier creates fourteen copies per train image', async t => {
   assert.equal(manifest.stats.augmentationVariants, 28);
   assert.equal(manifest.stats.duplicateVariantsKept, 28);
   assert.equal(new Set(manifest.images.map(image => image.id)).size, 30);
+});
+
+test('legacy count-only no-op augmentation still skips duplicate variants', async t => {
+  const dir = tempDir(t);
+  const sourceFile = path.join(dir, 'tiny.png');
+  await sharp({ create: { width: 2, height: 2, channels: 3, background: '#778899' } }).png().toFile(sourceFile);
+  const manifest = await createImmutableVersion({
+    versionsRoot: path.join(dir, 'versions'), indexFile: path.join(dir, 'index.json'), id: 'legacy-no-op-version',
+    sourceType: 'project', source: { id: 'project-legacy-no-op', name: 'Legacy', labelClasses: [] },
+    images: [{ id: 'train-1', originalName: 'tiny.png', sourcePath: sourceFile, split: 'train' }],
+    processing: { augmentation: { count: 1, rotate: [0] } },
+  });
+  assert.equal(manifest.stats.images, 1);
+  assert.equal(manifest.stats.augmentationVariants, 0);
+  assert.equal(manifest.stats.duplicateVariantsSkipped, 1);
+  assert.equal(manifest.stats.duplicateVariantsKept, 0);
+});
+
+test('multiplier cap fails before augmentation generation', async t => {
+  const dir = tempDir(t);
+  const sourceFile = path.join(dir, 'tiny.png');
+  await sharp({ create: { width: 2, height: 2, channels: 3, background: '#778899' } }).png().toFile(sourceFile);
+  const preprocessing = require('../lib/version-preprocessing');
+  const originalPreprocessImage = preprocessing.preprocessImage;
+  preprocessing.preprocessImage = async ({ source }) => Array.from({ length: 3334 }, (_, index) => ({
+    path: source.sourcePath, width: 2, height: 2, annotations: [], suffix: `tile-${index}`, nameSuffix: `_${index}`, transforms: [],
+  }));
+  try {
+    await assert.rejects(() => materializeVersionInputs({
+      images: [{ id: 'train-1', originalName: 'tiny.png', sourcePath: sourceFile, split: 'train' }], annotations: [],
+      processing: { augmentation: { multiplier: 15, rotate: [0] } }, workDir: path.join(dir, 'processing'),
+    }), /50,000.*multiplier/);
+  } finally {
+    preprocessing.preprocessImage = originalPreprocessImage;
+  }
 });
 
 test('processed versions retain every rich annotation and its provenance', async t => {
