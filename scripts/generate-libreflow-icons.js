@@ -11,6 +11,10 @@ const path = require('node:path');
 
 const sourceRoot = process.argv[2];
 if (!sourceRoot) throw new Error('Pass the unpacked lucide-static package path');
+const packageJson = JSON.parse(fs.readFileSync(path.join(sourceRoot, 'package.json'), 'utf8'));
+if (packageJson.name !== 'lucide-static' || packageJson.version !== '0.468.0') {
+  throw new Error(`Expected lucide-static@0.468.0, got ${packageJson.name}@${packageJson.version}`);
+}
 
 const sourceNames = {
   check: 'check', close: 'x', warning: 'triangle-alert', info: 'info', clock: 'clock',
@@ -50,8 +54,13 @@ const entries = Object.entries(sourceNames).map(([name, source]) => {
 }).join('\n');
 const iconPath = path.resolve(__dirname, '..', 'public/js/icons.js');
 const current = fs.readFileSync(iconPath, 'utf8');
+const registryPattern = /const paths = Object\.freeze\(\{[\s\S]*?\n  \}\);/;
+if (!registryPattern.test(current)) throw new Error('Could not locate the paths registry in icons.js');
 const replacement = `const paths = Object.freeze({\n${entries}\n  });`;
-const updated = current.replace(/const paths = Object\.freeze\(\{[\s\S]*?\n  \}\);/, replacement);
-if (updated === current) throw new Error('Could not locate the paths registry in icons.js');
+const updated = current.replace(registryPattern, replacement);
+if (updated === current) {
+  console.log(`Icon registry already current (${Object.keys(sourceNames).length} paths)`);
+  process.exit(0);
+}
 fs.writeFileSync(iconPath, updated);
 console.log(`Generated ${Object.keys(sourceNames).length} icon paths from lucide-static`);
