@@ -64,11 +64,15 @@ const Notify = (() => {
       gap: 10px;
     }
     .notify-icon {
-      font-size: 16px;
-      line-height: 1;
+      display: inline-flex;
+      width: 20px;
+      height: 20px;
+      align-items: center;
+      justify-content: center;
       flex-shrink: 0;
       margin-top: 1px;
     }
+    .notify-icon .lf-icon { width: 18px; height: 18px; }
     .notify-body { flex: 1; min-width: 0; }
     .notify-title {
       font-size: 13px;
@@ -127,12 +131,13 @@ const Notify = (() => {
   container.id = 'notify-container';
   document.body.appendChild(container);
 
+  const renderIcon = (name, label = '') => window.LibreFlowIcons?.icon(name, label) || '';
   const ICONS = {
-    success: LibreFlowIcons.icon('check', 'Success'),
-    error:   LibreFlowIcons.icon('close', 'Error'),
-    warn:    LibreFlowIcons.icon('warning', 'Warning'),
-    info:    LibreFlowIcons.icon('info', 'Information'),
-    progress: LibreFlowIcons.icon('clock', 'In progress'),
+    success: renderIcon('check', 'Success'),
+    error:   renderIcon('close', 'Error'),
+    warn:    renderIcon('warning', 'Warning'),
+    info:    renderIcon('info', 'Information'),
+    progress: renderIcon('loader', 'In progress').replace('lf-icon-loader', 'lf-icon-loader lf-icon-spin'),
   };
 
   const AUTO_DISMISS = { success: 4000, info: 5000, warn: 6000, error: 8000, progress: 0 };
@@ -150,12 +155,12 @@ const Notify = (() => {
     el.innerHTML = `
       ${type === 'progress' ? '<div class="notify-shimmer"></div>' : ''}
       <div class="notify-top">
-        <span class="notify-icon">${ICONS[type] || LibreFlowIcons.icon('info', 'Information')}</span>
+        <span class="notify-icon">${ICONS[type] || renderIcon('info', 'Information')}</span>
         <div class="notify-body">
           <div class="notify-title">${escHtml(title)}</div>
           ${message ? `<div class="notify-msg notify-msg-el">${escHtml(message)}</div>` : ''}
         </div>
-        <button class="notify-close" title="Dismiss" aria-label="Dismiss notification">${LibreFlowIcons.icon('close')}</button>
+        <button class="notify-close" title="Dismiss" aria-label="Dismiss notification">${renderIcon('close')}</button>
       </div>
       ${type === 'progress' ? `
         <div class="notify-progress-bar-wrap">

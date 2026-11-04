@@ -12,14 +12,14 @@
   --bg3: #e7e3d9;
   --surface: #fbfaf7;
   --surface-2: #f5f2eb;
-  --accent: #e85a4f;
-  --accent-strong: #8e8d8a;
+  --accent: #c24238;
+  --accent-strong: #87443d;
   --accent2: #d8c3a5;
   --accent-soft: #f5d4c9;
   --danger: #c94d45;
   --success: #5b8a7d;
   --text: #343535;
-  --text-dim: #777671;
+  --text-dim: #686762;
   --border: #d8d2c7;
   --canvas-bg: #dedbd4;
   --overlay: rgba(52, 53, 53, .3);
@@ -45,7 +45,7 @@
   --danger: #c6514a;
   --success: #2d7f75;
   --text: #173657;
-  --text-dim: #6b737d;
+  --text-dim: #606873;
   --border: #d8c9c5;
   --canvas-bg: #ddd4d2;
   --overlay: rgba(18, 60, 105, .28);
@@ -62,14 +62,14 @@
   --bg3: #e7e3d9;
   --surface: #fbfaf7;
   --surface-2: #f5f2eb;
-  --accent: #e85a4f;
-  --accent-strong: #8e8d8a;
+  --accent: #c24238;
+  --accent-strong: #87443d;
   --accent2: #d8c3a5;
   --accent-soft: #f5d4c9;
   --danger: #c94d45;
   --success: #5b8a7d;
   --text: #343535;
-  --text-dim: #777671;
+  --text-dim: #686762;
   --border: #d8d2c7;
   --canvas-bg: #dedbd4;
   --overlay: rgba(52, 53, 53, .3);
@@ -93,7 +93,7 @@
   --danger: #c96858;
   --success: #087f78;
   --text: #13454b;
-  --text-dim: #5f7d7f;
+  --text-dim: #506e70;
   --border: #c9e1db;
   --canvas-bg: #dcebe6;
   --overlay: rgba(2, 102, 112, .28);
@@ -118,7 +118,7 @@
   --danger: #ef7043;
   --success: #08aaa8;
   --text: #31275b;
-  --text-dim: #7d7185;
+  --text-dim: #706377;
   --border: #e1d6c9;
   --canvas-bg: #e9e2d8;
   --overlay: rgba(49, 39, 91, .3);
@@ -136,7 +136,7 @@
   --bg3: #30252f;
   --surface: #261e29;
   --surface-2: #1e1821;
-  --accent: #ac3b61;
+  --accent: #da6d91;
   --accent-strong: #8eb3d8;
   --accent2: #edc7b7;
   --accent-soft: rgba(172, 59, 97, .22);
@@ -147,7 +147,7 @@
   --border: #4d3b47;
   --canvas-bg: #2b252d;
   --overlay: rgba(8, 7, 12, .68);
-  --on-accent: #fff;
+  --on-accent: #25121b;
   --accent2-ink: #24172a;
   --shadow: 0 18px 50px rgba(0, 0, 0, .34);
   --shadow-soft: 0 8px 26px rgba(0, 0, 0, .24);
@@ -160,7 +160,7 @@
   --bg3: #34302b;
   --surface: #2a2825;
   --surface-2: #211f1d;
-  --accent: #e85a4f;
+  --accent: #f07a6e;
   --accent-strong: #e98074;
   --accent2: #d8c3a5;
   --accent-soft: rgba(232, 90, 79, .2);
@@ -171,7 +171,7 @@
   --border: #4c453c;
   --canvas-bg: #302d29;
   --overlay: rgba(11, 10, 9, .7);
-  --on-accent: #fffaf5;
+  --on-accent: #281512;
   --accent2-ink: #2c251e;
   --shadow: 0 18px 50px rgba(0, 0, 0, .35);
   --shadow-soft: 0 8px 26px rgba(0, 0, 0, .25);
@@ -184,7 +184,7 @@
   --bg3: #194143;
   --surface: #173537;
   --surface-2: #12282a;
-  --accent: #026670;
+  --accent: #43b8b8;
   --accent-strong: #4bc8c8;
   --accent2: #fce181;
   --accent-soft: rgba(23, 233, 224, .17);
@@ -195,7 +195,7 @@
   --border: #31595a;
   --canvas-bg: #0d2729;
   --overlay: rgba(4, 19, 20, .72);
-  --on-accent: #f5fffb;
+  --on-accent: #0d2526;
   --accent2-ink: #173a3b;
   --shadow: 0 18px 50px rgba(0, 0, 0, .34);
   --shadow-soft: 0 8px 26px rgba(0, 0, 0, .24);
@@ -208,7 +208,7 @@
   --bg3: #342448;
   --surface: #281b38;
   --surface-2: #1e162d;
-  --accent: #a64ac9;
+  --accent: #bb73dc;
   --accent-strong: #17e9e0;
   --accent2: #fccd04;
   --accent-soft: rgba(166, 74, 201, .22);
@@ -219,7 +219,7 @@
   --border: #58436c;
   --canvas-bg: #241735;
   --overlay: rgba(9, 5, 18, .72);
-  --on-accent: #fff8f0;
+  --on-accent: #21112c;
   --accent2-ink: #2c2058;
   --shadow: 0 18px 50px rgba(0, 0, 0, .38);
   --shadow-soft: 0 8px 26px rgba(0, 0, 0, .26);
@@ -579,6 +579,34 @@ input:focus, select:focus, textarea:focus {
 .theme-option.active .theme-check { opacity: 1; transform: scale(1); }
 .theme-panel-footer { margin-top: 18px; color: var(--text-dim); font-size: 11px; }
 @keyframes theme-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Keep keyboard focus visible without moving the surrounding layout. */
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[tabindex]:not([tabindex="-1"]):not(canvas):focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html,
+  body,
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  #theme-modal,
+  #theme-modal *,
+  #top-nav,
+  #top-nav * {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 @media (max-width: 760px) {
   #top-nav { padding: 0 12px !important; }
