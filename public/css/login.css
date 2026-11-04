@@ -269,3 +269,14 @@ html, body {
   .auth-panel { padding: 36px 24px; }
   .auth-card { padding: 24px; }
 }
+
+@media (max-width: 900px) {
+  .login-page { flex-direction: column; }
+  .brand-panel { width: 100%; padding: 20px 24px; }
+  .brand-inner { width: 100%; max-width: 400px; }
+  .brand-logo { margin-bottom: 0; }
+  .brand-tagline, .brand-sub, .brand-features { display: none; }
+  .auth-panel { align-items: flex-start; padding: 24px 16px; }
+  .auth-card { padding: 24px; }
+  .field-group input { min-width: 0; font-size: 16px; min-height: 44px; }
+}

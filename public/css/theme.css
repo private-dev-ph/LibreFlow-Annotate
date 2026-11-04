@@ -608,7 +608,7 @@ summary:focus-visible,
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 1000px) {
   :root { --nav-h: 112px; }
   #top-nav {
     height: var(--nav-h) !important;
@@ -665,4 +665,43 @@ summary:focus-visible,
   }
   .theme-options { grid-template-columns: 1fr; }
   .theme-panel { padding: 20px; }
+}
+
+/* Compact navigation begins before breadcrumb and account controls collide. */
+.nav-left { min-width: 0; }
+.nav-breadcrumb { min-width: 0; }
+.nav-right { flex-shrink: 0; }
+@media (max-width: 1000px) {
+  .nav-logo, .nav-link, .nav-notif-btn, .btn-theme-settings, .btn-logout {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .nav-logo { justify-content: center; }
+  .btn-theme-settings { width: 44px; }
+  .nav-inbox-dropdown {
+    position: fixed;
+    top: calc(var(--nav-h) + 8px);
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: 420px;
+    margin-left: auto;
+    max-height: calc(100dvh - var(--nav-h) - 20px);
+    overflow-y: auto;
+  }
+  .nav-inbox-list { max-height: none; }
+}
+@media (pointer: coarse), (max-width: 600px) {
+  button, .card-btn, .btn-new-project, .upload-btn, .tab-btn,
+  .theme-mode-toggle, .toggle-switch, .btn-mark-all-read {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="color"]), select, textarea {
+    font-size: 16px;
+    min-height: 44px;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .toggle-knob { top: 50%; margin-top: -8px; }
 }

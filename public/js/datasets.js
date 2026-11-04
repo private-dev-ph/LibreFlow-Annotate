@@ -26,6 +26,12 @@
   let imageGroup = 'none';
   let uploadMode = 'new'; // new | add
 
+  const layout = document.querySelector('.datasets-layout');
+  document.getElementById('btn-datasets-back').addEventListener('click', () => {
+    layout.classList.add('show-dataset-list');
+    document.getElementById('dataset-search').focus();
+  });
+
   function selectedDataset() { return datasets.find(d => d.id === selectedId) || null; }
 
   async function loadDatasets() {
@@ -43,14 +49,15 @@
       (d.name || '').toLowerCase().includes(q) || (d.description || '').toLowerCase().includes(q)
     );
     list.innerHTML = filtered.map(d => `
-      <div class="dataset-item ${d.id === selectedId ? 'active' : ''}" data-id="${esc(d.id)}">
+      <button type="button" class="dataset-item ${d.id === selectedId ? 'active' : ''}" data-id="${esc(d.id)}">
         <div><strong>${esc(d.name)}</strong></div>
         <div class="dataset-meta">${d.imageCount || (d.images || []).length} images · ${d.sharedWithCollaborators ? 'Shared' : 'Private'}</div>
-      </div>
+      </button>
     `).join('');
     list.querySelectorAll('.dataset-item').forEach(el => {
       el.addEventListener('click', async () => {
         selectedId = el.dataset.id;
+        layout.classList.remove('show-dataset-list');
         renderDatasetsList();
         await refreshSelectedDataset();
       });
@@ -64,6 +71,7 @@
     const btnAddImage = document.getElementById('btn-add-image');
 
     if (!selectedId) {
+      layout.classList.add('show-dataset-list');
       dsTitle.textContent = 'Select dataset';
       dsSub.textContent = 'Choose a dataset to view and manage images.';
       grid.innerHTML = '';

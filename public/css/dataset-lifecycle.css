@@ -122,3 +122,23 @@ summary { color: var(--text-dim); cursor: pointer; font-size: 12px; font-weight:
 .toast.error { border-color: var(--danger); }
 @media (max-width: 950px) { .two-column, .import-columns { grid-template-columns: 1fr; } .metric-grid { grid-template-columns: repeat(3, 1fr); } .health-toolbar, .lifecycle-header { align-items: flex-start; flex-direction: column; } .health-actions { min-width: 0; width: 100%; } .header-proof { justify-content: flex-start; } }
 @media (max-width: 620px) { .lifecycle-page { padding: 76px 14px 50px; } .health-grid { grid-template-columns: 1fr; } .metric-grid { grid-template-columns: repeat(2, 1fr); } .form-grid { grid-template-columns: 1fr; } .health-actions { flex-direction: column; align-items: stretch; } .lifecycle-tabs { overflow-x: auto; } }
+
+.lifecycle-page { padding-top: calc(var(--nav-h) + 24px); }
+.card, .version-item, .two-column > *, .hash-row code { min-width: 0; }
+.two-column, .import-columns { grid-template-columns: minmax(0, .82fr) minmax(0, 1.5fr); }
+.modal-card { width: min(980px, 100%); max-height: calc(100dvh - 24px); overflow-y: auto; }
+.lifecycle-modal { padding: 12px; }
+.version-actions { flex-wrap: wrap; }
+@media (max-width: 950px) { .two-column, .import-columns { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 620px) {
+  .lifecycle-page { padding-top: calc(var(--nav-h) + 20px); }
+  .card { padding: 16px; }
+  .processing-grid, .processing-grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .split-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .check-grid { grid-template-columns: minmax(0, 1fr); }
+  .card-heading, .version-top { flex-wrap: wrap; }
+  .version-name { overflow-wrap: anywhere; }
+  .lifecycle-tabs { flex-wrap: wrap; }
+  .lifecycle-tab { padding: 12px; }
+  .back-link, summary { min-height: 44px; display: inline-flex; align-items: center; }
+}

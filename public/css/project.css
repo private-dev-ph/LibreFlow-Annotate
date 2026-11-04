@@ -1105,5 +1105,55 @@
 @media (max-width: 900px) {
   .review-overview { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
   .project-review-row { grid-template-columns: 42px minmax(130px, 1fr) 110px 65px; }
-  .project-reviewer-select, .project-review-reason { display: none; }
+
+}
+
+/* Keep all project sections reachable, including dynamically added tabs. */
+.project-tabs { flex-wrap: wrap; }
+.project-container, .section-card, .project-header-left, .tab-panel, .field { min-width: 0; }
+.project-header-left h1 { overflow-wrap: anywhere; }
+.project-review-row > div { min-width: 0; }
+@media (max-width: 900px) {
+  .project-review-row { grid-template-columns: 46px minmax(0, 1fr); align-items: start; }
+  .project-reviewer-select { grid-column: 2; width: 100%; }
+  .project-review-status, .project-open-issues, .project-review-open { grid-column: 2; }
+  .project-review-reason { white-space: normal; overflow-wrap: anywhere; font-size: 12px; margin-top: 6px; }
+  .project-review-open { display: inline-flex; align-items: center; min-height: 44px; }
+  .batch-header { flex-wrap: wrap; }
+  .batch-name { flex-basis: calc(100% - 30px); }
+  .batch-meta, .batch-actions { flex-wrap: wrap; }
+  .batch-assign-wrap { max-width: 100%; flex-wrap: wrap; }
+}
+@media (max-width: 600px) {
+  .project-container { padding: 24px 14px 50px; }
+  .section-card { padding: 16px; }
+  .project-tabs { gap: 4px; }
+  .tab-btn { padding: 10px 12px; }
+  .labels-input-row, .yaml-import-row, .images-controls, .collab-search-row,
+  .project-review-toolbar, .project-review-controls { flex-wrap: wrap; }
+  .labels-input-row input:not([type="color"]), .yaml-file-label,
+  .images-controls input, .collab-search-row input { flex: 1 1 100%; width: 100%; min-width: 0; }
+  .yaml-file-label span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .images-controls select, .project-review-controls select { flex: 1; min-width: 0; }
+  .project-review-toolbar { flex-direction: column; }
+  .project-review-controls { width: 100%; }
+  #panel-batches > .section-card { flex-direction: column; align-items: stretch !important; }
+  .compression-quality-row input[type="range"] { min-width: 0; width: 0; }
+  .dataset-import-row select { min-width: 0; width: 100%; }
+  .collab-row, .collab-lookup-result, .batch-note-row, .subbatch-note-row { flex-wrap: wrap; }
+  .collab-username, .collab-lookup-name, .label-name { overflow-wrap: anywhere; min-width: 0; }
+  .label-chip { max-width: 100%; flex-wrap: wrap; }
+  .batch-actions { width: 100%; }
+  .batch-meta { flex-shrink: 1; }
+  .subbatch-assign { flex-wrap: wrap; max-width: 100%; }
+  .review-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .modal, .split-dialog { padding: 12px; }
+  .modal-box, .split-dialog-box { min-width: 0; max-width: 100%; max-height: calc(100dvh - 24px); overflow-y: auto; padding: 20px; }
+  .drop-zone { padding: 24px 16px; }
+}
+@media (hover: none), (pointer: coarse) {
+  .img-thumb .img-del { display: flex; z-index: 3; }
+  .img-tag-edit { right: 54px; }
+  .img-tag-edit { flex-wrap: wrap; }
+  .img-tag-input { width: 100%; flex-basis: 100%; }
 }

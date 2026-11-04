@@ -24,7 +24,10 @@ const Notify = (() => {
       gap: 10px;
       z-index: 9999;
       pointer-events: none;
-      width: 340px;
+      width: min(340px, calc(100vw - 24px));
+      right: max(12px, env(safe-area-inset-right));
+      max-height: calc(100dvh - 24px);
+      overflow-y: auto;
     }
     .notify-item {
       background: var(--surface);
@@ -98,6 +101,7 @@ const Notify = (() => {
       flex-shrink: 0;
       transition: color .15s;
     }
+    @media (pointer: coarse) { .notify-close { min-width: 44px; min-height: 44px; } }
     .notify-close:hover { color: var(--accent-strong); }
 
     .notify-progress-bar-wrap {

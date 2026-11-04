@@ -119,7 +119,7 @@ input:focus, select:focus { outline: none; border-color: #6c63ff; }
   align-items: center;
   gap: 6px;
 }
-.images-tools input { min-width: 360px; flex: 1; }
+.images-tools input { min-width: 0; width: 100%; flex: 1 1 240px; }
 
 .dataset-images-scroll {
   margin-top: 12px;
@@ -139,7 +139,7 @@ input:focus, select:focus { outline: none; border-color: #6c63ff; }
 
 .dataset-images-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr));
   gap: 12px;
   min-width: 0;
 }
@@ -253,3 +253,30 @@ input:focus, select:focus { outline: none; border-color: #6c63ff; }
 .small-check { color: var(--text-dim); }
 .small-check input[type="checkbox"] { accent-color: var(--accent); inline-size: 16px; block-size: 16px; }
 .small-check:focus-within { color: var(--accent-strong); }
+
+.datasets-back { display: none; align-self: flex-start; margin-bottom: 12px; }
+.dataset-item { text-align: left; color: inherit; font: inherit; }
+.dataset-item strong, #dataset-title { overflow-wrap: anywhere; }
+@media (max-width: 900px), (max-height: 600px) {
+  .page-body { height: auto; }
+  .datasets-layout { height: auto !important; min-height: calc(100dvh - var(--nav-h)); }
+  .dataset-images-scroll { flex: none; min-height: 300px; max-height: 70dvh; }
+  .row, .row-actions { flex-wrap: wrap; }
+}
+@media (max-width: 700px) {
+  .datasets-layout { grid-template-columns: minmax(0, 1fr); padding: 12px; }
+  .datasets-list-card { display: none; }
+  .datasets-back { display: inline-flex; align-items: center; }
+  .show-dataset-list .datasets-list-card { display: flex; }
+  .show-dataset-list .dataset-main-card { display: none; }
+  .dataset-images-scroll { max-height: none; }
+  .toolbar, .images-tools { align-items: stretch; }
+  .images-tools input { flex-basis: 100%; }
+  .modal { padding: 12px; }
+  .modal-box { max-width: 100%; max-height: calc(100dvh - 24px); overflow-y: auto; }
+  #datasets-list { overflow: visible; }
+}
+@media (hover: none), (pointer: coarse) {
+  .btn-del-img { opacity: 1; pointer-events: auto; }
+  .small-check { min-height: 44px; }
+}
