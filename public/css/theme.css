@@ -631,7 +631,6 @@ summary:focus-visible,
   .nav-username,
   .nav-sep,
   .nav-breadcrumb,
-  .nav-link svg,
   .btn-theme-label { display: none !important; }
   .nav-links {
     flex: 1 1 auto;
@@ -644,6 +643,11 @@ summary:focus-visible,
     padding: 6px 5px !important;
     font-size: 12px;
     white-space: nowrap;
+  }
+  .nav-link svg {
+    display: block !important;
+    width: 18px;
+    height: 18px;
   }
   .nav-right {
     height: 56px;
@@ -665,6 +669,14 @@ summary:focus-visible,
   }
   .theme-options { grid-template-columns: 1fr; }
   .theme-panel { padding: 20px; }
+}
+
+/* Phone links use the SVG plus an accessible name; larger compact layouts
+ * retain the readable labels when there is room for them. */
+@media (max-width: 600px) {
+  .nav-link-label { display: none; }
+  .nav-link { position: relative; justify-content: center; flex: 1 1 0; }
+  .nav-badge { position: absolute; top: 2px; right: 2px; margin: 0; }
 }
 
 /* Compact navigation begins before breadcrumb and account controls collide. */

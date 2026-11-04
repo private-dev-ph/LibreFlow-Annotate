@@ -122,10 +122,57 @@ window.LibreFlowIcons = (() => {
     });
   }
 
-  if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => hydrate(document), { once: true });
-    else hydrate(document);
+  // Primary navigation is shared by several plain HTML pages. Keep its icon
+  // markup in one place so pages cannot drift into text-only navigation.
+  const navigationIcons = Object.freeze({
+    '/dashboard': ['grid', 'Dashboard'],
+    '/jobs': ['briefcase', 'Jobs'],
+    '/models': ['brain', 'Models'],
+    '/datasets': ['package', 'Datasets'],
+  });
+
+  function hydrateNavigation(root) {
+    const scope = root || (typeof document !== 'undefined' ? document : null);
+    if (!scope || typeof scope.querySelectorAll !== 'function') return;
+    scope.querySelectorAll('.nav-link').forEach(link => {
+      const href = link.getAttribute('href') || '';
+      let pathname;
+      try {
+        pathname = new URL(href, document.baseURI).pathname;
+      } catch {
+        pathname = href.split(/[?#]/, 1)[0];
+      }
+      pathname = pathname.replace(/\/$/, '') || '/';
+      const entry = navigationIcons[pathname];
+      if (!entry) return;
+      const [name, label] = entry;
+      if (!link.querySelector('svg')) {
+        link.insertAdjacentHTML('afterbegin', icon(name));
+      }
+      if (!link.querySelector('.nav-link-label')) {
+        const labelNode = document.createElement('span');
+        labelNode.className = 'nav-link-label';
+        labelNode.textContent = label;
+        [...link.childNodes]
+          .filter(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim())
+          .forEach(node => node.remove());
+        const badge = link.querySelector('.nav-badge');
+        if (badge) link.insertBefore(labelNode, badge);
+        else link.append(labelNode);
+      }
+      if (!link.getAttribute('aria-label')) link.setAttribute('aria-label', label);
+      if (!link.getAttribute('title')) link.setAttribute('title', label);
+    });
   }
 
-  return { icon, hydrate, names };
+  if (typeof document !== 'undefined') {
+    const hydrateAll = () => {
+      hydrate(document);
+      hydrateNavigation(document);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hydrateAll, { once: true });
+    else hydrateAll();
+  }
+
+  return { icon, hydrate, hydrateNavigation, names };
 })();
