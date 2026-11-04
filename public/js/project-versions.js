@@ -41,6 +41,7 @@
       $(`version-${key}`).value = splits[key];
       $(`version-${key}-count`).textContent = `${exact ? '' : '≈ '}${counts[key]} source images`;
     });
+    if ($('version-processing')) VersionProcessingFields.updateTrainingEstimate($('version-processing'), counts.train);
   }
   async function preview() {
     if (creating) return;
@@ -69,7 +70,9 @@
       const versions = await request(`${base}/versions`);
       list.innerHTML = versions.length ? versions.map(version => {
         const counts = version.splits?.counts || {}, sources = version.splits?.sourceCounts;
-        return `<article class="version-history-card"><div class="version-history-top"><div><h4>v${version.sequence} · ${esc(version.name)}</h4><span class="version-note">${esc(new Date(version.createdAt).toLocaleString())} · Immutable snapshot</span></div><button type="button" class="version-primary" data-export-version="${esc(version.id)}" data-version-name="${esc(version.name)}">${LibreFlowIcons.icon('download')} Export dataset</button></div>${version.description ? `<p>${esc(version.description)}</p>` : ''}<div class="version-counts"><span>${version.stats.images} images</span><span>Train ${counts.train || 0}</span><span>Valid ${counts.valid || 0}</span><span>Test ${counts.test || 0}</span><span>${version.stats.augmentationVariants || 0} augmented</span></div>${sources ? `<p class="version-note">Source split: ${sources.train} train / ${sources.valid} valid / ${sources.test} test. Final counts include preprocessing and training variants.</p>` : ''}<details><summary>Processing settings and reproducibility</summary><pre class="version-config">${esc(JSON.stringify({ splits: version.splits, processing: version.processing, contentHash: version.contentHash }, null, 2))}</pre></details></article>`;
+        const multiplier = Number(version.processing?.augmentation?.multiplier);
+        const multiplierLabel = Number.isInteger(multiplier) && multiplier >= 2 ? ` · ${multiplier}×` : '';
+        return `<article class="version-history-card"><div class="version-history-top"><div><h4>v${version.sequence} · ${esc(version.name)}${multiplierLabel}</h4><span class="version-note">${esc(new Date(version.createdAt).toLocaleString())} · Immutable snapshot</span></div><button type="button" class="version-primary" data-export-version="${esc(version.id)}" data-version-name="${esc(version.name)}">${LibreFlowIcons.icon('download')} Export dataset</button></div>${version.description ? `<p>${esc(version.description)}</p>` : ''}<div class="version-counts"><span>${version.stats.images} images</span><span>Train ${counts.train || 0}</span><span>Valid ${counts.valid || 0}</span><span>Test ${counts.test || 0}</span><span>${version.stats.augmentationVariants || 0} augmented</span></div>${sources ? `<p class="version-note">Source split: ${sources.train} train / ${sources.valid} valid / ${sources.test} test. Final counts include preprocessing and training variants.</p>` : ''}<details><summary>Processing settings and reproducibility</summary><pre class="version-config">${esc(JSON.stringify({ splits: version.splits, processing: version.processing, contentHash: version.contentHash }, null, 2))}</pre></details></article>`;
       }).join('') : '<p class="version-note">No versions yet. Your first version will appear here with an export link.</p>';
     } catch (err) { list.textContent = err.message; }
   }

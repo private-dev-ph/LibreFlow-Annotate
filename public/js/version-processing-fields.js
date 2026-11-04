@@ -8,8 +8,11 @@ window.VersionProcessingFields = (() => {
   const preview = (operation, title) => `<div class="version-operation-preview"><button type="button" data-preview-operation="${operation}" aria-label="Preview ${esc(title)}">${window.LibreFlowIcons?.icon('image') || ''} Preview effect</button><div class="version-preview-result" role="status" aria-live="polite" hidden></div></div>`;
   const setting = (path, title, help, fields) => `<details class="version-setting"><summary><label class="version-check"><input type="checkbox" data-path="${path}.enabled" data-enable>${esc(title)}</label><span class="version-setting-hint">${esc(help)}</span></summary><fieldset disabled><div class="version-fields">${fields}</div></fieldset>${preview(path, title)}</details>`;
   const group = (operation, title, help, content) => `<details class="version-setting"><summary>${esc(title)}<span class="version-setting-hint">${esc(help)}</span></summary><div class="version-fields">${content}</div>${preview(operation, title)}</details>`;
+  function flipFields(prefix) {
+    return `<div class="version-flip-fields"><div class="version-flip-row"><label class="version-check"><input type="checkbox" data-flip-toggle="${prefix}.horizontalFlip">Horizontal flip</label>${field(`${prefix}.horizontalFlip`, 'Probability (0–1)', 0.5, 0, 1, 0.05).replace('<input ', '<input disabled data-flip-probability="' + `${prefix}.horizontalFlip` + '" ')} </div><div class="version-flip-row"><label class="version-check"><input type="checkbox" data-flip-toggle="${prefix}.verticalFlip">Vertical flip</label>${field(`${prefix}.verticalFlip`, 'Probability (0–1)', 0.5, 0, 1, 0.05).replace('<input ', '<input disabled data-flip-probability="' + `${prefix}.verticalFlip` + '" ')} </div></div>`;
+  }
   function augmentation(prefix, box = false) {
-    let html = group(`${prefix}.flip`, 'Flip', 'Choose how often horizontal and vertical flips occur.', field(`${prefix}.horizontalFlip`, 'Horizontal probability (0–1)', 0, 0, 1, 0.05) + field(`${prefix}.verticalFlip`, 'Vertical probability (0–1)', 0, 0, 1, 0.05));
+    let html = group(`${prefix}.flip`, 'Flip', 'Choose whether each flip is applied, then set its probability.', flipFields(prefix));
     html += group(`${prefix}.rotate`, '90° rotation', 'Randomly choose one of the checked orientations.', [0, 90, 180, 270].map(angle => `<label class="version-check"><input type="checkbox" data-rotate="${prefix}" value="${angle}"${angle === 0 ? ' checked' : ''}>${({ 0: 'Original', 90: 'Clockwise', 180: 'Upside down', 270: 'Counterclockwise' })[angle]}</label>`).join(''));
     html += setting(`${prefix}.crop`, 'Random crop', 'Drop a random portion of the image area.', field(`${prefix}.crop.min`, 'Minimum area removed (%)', 0, 0, 90) + field(`${prefix}.crop.max`, 'Maximum area removed (%)', 20, 0, 90));
     html += setting(`${prefix}.rotation`, 'Rotation', 'Vary the angle clockwise or counterclockwise.', field(`${prefix}.rotation.degrees`, 'Maximum angle (°)', 15, 0, 180));
@@ -48,7 +51,7 @@ window.VersionProcessingFields = (() => {
     }).join('') : '<p>No label classes yet.</p>');
     pre += setting(`${p}.filterNull`, 'Filter background images', 'Limit images without labels, including those made empty by class changes.', field(`${p}.filterNull.maxPercent`, 'Maximum background share (%)', 10, 0, 100));
     pre += group(`${p}.filterTags`, 'Filter by tag', 'All required tags must match; any excluded tag removes the image.', tags.length ? tags.map(tag => `<label class="version-field">${esc(tag)}<select data-tag="${esc(tag)}"><option value="allow">Allow</option><option value="require">Require</option><option value="exclude">Exclude</option></select></label>`).join('') : '<p>No image tags yet.</p>');
-    container.innerHTML = `<section class="version-stage"><h3>3. Preprocessing</h3><p>Applied to training, validation and test images.</p>${pre}</section><section class="version-stage"><h3>4. Augmentation</h3><p>New variants are created from training images only. Start with zero copies for an unchanged baseline.</p><div class="version-fields">${field('augmentation.count', 'Additional copies per training image', 0, 0, 10)}<label class="version-field">Augmentation seed<input type="text" data-path="augmentation.seed" value="libreflow-augmentation" maxlength="120"></label></div><details class="version-settings-group"><summary>Image augmentations · 16 types</summary>${augmentation('augmentation')}</details><details class="version-settings-group"><summary><label class="version-check"><input type="checkbox" data-path="augmentation.boundingBox.enabled" data-enable>Bounding-box augmentations</label></summary><fieldset disabled><p>Change only the contents of bounding boxes. Overlapping boxes are processed in a consistent order. For boxes overlapping masks, polygons or other spatial labels, use image-level geometric augmentation.</p>${augmentation('augmentation.boundingBox', true)}</fieldset></details></section>`;
+    container.innerHTML = `<section class="version-stage"><h3>3. Preprocessing</h3><p>Applied to training, validation and test images.</p>${pre}</section><section class="version-stage"><h3>4. Augmentation</h3><p>New variants are created from training images only.</p><div class="augmentation-controls"><label class="version-check"><input type="checkbox" data-augmentation-master checked>Generate augmented images</label><label class="version-field augmentation-multiplier-field">Augmentation multiplier <span class="version-note">Each multiplier includes the original image: 2× = 1 original + 1 new; 15× = 1 original + 14 new.</span><input type="range" data-augmentation-multiplier min="2" max="15" step="1" value="2" aria-label="Augmentation multiplier" aria-valuemin="2" aria-valuemax="15" aria-valuenow="2"><output data-augmentation-multiplier-value for="augmentation-multiplier">2×</output></label><p class="version-note augmentation-estimate" data-augmentation-estimate>Training source estimate before tiling, object crops or filters: waiting for split counts.</p><p class="version-note augmentation-effects-help" data-augmentation-effects-help>No image effects selected yet. Choose one or more effects below to vary generated copies.</p></div><div class="version-fields"><label class="version-field">Augmentation seed<input type="text" data-path="augmentation.seed" value="libreflow-augmentation" maxlength="120"></label></div><details class="version-settings-group"><summary>Image augmentations · 16 types</summary>${augmentation('augmentation')}</details><details class="version-settings-group"><summary><label class="version-check"><input type="checkbox" data-path="augmentation.boundingBox.enabled" data-enable>Bounding-box augmentations</label></summary><fieldset disabled><p>Change only the contents of bounding boxes. Overlapping boxes are processed in a consistent order. For boxes overlapping masks, polygons or other spatial labels, use image-level geometric augmentation.</p>${augmentation('augmentation.boundingBox', true)}</fieldset></details></section>`;
     const syncTileMode = () => {
       const mode = container.querySelector('[data-path="preprocessing.tile.mode"]').value;
       container.querySelectorAll('[data-tile-mode]').forEach(node => {
@@ -57,6 +60,26 @@ window.VersionProcessingFields = (() => {
       });
     };
     syncTileMode();
+    const syncAugmentationControls = () => {
+      const enabled = container.querySelector('[data-augmentation-master]')?.checked;
+      const multiplier = Number(container.querySelector('[data-augmentation-multiplier]')?.value || 2);
+      const value = container.querySelector('[data-augmentation-multiplier-value]');
+      const estimate = container.querySelector('[data-augmentation-estimate]');
+      const sourceCount = Number(container.dataset.trainingSourceCount || 0);
+      if (value) value.textContent = `${multiplier}×`;
+      container.querySelector('[data-augmentation-multiplier]')?.setAttribute('aria-valuenow', String(multiplier));
+      if (estimate && sourceCount) {
+        estimate.textContent = enabled
+          ? `Training source estimate before tiling, object crops or filters: ≈ ${sourceCount} original${sourceCount === 1 ? '' : 's'} × ${multiplier} = ≈ ${sourceCount * multiplier} images (≈ ${sourceCount * (multiplier - 1)} new).`
+          : `Augmentation is off. Training source estimate before tiling, object crops or filters: ≈ ${sourceCount} original${sourceCount === 1 ? '' : 's'} only.`;
+      } else if (estimate && !enabled) {
+        estimate.textContent = 'Augmentation is off. Training source estimate before tiling, object crops or filters: originals only.';
+      }
+      const effectSelected = [...container.querySelectorAll('[data-flip-toggle]:checked, [data-enable]:checked')].some(input => input.checked) || [...container.querySelectorAll('[data-rotate]:checked')].some(input => Number(input.value) !== 0);
+      const effectsHelp = container.querySelector('[data-augmentation-effects-help]');
+      if (effectsHelp) effectsHelp.textContent = effectSelected ? 'Selected effects will be applied to generated copies.' : 'No image effects selected yet. Choose one or more effects below to vary generated copies.';
+    };
+    syncAugmentationControls();
     container.addEventListener('change', event => {
       const input = event.target;
       if (input.matches('[data-enable]')) {
@@ -65,13 +88,22 @@ window.VersionProcessingFields = (() => {
         if (input.checked) details.open = true;
       }
       if (input.dataset.path === 'preprocessing.tile.mode') syncTileMode();
+      if (input.matches('[data-flip-toggle]')) {
+        const probability = container.querySelector(`[data-flip-probability="${input.dataset.flipToggle}"]`);
+        if (probability) probability.disabled = !input.checked;
+      }
       if (input.matches('[data-class-action]')) {
         const rename = input.closest('[data-class]').querySelector('[data-class-rename]');
         rename.hidden = input.value !== 'rename';
         rename.querySelector('input').disabled = rename.hidden;
         rename.querySelector('input').required = !rename.hidden;
       }
+      syncAugmentationControls();
     });
+    container.addEventListener('input', event => {
+      if (event.target.matches('[data-augmentation-multiplier]')) syncAugmentationControls();
+    });
+    container.syncAugmentationControls = syncAugmentationControls;
   }
   function read(container) {
     const result = { preprocessing: {}, augmentation: {} };
@@ -81,7 +113,28 @@ window.VersionProcessingFields = (() => {
       keys.slice(0, -1).forEach(key => { node = node[key] ||= {}; });
       node[keys[keys.length - 1]] = value;
     };
-    container.querySelectorAll('[data-path]').forEach(input => set(input.dataset.path, input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value));
+    container.querySelectorAll('[data-path]').forEach(input => {
+      if (input.matches('[data-flip-probability]')) return;
+      set(input.dataset.path, input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value);
+    });
+    const augmentationEnabled = container.querySelector('[data-augmentation-master]')?.checked !== false;
+    const multiplierInput = container.querySelector('[data-augmentation-multiplier]');
+    if (augmentationEnabled) {
+      const multiplier = Math.min(15, Math.max(2, Number(multiplierInput?.value) || 2));
+      set('augmentation.multiplier', multiplier);
+      set('augmentation.count', multiplier - 1);
+    } else {
+      set('augmentation.count', 0);
+      delete result.augmentation.multiplier;
+    }
+    for (const prefix of ['augmentation', 'augmentation.boundingBox']) {
+      for (const axis of ['horizontalFlip', 'verticalFlip']) {
+        const input = container.querySelector(`[data-flip-probability="${prefix}.${axis}"]`);
+        const toggle = container.querySelector(`[data-flip-toggle="${prefix}.${axis}"]`);
+        const probability = toggle?.checked && input && !input.disabled ? Math.min(1, Math.max(0, Number(input.value) || 0)) : 0;
+        set(`${prefix}.${axis}`, probability);
+      }
+    }
     for (const prefix of ['augmentation', 'augmentation.boundingBox']) {
       const choices = [...container.querySelectorAll(`[data-rotate="${prefix}"]:checked`)].map(input => Number(input.value));
       set(`${prefix}.rotate`, choices.length ? choices : [0]);
@@ -102,5 +155,9 @@ window.VersionProcessingFields = (() => {
     });
     return result;
   }
-  return { mount, read };
+  function updateTrainingEstimate(container, count) {
+    container.dataset.trainingSourceCount = String(Math.max(0, Number(count) || 0));
+    if (typeof container.syncAugmentationControls === 'function') container.syncAugmentationControls();
+  }
+  return { mount, read, updateTrainingEstimate };
 })();
