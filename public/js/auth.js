@@ -11,6 +11,12 @@
   const formLogin = document.getElementById('form-login');
   const formReg   = document.getElementById('form-register');
   const errorDiv  = document.getElementById('auth-error');
+  const regPassword = document.getElementById('reg-password');
+  const regPasswordError = document.getElementById('reg-password-error');
+  const passwordPolicy = window.PasswordPolicy;
+  const passwordMessage = passwordPolicy?.MESSAGE || 'Use 8–72 characters, including at least one number and one symbol (such as !, @ or #).';
+
+  document.getElementById('reg-password-guidance').textContent = passwordMessage;
 
   // ── Tab switching ──────────────────────────────────────────────────────────
   function switchTab(name) {
@@ -37,6 +43,35 @@
     btn.querySelector('.btn-label').classList.toggle('hidden', loading);
     btn.querySelector('.btn-spinner').classList.toggle('hidden', !loading);
   }
+
+  function clearPasswordValidation() {
+    regPassword.removeAttribute('aria-invalid');
+    regPasswordError.textContent = '';
+    regPasswordError.classList.add('hidden');
+  }
+
+  function validateRegistrationPassword({ focus = false } = {}) {
+    const valid = passwordPolicy?.validate?.(regPassword.value) === true;
+    if (valid) {
+      clearPasswordValidation();
+      return true;
+    }
+
+    regPassword.setAttribute('aria-invalid', 'true');
+    regPasswordError.textContent = passwordMessage;
+    regPasswordError.classList.remove('hidden');
+    if (focus) regPassword.focus();
+    return false;
+  }
+
+  regPassword.addEventListener('blur', () => {
+    if (regPassword.value) validateRegistrationPassword();
+  });
+  regPassword.addEventListener('input', () => {
+    if (regPassword.getAttribute('aria-invalid') === 'true' && passwordPolicy?.validate?.(regPassword.value)) {
+      clearPasswordValidation();
+    }
+  });
 
   // ── Login ──────────────────────────────────────────────────────────────────
   formLogin.addEventListener('submit', async e => {
@@ -73,7 +108,7 @@
     const email    = document.getElementById('reg-email').value.trim();
     const password = document.getElementById('reg-password').value;
 
-    if (password.length < 6) { showError('Password must be at least 6 characters.'); return; }
+    if (!validateRegistrationPassword({ focus: true })) return;
 
     setLoading(btn, true);
     try {
