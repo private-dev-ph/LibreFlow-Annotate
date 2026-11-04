@@ -679,6 +679,10 @@ summary:focus-visible,
   .nav-badge { position: absolute; top: 2px; right: 2px; margin: 0; }
 }
 
+@media (min-width: 601px) and (max-width: 1100px) {
+  .nav-link { gap: 6px; }
+}
+
 /* Compact navigation begins before breadcrumb and account controls collide. */
 .nav-left { min-width: 0; }
 .nav-breadcrumb { min-width: 0; }
