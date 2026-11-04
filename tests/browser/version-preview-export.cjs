@@ -59,7 +59,7 @@ const root = path.resolve(__dirname, '../..');
     const gray = page.locator('[data-preview-operation="preprocessing.grayscale"]');
     await gray.click();
     await page.waitForFunction(() => typeof finishPreview === 'function');
-    await page.locator('[data-path="augmentation.count"]').fill('2');
+    await page.locator('[data-augmentation-multiplier]').fill('3');
     await page.evaluate(() => finishPreview());
     await page.waitForFunction(() => !document.querySelector('[data-preview-operation="preprocessing.grayscale"]').disabled);
     assert.match(await gray.locator('..').innerText(), /Settings changed/);
