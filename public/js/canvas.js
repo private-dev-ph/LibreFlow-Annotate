@@ -812,6 +812,7 @@ const Canvas = (() => {
   }
 
   function onDblClick(e) {
+    if (e && lastPointerType !== 'mouse') return;
     if (!['polygon', 'line', 'skeleton'].includes(tool)) return;
     const pts = tool === 'polygon' ? polygonPts : pathPts;
     while (pts.length > 1) {
@@ -840,7 +841,8 @@ const Canvas = (() => {
     });
   }
 
-  function onClick(e) {
+  function onClick(e, pointerRelease = false) {
+    if (!pointerRelease && (['touch', 'pen'].includes(e.pointerType) || e.sourceCapabilities?.firesTouchEvents)) return;
     if (!['polygon', 'line', 'skeleton'].includes(tool)) return;
     const rect = canvas.getBoundingClientRect();
     const imgPt = toImg(e.clientX - rect.left, e.clientY - rect.top);
@@ -858,6 +860,7 @@ const Canvas = (() => {
 
   // One captured pointer owns each gesture. A canceled drag never commits edits.
   let activePointer = null;
+  let lastPointerType = 'mouse';
   let pointerSnapshot = null;
   function cancelPointer() {
     if (activePointer === null) return;
@@ -892,7 +895,8 @@ const Canvas = (() => {
     if (!img || activePointer !== null || e.isPrimary === false || ![0, 1].includes(e.button)) return;
     e.preventDefault();
     activePointer = e.pointerId;
-    pointerSnapshot = { shapes: JSON.stringify(shapes), undo: [...undoStack], redo: [...redoStack], x: offsetX, y: offsetY };
+    lastPointerType = e.pointerType;
+    pointerSnapshot = { shapes: JSON.stringify(shapes), undo: [...undoStack], redo: [...redoStack], x: offsetX, y: offsetY, startX: e.clientX, startY: e.clientY };
     canvas.setPointerCapture(e.pointerId);
     onMouseDown(e);
   }
@@ -905,6 +909,12 @@ const Canvas = (() => {
     if (activePointer !== e.pointerId) return;
     onMouseMove(e);
     onMouseUp(e);
+    // Touch clicks can be suppressed after panning. Capture path taps here and
+    // ignore their later compatibility clicks to avoid missing/doubled vertices.
+    if (['touch', 'pen'].includes(e.pointerType)
+        && Math.hypot(e.clientX - pointerSnapshot.startX, e.clientY - pointerSnapshot.startY) <= 10) {
+      onClick(e, true);
+    }
     activePointer = null;
     pointerSnapshot = null;
     if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
