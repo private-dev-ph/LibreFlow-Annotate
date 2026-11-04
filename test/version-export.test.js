@@ -18,11 +18,13 @@ const fixture = () => {
   fs.writeFileSync(path.join(root, 'images', 'one.png'), bytes);
   fs.writeFileSync(path.join(root, 'images', 'null.png'), bytes);
   const manifest = {
-    schema: 'libreflow.dataset-version/v1', id: 'version-one', sequence: 1, name: 'Fixture', manifestHash: 'signed-hash',
+    schema: 'libreflow.dataset-version/v1', id: 'version-one', sequence: 1, name: 'Fixture', manifestHash: 'signed-hash', contentHash: 'source-content-hash',
+    stats: { sourceImages: 2, images: 2, generatedImages: 0, augmentationVariants: 0, annotations: 3, nullImages: 0, bytes: bytes.length * 2 },
+    splits: { counts: { train: 1, valid: 1, test: 0 }, sourceCounts: { train: 10, valid: 20, test: 30 } },
     source: { type: 'project', id: 'project-1', name: 'Fixture <source>' }, classes: [{ name: 'cat & dog' }, { name: 'class/unsafe' }, { name: "O'Reilly: line\nbreak" }],
     images: [
-      { id: 'image-one', originalName: 'strange & name.png', path: 'images/one.png', contentHash: hash(bytes), size: bytes.length, width: 100, height: 80, split: 'train', isNull: false },
-      { id: 'image-null', originalName: 'empty.png', path: 'images/null.png', contentHash: hash(bytes), size: bytes.length, width: 100, height: 80, split: 'valid', isNull: true, isExplicitNull: false },
+      { id: 'image-one', sourceImageId: 'source-one', originalName: 'strange & name.png', path: 'images/one.png', contentHash: hash(bytes), size: bytes.length, width: 100, height: 80, split: 'train', isNull: false },
+      { id: 'image-null', sourceImageId: 'source-null', originalName: 'empty.png', path: 'images/null.png', contentHash: hash(bytes), size: bytes.length, width: 100, height: 80, split: 'valid', isNull: true, isExplicitNull: false },
     ],
     annotations: [
       { id: 'bbox-1', imageId: 'image-one', label: 'cat & dog', type: 'bbox', data: { x: 10, y: 8, width: 20, height: 16 }, review: { status: 'approved' } },
@@ -70,6 +72,7 @@ test('all and five explicit formats export split data, rich metadata, and safe n
 
 test('format artifacts remain parseable and references resolve for every option combination', t => {
   const { root, manifest, original } = fixture();
+  const originalObject = structuredClone(manifest);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   for (const format of ['yolo', 'roboflow', 'coco', 'voc', 'csv']) {
     for (const includeImages of [true, false]) {
@@ -78,6 +81,15 @@ test('format artifacts remain parseable and references resolve for every option 
         const names = new Set(zip.getEntries().map(entry => entry.entryName));
         const selected = zipJson(zip.toBuffer(), 'export-manifest.json');
         assert.equal(Buffer.from(zip.readFile('manifest.json')).toString(), original);
+        assert.equal(selected.schema, 'libreflow.dataset-export/v1');
+        assert.equal(selected.contentHash, undefined);
+        assert.equal(selected.export.sourceContentHash, manifest.contentHash);
+        assert.deepEqual(selected.splits.counts, includeNull ? { train: 1, valid: 1, test: 0 } : { train: 1, valid: 0, test: 0 });
+        assert.equal(selected.splits.sourceCounts, undefined);
+        assert.deepEqual(selected.sourceSplits.sourceCounts, manifest.splits.sourceCounts);
+        assert.equal(selected.stats.sourceImages, includeNull ? 2 : 1);
+        assert.equal(selected.stats.generatedImages, 0);
+        assert.equal(selected.stats.nullImages, includeNull ? 1 : 0);
         assert.ok(names.has('classification/classes.json'));
         assert.ok(names.has('classification/labels.json'));
         assert.ok(![...names].some(name => /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i.test(name)) || includeImages);
@@ -108,15 +120,33 @@ test('format artifacts remain parseable and references resolve for every option 
         if (format === 'voc') {
           for (const split of ['train', 'val', 'test']) {
             const list = zip.readAsText(`ImageSets/Main/${split}.txt`).trim();
-            if (list) for (const stem of list.split('\n')) {
-              assert.ok([...names].some(name => name.endsWith(`/${stem}.xml`)));
-              if (includeImages) assert.ok([...names].some(name => name.includes(`/` + stem + '.png')));
+            if (list) for (const imageId of list.split('\n')) {
+              assert.ok(names.has(`Annotations/${imageId}.xml`));
+              if (includeImages) assert.ok(names.has(`JPEGImages/${imageId}.png`));
             }
           }
         }
       }
     }
   }
+  assert.deepEqual(manifest, originalObject);
+});
+
+test('subset metrics count unique sources and generated variants', t => {
+  const { root, manifest } = fixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const variant = structuredClone(manifest.images[0]);
+  variant.id = 'image-variant';
+  variant.sourceImageId = 'source-one';
+  variant.lineage = { sourceImageId: 'source-one', variant: 'augmentation-1' };
+  variant.split = 'train';
+  manifest.images.push(variant);
+  const selected = zipJson(buildVersionExport({ manifest, versionDir: root, format: 'csv', includeNull: true }), 'export-manifest.json');
+  assert.equal(selected.stats.sourceImages, 2);
+  assert.equal(selected.stats.images, 3);
+  assert.equal(selected.stats.generatedImages, 1);
+  assert.equal(selected.stats.augmentationVariants, 1);
+  assert.equal(selected.stats.nullImages, 2);
 });
 
 test('null selection honors explicit null override and includeImages removes every image payload', t => {
@@ -147,5 +177,29 @@ test('asset traversal and corrupt bytes fail with readable codes', t => {
   manifest.images[0].path = 'images/one.png';
   fs.writeFileSync(path.join(root, 'images', 'one.png'), 'tampered');
   assert.throws(() => buildVersionExport({ manifest, versionDir: root }), error => error.code === 'ASSET_INTEGRITY');
+  manifest.images[0].split = 'invalid';
+  assert.throws(() => buildVersionExport({ manifest, versionDir: root }), error => error.code === 'INVALID_SPLIT');
   assert.throws(() => buildVersionExport({ manifest, versionDir: root, format: 'not-a-format' }), error => error.code === 'INVALID_FORMAT');
+});
+
+test('rejects a directory junction that escapes the version root when supported', t => {
+  const { root, manifest } = fixture();
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'libreflow-version-export-outside-'));
+  const link = path.join(root, 'images', 'outside-link');
+  t.after(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+  let linked = false;
+  try {
+    fs.writeFileSync(path.join(outside, 'escape.png'), Buffer.from('outside'));
+    fs.symlinkSync(outside, link, 'junction');
+    linked = true;
+  } catch (_) {
+    // Junction creation may require elevated privileges on Windows.
+  }
+  if (!linked) return;
+  manifest.images[0].path = 'images/outside-link/escape.png';
+  manifest.images[0].contentHash = hash(Buffer.from('outside'));
+  assert.throws(() => buildVersionExport({ manifest, versionDir: root }), error => error.code === 'INVALID_ASSET_PATH');
 });
