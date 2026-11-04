@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/css/project.css" />
   <link rel="stylesheet" href="/css/theme.css" />
   <link rel="stylesheet" href="/css/icons.css" />
+  <link rel="stylesheet" href="/css/project-versions.css" />
 </head>
 <body>
 
@@ -107,6 +108,10 @@
           <span data-lf-icon="image" aria-hidden="true"></span>
           Images
         </button>
+        <button class="tab-btn" data-tab="versions">
+          <span data-lf-icon="database" aria-hidden="true"></span>
+          Versions
+        </button>
         <button class="tab-btn" data-tab="models">
           <span data-lf-icon="settings" aria-hidden="true"></span>
           Models
@@ -126,6 +131,9 @@
       </div>
 
       <!-- ── LABELS panel ── -->
+      <div class="tab-panel" id="panel-versions" aria-label="Dataset versions">
+        <div id="project-versions"><p class="versions-loading" role="status">Open Versions to prepare a training dataset.</p></div>
+      </div>
       <div class="tab-panel active" id="panel-labels">
         <div class="section-card">
           <h2>Label Classes</h2>
@@ -378,5 +386,8 @@
   <script src="/js/theme.js"></script>
   <script src="/js/project.js"></script>
   <script src="/js/project-review.js"></script>
+  <script src="/js/version-splits.js"></script>
+  <script src="/js/version-processing-fields.js"></script>
+  <script src="/js/project-versions.js"></script>
 </body>
 </html>

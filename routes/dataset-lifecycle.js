@@ -14,7 +14,10 @@ const {
   readVersionManifest,
   listVersions,
   writeJsonAtomic,
+  assignSplits,
 } = require('../lib/dataset-lifecycle');
+const { normalizeProcessingConfig } = require('../lib/version-processing');
+const { selectVersionInputs } = require('../lib/version-selection');
 const {
   parseArchive,
   parseCocoObject,
@@ -462,6 +465,21 @@ router.get('/:sourceType/:sourceId/versions', requireScopes('versions:read'), (r
   res.json(listVersions(VERSION_INDEX_FILE, req.params.sourceType, req.params.sourceId));
 });
 
+router.post('/:sourceType/:sourceId/versions/preview', requireScopes('versions:read'), (req, res) => {
+  const { resolved } = resolveRequestSource(req);
+  if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+  try {
+    const processing = normalizeProcessingConfig(req.body.processing || {});
+    const selected = selectVersionInputs({ ...resolved, classes: resolved.source.labelClasses || resolved.source.classes || [],
+      preprocessing: processing.preprocessing, selection: req.body.selection || 'annotated', seed: req.body.seed || 'libreflow' });
+    const splits = assignSplits(enrichImages(selected.images), { ratios: req.body.splitRatios,
+      seed: req.body.seed || 'libreflow', preserveExisting: req.body.preserveExistingSplits === true });
+    res.json({ selection: selected.selection, splits: { counts: splits.counts, ratios: splits.ratios, conflicts: splits.conflicts },
+      classes: selected.classes, tags: [...new Set(resolved.images.flatMap(image => image.tags || []))].sort(),
+      processing, message: 'Counts describe source images. Tiling, object isolation and training augmentation can change final counts.' });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 router.post('/:sourceType/:sourceId/versions', requireScopes('versions:write'), async (req, res) => {
   const { actor, resolved } = resolveRequestSource(req);
   if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
@@ -485,6 +503,7 @@ router.post('/:sourceType/:sourceId/versions', requireScopes('versions:write'), 
       },
       reproducibility: req.body.reproducibility || {},
       processing: req.body.processing || {},
+      selection: req.body.selection || 'all',
       appVersion: PACKAGE.version,
     });
     res.status(201).json(publicManifest(manifest, false));
@@ -517,6 +536,10 @@ router.get('/:sourceType/:sourceId/versions/:versionId/download', requireScopes(
   const zip = new AdmZip();
   const checksums = [];
   const classIndex = new Map(manifest.classes.map((label, index) => [label.name, index]));
+  const classificationClasses = manifest.classes.map((label, index) => ({
+    label: label.name, folder: `${String(index).padStart(3, '0')}_${String(label.name).replace(/[^a-z0-9_.-]+/gi, '_').slice(0, 80) || 'class'}`,
+  }));
+  const classificationRows = [];
   const annotationsByImage = new Map();
   manifest.annotations.forEach(annotation => {
     if (!annotationsByImage.has(annotation.imageId)) annotationsByImage.set(annotation.imageId, []);
@@ -544,6 +567,13 @@ router.get('/:sourceType/:sourceId/versions/:versionId/download', requireScopes(
     const exportLabel = `training/${image.split}/labels/${exportStem}.txt`;
     zip.addFile(exportImage, bytes);
     const imageAnnotations = annotationsByImage.get(image.id) || [];
+    imageAnnotations.filter(annotation => annotation.type === 'classification').forEach(annotation => {
+      const category = classIndex.get(annotation.label);
+      if (category === undefined) return;
+      const classificationPath = `classification/${image.split}/${classificationClasses[category].folder}/${exportStem}${extension}`;
+      zip.addFile(classificationPath, bytes);
+      classificationRows.push({ image: classificationPath, label: annotation.label, split: image.split });
+    });
     const yolo = [];
     imageAnnotations.forEach(annotation => {
       const category = classIndex.get(annotation.label);
@@ -577,6 +607,11 @@ router.get('/:sourceType/:sourceId/versions/:versionId/download', requireScopes(
   zip.addFile('manifest.json', manifestBuffer);
   zip.addFile('annotations.json', Buffer.from(JSON.stringify(manifest.annotations, null, 2)));
   zip.addFile('annotations/coco.json', Buffer.from(JSON.stringify(coco, null, 2)));
+  if (classificationRows.length) {
+    zip.addFile('classification/classes.json', Buffer.from(JSON.stringify(classificationClasses, null, 2)));
+    zip.addFile('classification/labels.json', Buffer.from(JSON.stringify(classificationRows, null, 2)));
+    zip.addFile('classification/README.txt', Buffer.from('Images are grouped by train/valid/test and class folder. classes.json maps each folder to its original class name. Geometry exports and the complete manifest are included at the archive root.\n'));
+  }
   ['train', 'valid', 'test'].forEach(split => {
     const lines = manifest.images.filter(image => image.split === split).map(image => image.path);
     zip.addFile(`splits/${split}.txt`, Buffer.from(lines.join('\n')));

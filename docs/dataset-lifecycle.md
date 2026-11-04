@@ -11,6 +11,27 @@ The UI is available at:
 
 Project and dataset pages link to it directly.
 
+## Project Versions tab
+
+The project page also has a **Versions** tab (`/project?projectId=<id>#versions`). Its builder includes annotated images, explicitly marked backgrounds, and images marked completed/submitted/approved. Untouched uploads are excluded. Originals, annotations and existing versions are never rewritten.
+
+Use the two handles to set the train/valid and valid/test boundaries, or type any of the three percentages. Editing one percentage distributes the remainder proportionally between the other two; the total remains 100%. Keyboard arrow keys work on both handles. **Check image counts** computes actual source assignments after tag/class/background filtering; exact duplicate images remain together, so small datasets may not exactly match the percentages.
+
+Splits are assigned **before** preprocessing and augmentation. Tiles and isolated objects inherit their source split. Augmentation and mosaic sources use training images only. The history shows both source and final counts. Identical generated variants with identical labels are skipped.
+
+Preprocessing supports auto-orientation, percentage static crop, object isolation into classification crops, grayscale, class rename/merge/omission, tag requirements/exclusions, and a maximum background-image share. Resizing supports stretch, center crop, fit within, and reflected/black/white padding. Tiling runs before resizing and supports a grid, fixed pixel size, or fixed aspect ratio with overlap and padding. Contrast supports percentile stretching, histogram equalization, and adaptive equalization (CLAHE). Explicit fixed/aspect tiles cannot be combined with object isolation.
+
+Image augmentation supports horizontal/vertical flips, quarter-turns, random crop, arbitrary rotation, shear, grayscale, hue, saturation, brightness, exposure, blur, salt-and-pepper noise, camera gain, motion blur, cutout and mosaic. Bounding-box settings support the documented geometric and lighting/noise operations. Geometric box-only operations cannot safely coexist with intersecting non-box spatial labels; use image-level operations for those images. Settings are stored with the immutable version, together with sampled transformation provenance and source IDs.
+
+**Export dataset** downloads the processed snapshot with YOLO labels, COCO annotations, split folders, a manifest and checksums. Object-isolation output also includes `classification/<split>/<class-folder>/`, with `classification/classes.json` mapping folder names back to labels. No model training service or paid augmentation feature is required.
+
+The controls follow these reference option families; this is an independent implementation, not a claim of byte-identical output to Roboflow:
+
+- [Image preprocessing reference](https://docs.roboflow.com/datasets/versions/dataset-versions/image-preprocessing)
+- [Image augmentation reference](https://docs.roboflow.com/datasets/versions/dataset-versions/image-augmentation)
+
+To preview a project version, `POST /api/dataset-lifecycle/project/:projectId/versions/preview` accepts the same selection, processing and split settings as creation. It returns selected/excluded counts, classes, tags and source split counts, without creating a version. Send `selection: "annotated"` and `preserveExistingSplits: false` to match the new tab. Existing API clients may retain `selection: "all"` and imported split assignments.
+
 ## Immutable versions
 
 Create a version:
