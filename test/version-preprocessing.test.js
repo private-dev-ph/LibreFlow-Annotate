@@ -164,6 +164,24 @@ test('isolate objects emits no fallback image when all boxes have zero area', as
   assert.deepEqual(output, []);
 });
 
+test('isolate objects clips fractional and negative bbox edges to exact pixels', async t => {
+  const fixtureData = await fixture(8, 6, 3, (x, y) => [x * 20, y * 30, 7]);
+  t.after(() => fs.promises.rm(fixtureData.directory, { recursive: true, force: true }));
+  const annotations = [
+    { id: 'fractional', label: 'fractional', type: 'bbox', data: { x: 1.5, y: 1.25, width: 2.2, height: 2.4 }, metadata: { keep: true } },
+    { id: 'negative', label: 'negative', type: 'bbox', data: { x: -1.2, y: -0.5, width: 3.4, height: 2.2 } },
+    { id: 'outside', label: 'outside', type: 'bbox', data: { x: 20, y: 20, width: 2, height: 2 } },
+  ];
+  const output = await preprocessImage({ source: fixtureData.source, annotations, config: { isolateObjects: true }, workDir: fixtureData.directory, helpers: helpers() });
+  assert.equal(output.length, 2);
+  assert.deepEqual(output.map(item => [item.width, item.height]), [[3, 3], [3, 2]]);
+  const fractionalRaw = await readRaw(output[0].path); const negativeRaw = await readRaw(output[1].path);
+  assert.deepEqual([...fractionalRaw.data.slice(0, 3)], [20, 30, 7]);
+  assert.deepEqual([...negativeRaw.data.slice(0, 3)], [0, 0, 7]);
+  assert.equal(output[0].annotations[0].metadata.keep, true);
+  assert.equal(output[0].annotations[0].label, 'fractional');
+});
+
 test('grayscale and all contrast modes alter pixels while disabled contrast does not', async t => {
   const fixtureData = await fixture(32, 8, 3, (x, y) => [x * 3, 20 + y, 80]);
   t.after(() => fs.promises.rm(fixtureData.directory, { recursive: true, force: true }));
