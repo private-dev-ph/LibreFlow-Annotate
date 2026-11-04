@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/css/nav.css" />
   <link rel="stylesheet" href="/css/datasets.css" />
   <link rel="stylesheet" href="/css/theme.css" />
+  <link rel="stylesheet" href="/css/icons.css" />
 </head>
 <body>
   <nav id="top-nav">
@@ -19,20 +20,20 @@
       </a>
       <div class="nav-links">
         <a class="nav-link" href="/dashboard">
-          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <span data-lf-icon="grid" aria-hidden="true"></span>
           Dashboard
         </a>
         <a class="nav-link" href="/jobs">
-          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A8 8 0 0 1 4.07 11H4a1 1 0 0 1 0-2h.07A8 8 0 0 1 11 4.07V4a1 1 0 0 1 2 0v.07A8 8 0 0 1 19.93 11H20a1 1 0 0 1 0 2h-.07A8 8 0 0 1 13 16.93z"/></svg>
+          <span data-lf-icon="briefcase" aria-hidden="true"></span>
           Jobs
           <span id="jobs-badge" class="nav-badge hidden">0</span>
         </a>
         <a class="nav-link" href="/models">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          <span data-lf-icon="brain" aria-hidden="true"></span>
           Models
         </a>
         <a class="nav-link active" href="/datasets">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="7.5 4.2 12 6.8 16.5 4.2"/><polyline points="7.5 19.8 7.5 12.6 3 10"/><polyline points="16.5 19.8 16.5 12.6 21 10"/></svg>
+          <span data-lf-icon="package" aria-hidden="true"></span>
           Datasets
         </a>
       </div>
@@ -43,7 +44,7 @@
         <span class="nav-username" id="nav-username">Loading…</span>
       </div>
       <button class="btn-theme-settings" id="btn-theme-settings" type="button" aria-label="Theme settings" aria-expanded="false" title="Theme settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.64 5.64l1.41 1.41M16.95 16.95l1.41 1.41M5.64 18.36l1.41-1.41M16.95 7.05l1.41-1.41"/><circle cx="12" cy="12" r="3.5"/><path d="M19 4.5l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5.5-1.5Z"/></svg>
+        <span data-lf-icon="settings" aria-hidden="true"></span>
         <span class="btn-theme-label">Theme</span>
       </button>
       <button class="btn-logout" id="btn-logout">Sign Out</button>
@@ -57,11 +58,11 @@
           <h2>Datasets</h2>
           <div class="row-actions">
             <button id="btn-refresh" class="btn icon-btn" title="Refresh">
-              <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3.2-6.9"/><polyline points="21 3 21 9 15 9"/></svg>
+              <span data-lf-icon="refresh" aria-hidden="true"></span>
               Refresh
             </button>
             <button id="btn-new-dataset" class="btn icon-btn primary" title="Create new dataset">
-              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              <span data-lf-icon="plus" aria-hidden="true"></span>
               New Dataset
             </button>
           </div>
@@ -76,15 +77,15 @@
 
         <div class="toolbar">
           <button id="btn-add-image" class="btn icon-btn">
-            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            <span data-lf-icon="plus" aria-hidden="true"></span>
             Add Image to Dataset
           </button>
           <button id="btn-export-zip" class="btn icon-btn">
-            <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+            <span data-lf-icon="download" aria-hidden="true"></span>
             Export ZIP
           </button>
           <button id="btn-dataset-lifecycle" class="btn icon-btn" title="Versions and dataset health">
-            <svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19V2"/><path d="M2 19h22"/></svg>
+            <span data-lf-icon="database" aria-hidden="true"></span>
             Versions &amp; Health
           </button>
           <label class="small-check"><input type="checkbox" id="export-include-tags" checked /> Include tags</label>
@@ -95,11 +96,11 @@
             <option value="size">Group: Size</option>
           </select>
           <button id="btn-edit-dataset" class="btn icon-btn">
-            <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            <span data-lf-icon="pencil" aria-hidden="true"></span>
             Edit
           </button>
           <button id="btn-delete-dataset" class="btn icon-btn danger">
-            <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/></svg>
+            <span data-lf-icon="trash" aria-hidden="true"></span>
             Delete
           </button>
         </div>
@@ -159,6 +160,7 @@
   </div>
 
   <script src="/js/api.js"></script>
+  <script src="/js/icons.js"></script>
   <script src="/js/jobs.js"></script>
   <script src="/js/notifications.js"></script>
   <script src="/js/theme.js"></script>

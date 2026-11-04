@@ -58,7 +58,7 @@
         <span class="project-review-status" data-status="${esc(item.status)}">${esc(labels[item.status] || item.status)}</span>
         <select class="project-reviewer-select" data-image-id="${esc(item.imageId)}" ${response.canManageReviewers ? '' : 'disabled'}>${reviewerOptions(item)}</select>
         <span class="project-open-issues">${item.openIssueCount ? `${item.openIssueCount} issue${item.openIssueCount === 1 ? '' : 's'}` : ''}</span>
-        <a class="project-review-open" href="/annotator?projectId=${encodeURIComponent(projectId)}&imageId=${encodeURIComponent(item.imageId)}">Open →</a>
+        <a class="project-review-open" href="/annotator?projectId=${encodeURIComponent(projectId)}&imageId=${encodeURIComponent(item.imageId)}">Open ${LibreFlowIcons.icon('arrowRight')}</a>
       </div>
     `).join('');
     list.querySelectorAll('.project-reviewer-select').forEach(select => {

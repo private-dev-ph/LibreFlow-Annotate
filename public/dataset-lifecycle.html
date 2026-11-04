@@ -9,23 +9,24 @@
   <link rel="stylesheet" href="/css/nav.css" />
   <link rel="stylesheet" href="/css/dataset-lifecycle.css" />
   <link rel="stylesheet" href="/css/theme.css" />
+  <link rel="stylesheet" href="/css/icons.css" />
 </head>
 <body>
   <nav id="top-nav">
     <div class="nav-left">
       <a class="nav-logo" href="/dashboard"><img class="nav-logo-icon" src="/assets/libreflow-logo.svg" alt="" /><span class="nav-logo-name">LibreFlow Annotate</span></a>
       <div class="nav-links">
-        <a class="nav-link" href="/dashboard">Dashboard</a>
-        <a class="nav-link" href="/jobs">Jobs</a>
-        <a class="nav-link" href="/models">Models</a>
-        <a class="nav-link" href="/datasets">Datasets</a>
+        <a class="nav-link" href="/dashboard"><span data-lf-icon="grid" aria-hidden="true"></span>Dashboard</a>
+        <a class="nav-link" href="/jobs"><span data-lf-icon="briefcase" aria-hidden="true"></span>Jobs</a>
+        <a class="nav-link" href="/models"><span data-lf-icon="brain" aria-hidden="true"></span>Models</a>
+        <a class="nav-link" href="/datasets"><span data-lf-icon="package" aria-hidden="true"></span>Datasets</a>
         <span class="nav-sep"></span>
         <span class="nav-breadcrumb" id="nav-breadcrumb">Dataset lifecycle</span>
       </div>
     </div>
     <div class="nav-right">
       <div class="nav-user"><div class="nav-avatar" id="nav-avatar">?</div><span class="nav-username" id="nav-username">Loading…</span></div>
-      <button class="btn-theme-settings" id="btn-theme-settings" type="button" aria-label="Theme settings" title="Theme settings">Theme</button>
+      <button class="btn-theme-settings" id="btn-theme-settings" type="button" aria-label="Theme settings" title="Theme settings"><span data-lf-icon="settings" aria-hidden="true"></span>Theme</button>
       <button class="btn-logout" id="btn-logout">Sign Out</button>
     </div>
   </nav>
@@ -33,7 +34,7 @@
   <main class="lifecycle-page">
     <header class="lifecycle-header">
       <div>
-        <a id="back-link" class="back-link" href="/dashboard">← Back</a>
+        <a id="back-link" class="back-link" href="/dashboard"><span data-lf-icon="arrowLeft" aria-hidden="true"></span> Back</a>
         <p class="eyebrow" id="source-kind">PROJECT DATASET</p>
         <h1 id="source-title">Loading…</h1>
         <p id="source-description" class="source-description"></p>
@@ -189,6 +190,7 @@
 
   <div id="toast" class="toast hidden" role="status"></div>
   <script src="/js/api.js"></script>
+  <script src="/js/icons.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/dataset-lifecycle.js"></script>
 </body>
