@@ -515,10 +515,11 @@ html, body { height: 100%; overflow: hidden; }
 
 /* ── Image list — grid modes ─────────────────────────────────────────────────── */
 .images-list-list { list-style: none; padding: 0; margin: 0; }
+/* Keep grid rows from stretching into empty sidebar height. */
 .images-list-grid-sm,
 .images-list-grid-lg {
   list-style: none; padding: 4px; margin: 0;
-  display: flex; flex-wrap: wrap; gap: 6px;
+  display: flex; flex-wrap: wrap; align-content: flex-start; align-items: flex-start; gap: 6px;
 }
 
 /* List mode items (inherit existing .img-list-item) */
@@ -542,16 +543,16 @@ html, body { height: 100%; overflow: hidden; }
 .img-list-item.active .img-dot-css.annotated { background: #fff; border-color: #fff; }
 
 /* Grid mode thumb items */
-.img-thumb-item {
+#images-list .img-thumb-item {
   display: flex; flex-direction: column; align-items: center;
   cursor: pointer; border-radius: 6px; padding: 3px;
   transition: background .15s; border: 2px solid transparent;
   overflow: hidden;
 }
-.img-thumb-item:hover  { background: var(--bg3); }
-.img-thumb-item.active { border-color: var(--accent); }
-.images-list-grid-sm .img-thumb-item { max-width: 62px; }
-.images-list-grid-lg .img-thumb-item { max-width: 106px; }
+#images-list .img-thumb-item:hover  { background: var(--bg3); }
+#images-list .img-thumb-item.active { border-color: var(--accent); }
+.images-list-grid-sm .img-thumb-item { max-width: 66px; }
+.images-list-grid-lg .img-thumb-item { max-width: 110px; }
 .img-thumb-wrap {
   border-radius: 4px; overflow: hidden;
   background: var(--bg2); flex-shrink: 0; position: relative;
