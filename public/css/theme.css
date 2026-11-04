@@ -416,7 +416,7 @@ input:focus, select:focus, textarea:focus {
 #dataset-sub, .small-check, .section-title, .field-group label,
 .delete-warn, .labels-empty, .compression-help { color: var(--text-dim) !important; }
 .project-card:hover, .model-row:hover { border-color: var(--accent) !important; box-shadow: var(--shadow) !important; }
-.card-icon { background: linear-gradient(135deg, var(--accent), var(--accent-strong)) !important; }
+.card-icon { background: linear-gradient(135deg, var(--accent), var(--accent-strong)) !important; color: var(--on-accent) !important; }
 .progress-bar-wrap, .job-progress-wrap { background: var(--bg3) !important; }
 .progress-bar-fill, .status-running .job-progress-bar { background: linear-gradient(90deg, var(--accent2), var(--accent)) !important; }
 .status-done .job-progress-bar { background: var(--success) !important; }
