@@ -178,3 +178,24 @@ test('isolation previews report the uncapped object count while returning six ou
   assert.match(result.messages.join(' '), /truncated/i);
   await fs.promises.rm(f.directory, { recursive: true, force: true });
 });
+
+test('rejects unknown or missing operations readably and leaves no preview temp directory', async () => {
+  const f = await fixture();
+  const previewDirs = () => new Set(fs.readdirSync(os.tmpdir()).filter(name => name.startsWith('libreflow-processing-preview-')));
+  const before = previewDirs();
+  await createProcessingPreview({ images: [imageRecord(f.sourcePath)], operation: 'preprocessing.grayscale' });
+  assert.deepEqual(previewDirs(), before);
+  await assert.rejects(() => createProcessingPreview({ images: [imageRecord(f.sourcePath)], operation: 'unknown.operation' }), /named processing preview operation/i);
+  assert.deepEqual(previewDirs(), before);
+  await assert.rejects(() => createProcessingPreview({ images: [imageRecord(f.sourcePath)] }), /named processing preview operation/i);
+  assert.deepEqual(previewDirs(), before);
+  await fs.promises.rm(f.directory, { recursive: true, force: true });
+});
+
+test('preflights excessive legacy tile counts before constructing tile rectangles', async () => {
+  const f = await fixture();
+  const largePath = path.join(f.directory, 'legacy-large.png');
+  await sharp({ create: { width: 1001, height: 1001, channels: 3, background: '#123456' } }).png().toFile(largePath);
+  await assert.rejects(() => createProcessingPreview({ images: [imageRecord(largePath)], operation: 'preprocessing.tile', processing: { preprocessing: { tile: { mode: 'legacy', width: 1, height: 1 } } } }), /10,000/);
+  await fs.promises.rm(f.directory, { recursive: true, force: true });
+});
