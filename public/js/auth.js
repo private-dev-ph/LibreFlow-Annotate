@@ -12,11 +12,12 @@
   const formReg   = document.getElementById('form-register');
   const errorDiv  = document.getElementById('auth-error');
   const regPassword = document.getElementById('reg-password');
+  const regPasswordGuidance = document.getElementById('reg-password-guidance');
   const regPasswordError = document.getElementById('reg-password-error');
   const passwordPolicy = window.PasswordPolicy;
   const passwordMessage = passwordPolicy?.MESSAGE || 'Use 8–72 characters, including at least one number and one symbol (such as !, @ or #).';
 
-  document.getElementById('reg-password-guidance').textContent = passwordMessage;
+  regPasswordGuidance.textContent = passwordMessage;
 
   // ── Tab switching ──────────────────────────────────────────────────────────
   function switchTab(name) {
@@ -46,6 +47,7 @@
 
   function clearPasswordValidation() {
     regPassword.removeAttribute('aria-invalid');
+    regPasswordGuidance.classList.remove('hidden');
     regPasswordError.textContent = '';
     regPasswordError.classList.add('hidden');
   }
@@ -58,6 +60,7 @@
     }
 
     regPassword.setAttribute('aria-invalid', 'true');
+    regPasswordGuidance.classList.add('hidden');
     regPasswordError.textContent = passwordMessage;
     regPasswordError.classList.remove('hidden');
     if (focus) regPassword.focus();
