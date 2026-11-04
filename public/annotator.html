@@ -7,6 +7,7 @@
   <title>Annotate – LibreFlow</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/nav.css" />
+  <link rel="stylesheet" href="/css/icons.css" />
   <link rel="stylesheet" href="/css/annotator.css" />
   <link rel="stylesheet" href="/css/theme.css" />
 </head>
@@ -21,20 +22,20 @@
       </a>
       <div class="nav-links">
         <a class="nav-link" href="/dashboard">
-          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <span data-lf-icon="grid" aria-hidden="true"></span>
           Dashboard
         </a>
         <a class="nav-link" href="/jobs">
-          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.93V17a1 1 0 0 1-2 0v-.07A8 8 0 0 1 4.07 11H4a1 1 0 0 1 0-2h.07A8 8 0 0 1 11 4.07V4a1 1 0 0 1 2 0v.07A8 8 0 0 1 19.93 11H20a1 1 0 0 1 0 2h-.07A8 8 0 0 1 13 16.93z"/></svg>
+          <span data-lf-icon="briefcase" aria-hidden="true"></span>
           Jobs
           <span id="jobs-badge" class="nav-badge hidden">0</span>
         </a>
         <a class="nav-link" href="/models">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          <span data-lf-icon="brain" aria-hidden="true"></span>
           Models
         </a>
         <a class="nav-link" href="/datasets">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="7.5 4.2 12 6.8 16.5 4.2"/><polyline points="7.5 19.8 7.5 12.6 3 10"/><polyline points="16.5 19.8 16.5 12.6 21 10"/></svg>
+          <span data-lf-icon="package" aria-hidden="true"></span>
           Datasets
         </a>
       </div>
@@ -43,8 +44,8 @@
     </div>
     <div class="nav-right">
       <div class="nav-notif-wrap" id="nav-notif-wrap">
-        <button class="nav-notif-btn" id="nav-notif-btn" title="Notifications">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <button class="nav-notif-btn" id="nav-notif-btn" type="button" title="Notifications" aria-label="Notifications">
+          <span data-lf-icon="bell" aria-hidden="true"></span>
           <span class="nav-notif-badge hidden" id="nav-notif-badge">0</span>
         </button>
         <div class="nav-inbox-dropdown hidden" id="nav-inbox-dropdown"></div>
@@ -54,10 +55,10 @@
         <span class="nav-username" id="nav-username">…</span>
       </div>
       <button class="btn-theme-settings" id="btn-theme-settings" type="button" aria-label="Theme settings" aria-expanded="false" title="Theme settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.64 5.64l1.41 1.41M16.95 16.95l1.41 1.41M5.64 18.36l1.41-1.41M16.95 7.05l1.41-1.41"/><circle cx="12" cy="12" r="3.5"/><path d="M19 4.5l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5.5-1.5Z"/></svg>
+        <span data-lf-icon="settings" aria-hidden="true"></span>
         <span class="btn-theme-label">Theme</span>
       </button>
-      <button class="btn-logout" id="btn-logout">Sign Out</button>
+      <button class="btn-logout" id="btn-logout" type="button"><span data-lf-icon="logOut" aria-hidden="true"></span> Sign Out</button>
     </div>
   </nav>
 
@@ -71,11 +72,13 @@
         <div class="section-header">
           <span class="section-title">Labels</span>
           <div class="add-label-row">
+            <label class="sr-only" for="new-label-input">New label</label>
             <input id="new-label-input" type="text" placeholder="New label…" />
-            <button id="btn-add-label" title="Add label">+</button>
+            <button id="btn-add-label" type="button" title="Add label" aria-label="Add label"><span data-lf-icon="plus" aria-hidden="true"></span></button>
           </div>
         </div>
         <div id="labels-container"></div>
+        <p id="labels-empty" class="panel-empty-hint">Add a label to start drawing.</p>
       </div>
 
       <!-- Image list -->
@@ -84,12 +87,12 @@
           <span class="section-title">Images (<span id="image-count">0</span>)</span>
           <div class="section-header-right">
             <div class="view-mode-btns">
-              <button class="view-mode-btn active" data-mode="list" title="List view">☰</button>
-              <button class="view-mode-btn" data-mode="grid-sm" title="Small grid">⎕</button>
-              <button class="view-mode-btn" data-mode="grid-lg" title="Large grid">■</button>
+              <button class="view-mode-btn active" type="button" data-mode="list" title="List view" aria-label="List view" aria-pressed="true"><span data-lf-icon="list" aria-hidden="true"></span></button>
+              <button class="view-mode-btn" type="button" data-mode="grid-sm" title="Small grid" aria-label="Small grid" aria-pressed="false"><span data-lf-icon="grid" aria-hidden="true"></span></button>
+              <button class="view-mode-btn" type="button" data-mode="grid-lg" title="Large grid" aria-label="Large grid" aria-pressed="false"><span data-lf-icon="image" aria-hidden="true"></span></button>
             </div>
             <label class="upload-btn" title="Upload images">
-              ↑
+              <span data-lf-icon="upload" aria-hidden="true"></span>
               <input id="upload-input" type="file" accept="image/*" multiple hidden />
             </label>
           </div>
@@ -107,7 +110,7 @@
       </div>
 
       <!-- Export -->
-      <button id="btn-export" class="btn-export">↓ Export Annotations</button>
+      <button id="btn-export" class="btn-export" type="button"><span data-lf-icon="download" aria-hidden="true"></span> Export Annotations</button>
 
       <!-- Sidebar resize handle -->
       <div id="sidebar-resize-handle"></div>
@@ -116,85 +119,97 @@
     <!-- Center: Toolbar + Canvas -->
     <div id="canvas-area">
       <!-- Toolbar -->
-      <div id="toolbar">
-        <div class="tool-group">
-          <button id="tool-select" class="tool-btn active" title="Select/Move (V)">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 2l16 9-7 2-4 7z"/></svg>
+      <div id="toolbar" aria-label="Annotation tools">
+        <div class="toolbar-row toolbar-drawing-row">
+        <div class="tool-group" data-group-label="Draw">
+          <span class="toolbar-group-caption">Draw</span>
+          <button id="tool-select" class="tool-btn active" type="button" title="Select/Move (V)" aria-label="Select or move">
+          <span data-lf-icon="mousePointer" aria-hidden="true"></span>
           </button>
-          <button id="tool-bbox" class="tool-btn" title="Bounding Box (B)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+          <button id="tool-bbox" class="tool-btn" type="button" title="Bounding Box (B)" aria-label="Bounding box">
+          <span data-lf-icon="box" aria-hidden="true"></span>
           </button>
-          <button id="tool-rbox" class="tool-btn" title="Rotated Box (R)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="5" width="14" height="14" rx="1" transform="rotate(18 12 12)"/></svg>
+          <button id="tool-rbox" class="tool-btn" type="button" title="Rotated Box (R)" aria-label="Rotated box">
+          <span data-lf-icon="rotatedBox" aria-hidden="true"></span>
           </button>
-          <button id="tool-polygon" class="tool-btn" title="Polygon (P)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,3 21,18 3,18"/></svg>
+          <button id="tool-polygon" class="tool-btn" type="button" title="Polygon (P)" aria-label="Polygon">
+          <span data-lf-icon="polygon" aria-hidden="true"></span>
           </button>
-          <button id="tool-point" class="tool-btn" title="Point (K)">
-            <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>
+          <button id="tool-point" class="tool-btn" type="button" title="Point (K)" aria-label="Point">
+          <span data-lf-icon="point" aria-hidden="true"></span>
           </button>
-          <button id="tool-mask" class="tool-btn" title="Freehand Mask (U). Alt-drag subtracts from the selected mask.">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15c2-7 5-10 9-10 4 0 7 3 7 7s-3 7-8 7H6a2 2 0 0 1-2-4Z"/><path d="M8 16c2-1 3-4 3-7"/></svg>
+          <button id="tool-mask" class="tool-btn" type="button" title="Freehand Mask (U). Alt-drag subtracts from the selected mask." aria-label="Freehand mask">
+          <span data-lf-icon="mask" aria-hidden="true"></span>
           </button>
-          <button id="tool-line" class="tool-btn" title="Polyline (L). Double-click to finish.">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,17 8,8 14,14 21,5"/><circle cx="3" cy="17" r="1.5"/><circle cx="21" cy="5" r="1.5"/></svg>
+          <button id="tool-line" class="tool-btn" type="button" title="Polyline (L). Double-click to finish." aria-label="Polyline">
+          <span data-lf-icon="polyline" aria-hidden="true"></span>
           </button>
-          <button id="tool-skeleton" class="tool-btn" title="Keypoint Skeleton (J). Double-click to finish.">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="7" cy="12" r="2"/><circle cx="17" cy="12" r="2"/><circle cx="12" cy="19" r="2"/><path d="M11 7 8 10M13 7l3 3M9 13l2 4M15 13l-2 4"/></svg>
+          <button id="tool-skeleton" class="tool-btn" type="button" title="Keypoint Skeleton (J). Double-click to finish." aria-label="Keypoint skeleton">
+          <span data-lf-icon="skeleton" aria-hidden="true"></span>
           </button>
-          <button id="tool-smart" class="tool-btn" title="Smart Mask with SAM (S). Click foreground; Shift-click background; Ctrl-click to refine.">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2Z"/><path d="m18 14 .8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8Z"/></svg>
-          </button>
-        </div>
-        <div class="toolbar-sep"></div>
-        <div class="tool-group">
-          <button id="tool-delete" class="tool-btn" title="Delete selected (Del)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-          </button>
-          <button id="tool-rotate-left" class="tool-btn" title="Rotate selected box left 5° ([)">↶</button>
-          <button id="tool-rotate-right" class="tool-btn" title="Rotate selected box right 5° (])">↷</button>
-          <button id="tool-classification" class="tool-btn" title="Add image-level classification (C)">C</button>
-        </div>
-        <div class="toolbar-sep"></div>
-        <div class="tool-group">
-          <button id="tool-undo" class="tool-btn" title="Undo (Ctrl+Z)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M3 13A9 9 0 1 0 6 6.7L3 13"/></svg>
-          </button>
-          <button id="tool-redo" class="tool-btn" title="Redo (Ctrl+Y)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M21 13A9 9 0 1 1 18 6.7L21 13"/></svg>
+          <button id="tool-smart" class="tool-btn" type="button" title="Smart Mask with SAM (S). Click foreground; Shift-click background; Ctrl-click to refine." aria-label="Smart mask">
+          <span data-lf-icon="sparkles" aria-hidden="true"></span>
           </button>
         </div>
         <div class="toolbar-sep"></div>
-        <div class="tool-group">
-          <button id="tool-zoom-in"  class="tool-btn" title="Zoom In (+)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        <div class="tool-group" data-group-label="Edit">
+          <span class="toolbar-group-caption">Edit</span>
+          <button id="tool-delete" class="tool-btn" type="button" title="Delete selected (Del)" aria-label="Delete selected annotation">
+            <span data-lf-icon="trash" aria-hidden="true"></span>
           </button>
-          <button id="tool-zoom-out" class="tool-btn" title="Zoom Out (-)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          <button id="tool-rotate-left" class="tool-btn" type="button" title="Rotate selected box left 5° ([)" aria-label="Rotate left"><span data-lf-icon="rotateLeft" aria-hidden="true"></span></button>
+          <button id="tool-rotate-right" class="tool-btn" type="button" title="Rotate selected box right 5° (])" aria-label="Rotate right"><span data-lf-icon="rotateRight" aria-hidden="true"></span></button>
+          <button id="tool-classification" class="tool-btn" type="button" title="Add image-level classification (C)" aria-label="Add image classification"><span data-lf-icon="tag" aria-hidden="true"></span></button>
+        </div>
+        <div class="toolbar-sep"></div>
+        <div class="tool-group" data-group-label="History">
+          <span class="toolbar-group-caption">History</span>
+          <button id="tool-undo" class="tool-btn" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">
+            <span data-lf-icon="undo" aria-hidden="true"></span>
           </button>
-          <button id="tool-fit"      class="tool-btn" title="Fit (F)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+          <button id="tool-redo" class="tool-btn" type="button" title="Redo (Ctrl+Y)" aria-label="Redo">
+            <span data-lf-icon="redo" aria-hidden="true"></span>
           </button>
         </div>
         <div class="toolbar-sep"></div>
-        <button id="btn-save" class="btn-save" title="Save (Ctrl+S)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        <div class="tool-group" data-group-label="View">
+          <span class="toolbar-group-caption">View</span>
+          <button id="tool-zoom-in"  class="tool-btn" type="button" title="Zoom In (+)" aria-label="Zoom in">
+            <span data-lf-icon="zoomIn" aria-hidden="true"></span>
+          </button>
+          <button id="tool-zoom-out" class="tool-btn" type="button" title="Zoom Out (-)" aria-label="Zoom out">
+            <span data-lf-icon="zoomOut" aria-hidden="true"></span>
+          </button>
+          <button id="tool-fit"      class="tool-btn" type="button" title="Fit (F)" aria-label="Fit image to screen">
+            <span data-lf-icon="expand" aria-hidden="true"></span>
+          </button>
+        </div>
+        </div>
+        <div class="toolbar-row toolbar-actions-row">
+        <div class="toolbar-sep"></div>
+        <button id="btn-save" class="btn-save" type="button" title="Save (Ctrl+S)">
+          <span data-lf-icon="save" aria-hidden="true"></span>
           Save
         </button>
-        <button id="btn-save-next" class="btn-save btn-save-next" title="Save and open next image (Ctrl+Enter)">Save + Next</button>
+        <button id="btn-save-next" class="btn-save btn-save-next" type="button" title="Save and open next image (Ctrl+Enter)"><span data-lf-icon="arrowRight" aria-hidden="true"></span> Save + Next</button>
         <label class="autosave-toggle" title="Save changes automatically before navigation"><input id="autosave-toggle" type="checkbox" /> Auto-save</label>
         <label class="autosave-toggle" title="Show or hide annotation labels"><input id="show-labels-toggle" type="checkbox" /> Show labels</label>
         <span id="save-indicator" class="save-indicator">Unsaved</span>
         <div class="toolbar-sep"></div>
-        <button id="btn-mark-null" class="btn-mark-null" title="Mark this image as intentionally empty (no objects to annotate). Will be included in exports without annotation entries.">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="9"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+        <button id="btn-mark-null" class="btn-mark-null" type="button" title="Mark this image as intentionally empty (no objects to annotate). Will be included in exports without annotation entries." aria-label="Mark image as null">
+          <span data-lf-icon="circleSlash" aria-hidden="true"></span>
           Mark as Null
         </button>
         <div class="image-tag-toolbar">
           <label for="image-tag-input">Tag</label>
           <input id="image-tag-input" type="text" placeholder="e.g. component A" />
-          <button id="btn-save-tag" class="btn-tag-save" title="Save image tag">Save</button>
+          <button id="btn-save-tag" class="btn-tag-save" type="button" title="Save image tag">Save</button>
         </div>
+      </div>
+
+      <div id="tool-context" class="tool-context" role="status" aria-live="polite">
+        <span class="tool-context-copy"><strong id="active-tool-name">Select / Move</strong><span id="active-tool-hint">Click an annotation to select it, then drag to move.</span></span>
+        <button id="btn-shortcuts" class="toolbar-help-btn" type="button" aria-haspopup="dialog"><span data-lf-icon="keyboard" aria-hidden="true"></span> Shortcuts</button>
       </div>
 
       <!-- Canvas -->
@@ -203,10 +218,10 @@
 
         <!-- Empty canvas state -->
         <div id="canvas-empty" class="canvas-empty hidden">
-          <div class="canvas-empty-icon">📸</div>
+          <div class="canvas-empty-icon"><span data-lf-icon="camera" aria-hidden="true"></span></div>
           <p>Upload images to start annotating</p>
           <label class="upload-btn-lg">
-            ↑ Upload Images
+            <span data-lf-icon="upload" aria-hidden="true"></span> Upload Images
             <input type="file" accept="image/*" multiple hidden id="upload-input-canvas" />
           </label>
         </div>
@@ -214,9 +229,9 @@
 
       <!-- Image navigation -->
       <div id="image-nav">
-        <button id="btn-prev-img" title="Previous (←)">←</button>
+        <button id="btn-prev-img" type="button" title="Previous (←)" aria-label="Previous image"><span data-lf-icon="chevronLeft" aria-hidden="true"></span></button>
         <span id="image-nav-label">– / –</span>
-        <button id="btn-next-img" title="Next (→)">→</button>
+        <button id="btn-next-img" type="button" title="Next (→)" aria-label="Next image"><span data-lf-icon="chevronRight" aria-hidden="true"></span></button>
       </div>
     </div>
 
@@ -230,6 +245,7 @@
           <span id="ann-count" class="ann-count">0</span>
         </div>
         <ul id="annotation-list"></ul>
+        <p id="annotations-empty" class="panel-empty-hint">No annotations yet. Choose a draw tool and drag on the image.</p>
       </div>
 
       <!-- Review workflow. Kept self-contained in review-workflow.js. -->
@@ -238,6 +254,7 @@
           <summary class="section-header review-summary">
             <span class="section-title">Review &amp; history</span>
             <span id="review-status-badge" class="review-status-badge">Unannotated</span>
+            <span class="review-summary-chevron" data-lf-icon="chevronDown" aria-hidden="true"></span>
           </summary>
           <div class="review-body">
             <label class="review-field">Status
@@ -278,8 +295,8 @@
             <strong>Smart Mask prompts</strong>
             <span>Click foreground · Shift-click background · Ctrl-click to refine the current mask.</span>
             <div class="smart-mask-actions">
-              <button id="btn-smart-commit" type="button">Keep mask</button>
-              <button id="btn-smart-reset" type="button">Reset prompts</button>
+              <button id="btn-smart-commit" type="button"><span data-lf-icon="check" aria-hidden="true"></span> Keep mask</button>
+              <button id="btn-smart-reset" type="button"><span data-lf-icon="refresh" aria-hidden="true"></span> Reset prompts</button>
             </div>
           </div>
 
@@ -295,10 +312,10 @@
             <input type="range" id="infer-good-bias-slider" class="infer-slider"
                    min="0" max="1" step="0.01" value="0.5"
                    oninput="document.getElementById('infer-good-bias-val').textContent=parseFloat(this.value).toFixed(2)" />
-            <div class="slider-hint"><span>← all GOOD</span><span>all NG →</span></div>
+            <div class="slider-hint"><span>all GOOD</span><span>all NG</span></div>
           </div>
 
-          <button id="btn-auto-infer" class="btn-infer" disabled>▶ Run Inference</button>
+          <button id="btn-auto-infer" class="btn-infer" disabled><span data-lf-icon="play" aria-hidden="true"></span> <span class="infer-button-label">Run Inference</span></button>
           <div id="auto-status" class="auto-status"></div>
           <p class="auto-hint">Load ML models on the <a href="/models" target="_blank">Models page</a>. Start the inference server with <code>start_inference.bat</code>.</p>
         </div>
@@ -341,11 +358,38 @@
         Include unannotated images as null images to dataset
       </label>
       <div class="modal-actions">
-        <button id="btn-export-confirm" class="btn-primary-sm">↓ Download ZIP</button>
+        <button id="btn-export-confirm" class="btn-primary-sm" type="button"><span data-lf-icon="download" aria-hidden="true"></span> Download ZIP</button>
         <button id="btn-export-cancel" class="btn-cancel-sm">Cancel</button>
       </div>
     </div>
   </div>
+
+  <dialog id="shortcuts-dialog" class="shortcuts-dialog" aria-labelledby="shortcuts-title">
+    <div class="shortcuts-dialog-header">
+      <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+      <button id="btn-close-shortcuts" type="button" class="dialog-close-btn" aria-label="Close shortcuts"><span data-lf-icon="close" aria-hidden="true"></span></button>
+    </div>
+    <p class="shortcuts-dialog-intro">Use these while the canvas is focused. Text fields keep their normal typing behavior.</p>
+    <dl class="shortcut-list">
+      <div><dt>V</dt><dd>Select / move</dd></div>
+      <div><dt>B</dt><dd>Bounding box</dd></div>
+      <div><dt>R</dt><dd>Rotated box</dd></div>
+      <div><dt>P</dt><dd>Polygon · Enter finishes</dd></div>
+      <div><dt>U</dt><dd>Freehand mask · Alt subtracts</dd></div>
+      <div><dt>L / J / K</dt><dd>Polyline / skeleton / point</dd></div>
+      <div><dt>S</dt><dd>Smart mask · Shift background · Ctrl refine</dd></div>
+      <div><dt>C</dt><dd>Image classification</dd></div>
+      <div><dt>Del / D</dt><dd>Delete selected</dd></div>
+      <div><dt>Ctrl/Cmd + Z/Y</dt><dd>Undo / redo</dd></div>
+      <div><dt>Ctrl/Cmd + C/V</dt><dd>Copy / paste selected</dd></div>
+      <div><dt>Ctrl/Cmd + S</dt><dd>Save</dd></div>
+      <div><dt>Ctrl/Cmd + Enter</dt><dd>Save and next</dd></div>
+      <div><dt>Q / E or ← / →</dt><dd>Previous / next image</dd></div>
+      <div><dt>+ / − / F</dt><dd>Zoom in / out / fit</dd></div>
+      <div><dt>X / N / [ ]</dt><dd>Inference / null / rotate</dd></div>
+    </dl>
+    <button id="btn-close-shortcuts-footer" type="button" class="btn-modal-cancel">Close</button>
+  </dialog>
 
   <div id="toast" class="toast-msg"></div>
 
