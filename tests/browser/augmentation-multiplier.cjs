@@ -31,6 +31,8 @@ const root = path.resolve(__dirname, '../..');
 
     const multiplier = page.locator('[data-augmentation-multiplier]');
     assert.equal(await multiplier.inputValue(), '2');
+    assert.equal(await multiplier.isDisabled(), false);
+    assert.equal(await multiplier.getAttribute('aria-valuetext'), '2 times including original');
     assert.equal(await page.locator('[data-augmentation-multiplier-value]').textContent(), '2×');
     assert.match(await page.locator('[data-augmentation-estimate]').textContent(), /50 originals × 2 = ≈ 100 images/);
     assert.deepEqual(await page.evaluate(() => { const augmentation = VersionProcessingFields.read(document.getElementById('version-processing')).augmentation; return { multiplier: augmentation.multiplier, count: augmentation.count, horizontalFlip: augmentation.horizontalFlip, verticalFlip: augmentation.verticalFlip }; }), { multiplier: 2, count: 1, horizontalFlip: 0, verticalFlip: 0 });
@@ -58,12 +60,33 @@ const root = path.resolve(__dirname, '../..');
     await horizontalToggle.check();
     assert.equal(await page.evaluate(() => VersionProcessingFields.read(document.getElementById('version-processing')).augmentation.horizontalFlip), 0.8);
 
+    await horizontalToggle.uncheck();
+    await page.locator('[data-path="preprocessing.resize.enabled"]').check();
+    assert.match(await page.locator('[data-augmentation-effects-help]').textContent(), /No image effects/);
+    await page.locator('[data-path="preprocessing.resize.enabled"]').uncheck();
+    const grayscale = page.locator('[data-path="augmentation.grayscale"]');
+    await grayscale.locator('xpath=ancestor::details[1]').evaluate(element => { element.open = true; });
+    await grayscale.fill('0.5');
+    assert.match(await page.locator('[data-augmentation-effects-help]').textContent(), /Selected effects/);
+    await grayscale.fill('0');
+    await page.locator('[data-path="augmentation.boundingBox.enabled"]').check();
+    assert.match(await page.locator('[data-augmentation-effects-help]').textContent(), /No image effects/);
+    await page.locator('[data-path="augmentation.boundingBox.enabled"]').uncheck();
+
+    await page.evaluate(() => VersionProcessingFields.updateTrainingEstimate(document.getElementById('version-processing'), 0));
+    assert.match(await page.locator('[data-augmentation-estimate]').textContent(), /≈ 0 originals × 2/);
+    await page.evaluate(() => VersionProcessingFields.updateTrainingEstimate(document.getElementById('version-processing'), 50));
+
+    await horizontalToggle.check();
     await page.locator('[data-augmentation-master]').uncheck();
+    assert.equal(await multiplier.isDisabled(), true);
     const offPayload = await page.evaluate(() => VersionProcessingFields.read(document.getElementById('version-processing')).augmentation);
     assert.equal(offPayload.count, 0);
     assert.equal(Object.hasOwn(offPayload, 'multiplier'), false);
     assert.match(await page.locator('[data-augmentation-estimate]').textContent(), /originals only/);
+    assert.match(await page.locator('[data-augmentation-effects-help]').textContent(), /will not run until/);
     await page.locator('[data-augmentation-master]').check();
+    assert.equal(await multiplier.isDisabled(), false);
     assert.equal((await page.evaluate(() => VersionProcessingFields.read(document.getElementById('version-processing')).augmentation)).count, 1);
     assert.match(await page.locator('[data-augmentation-effects-help]').textContent(), /Selected effects/);
 
