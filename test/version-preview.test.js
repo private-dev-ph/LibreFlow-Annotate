@@ -181,15 +181,26 @@ test('isolation previews report the uncapped object count while returning six ou
 
 test('rejects unknown or missing operations readably and leaves no preview temp directory', async () => {
   const f = await fixture();
-  const previewDirs = () => new Set(fs.readdirSync(os.tmpdir()).filter(name => name.startsWith('libreflow-processing-preview-')));
-  const before = previewDirs();
-  await createProcessingPreview({ images: [imageRecord(f.sourcePath)], operation: 'preprocessing.grayscale' });
-  assert.deepEqual(previewDirs(), before);
-  await assert.rejects(() => createProcessingPreview({ images: [imageRecord(f.sourcePath)], operation: 'unknown.operation' }), /named processing preview operation/i);
-  assert.deepEqual(previewDirs(), before);
-  await assert.rejects(() => createProcessingPreview({ images: [imageRecord(f.sourcePath)] }), /named processing preview operation/i);
-  assert.deepEqual(previewDirs(), before);
-  await fs.promises.rm(f.directory, { recursive: true, force: true });
+  const originalMkdtemp = fs.promises.mkdtemp;
+  const created = [];
+  fs.promises.mkdtemp = async prefix => {
+    const result = await originalMkdtemp(prefix);
+    if (String(prefix).includes('libreflow-processing-preview-')) created.push(result);
+    return result;
+  };
+  try {
+    await createProcessingPreview({ images: [imageRecord(f.sourcePath)], operation: 'preprocessing.grayscale' });
+    assert.equal(created.length, 1);
+    assert.ok(created.every(directory => !fs.existsSync(directory)));
+    await assert.rejects(() => createProcessingPreview({ images: [imageRecord(f.sourcePath)], operation: 'preprocessing.resize', processing: { preprocessing: { resize: { enabled: true, width: 'invalid' } } } }), /Resize width must be finite/i);
+    assert.equal(created.length, 2);
+    assert.ok(created.every(directory => !fs.existsSync(directory)));
+    await assert.rejects(() => createProcessingPreview({ images: [imageRecord(f.sourcePath)], operation: 'unknown.operation' }), /named processing preview operation/i);
+    await assert.rejects(() => createProcessingPreview({ images: [imageRecord(f.sourcePath)] }), /named processing preview operation/i);
+  } finally {
+    fs.promises.mkdtemp = originalMkdtemp;
+    await fs.promises.rm(f.directory, { recursive: true, force: true });
+  }
 });
 
 test('preflights excessive legacy tile counts before constructing tile rectangles', async () => {
