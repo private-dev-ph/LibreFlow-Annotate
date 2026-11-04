@@ -1,5 +1,6 @@
 const express = require('express');
-const bcrypt = require('bcryptjs');
+const PasswordPolicy = require('../public/js/password-policy');
+const { hashPassword, verifyPassword } = require('../lib/passwords');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
@@ -41,11 +42,13 @@ router.post('/register', (req, _res, next) => {
     return res.status(400).json({ error: 'All fields are required.' });
   if (username.length > 64 || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     return res.status(400).json({ error: 'Enter a valid username and email.' });
-  if (typeof password !== 'string' || password.length < 12 || Buffer.byteLength(password,'utf8') > 72 ||
-      [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(pattern => pattern.test(password)).length < 3)
-    return res.status(400).json({ error: 'Password must be at least 12 characters, at most 72 UTF-8 bytes and use at least three character types.' });
+  if (!PasswordPolicy.validate(password))
+    return res.status(400).json({ error: PasswordPolicy.MESSAGE });
 
-  const hash = await bcrypt.hash(password, 10);
+  let hash;
+  try {
+    hash = await hashPassword(password);
+  } catch { return res.status(500).json({ error: 'Unable to create your account. Please try again.' }); }
   // Re-read after asynchronous hashing; duplicate check and atomic write share one event-loop turn.
   const users = readUsers();
   if (users.find(u => String(u.email).trim().toLowerCase() === email))
@@ -72,14 +75,17 @@ router.post('/login', (req, _res, next) => {
 }, loginLimit, async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
   const password = req.body?.password;
-  if (!email || typeof password !== 'string' || !password || Buffer.byteLength(password,'utf8') > 72)
+  if (!email || typeof password !== 'string' || !password || Array.from(password).length > 72)
     return res.status(400).json({ error: 'Email and password are required.' });
 
   const users = readUsers();
   const user = users.find(u => String(u.email).trim().toLowerCase() === email);
   if (!user) return res.status(401).json({ error: 'Invalid email or password.' });
 
-  const match = await bcrypt.compare(password, user.passwordHash);
+  let match;
+  try {
+    match = await verifyPassword(password, user.passwordHash);
+  } catch { return res.status(500).json({ error: 'Unable to sign in. Please try again.' }); }
   if (!match) return res.status(401).json({ error: 'Invalid email or password.' });
 
   try {
