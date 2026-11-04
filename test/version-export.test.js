@@ -66,6 +66,10 @@ test('null selection honors explicit null override and includeImages removes eve
   assert.ok(noNullZip.getEntries().every(entry => !entry.entryName.match(/\.(png|jpe?g|gif|webp|bmp|tiff?)$/i)));
   assert.ok(!noNullZip.getEntry('classification/valid'));
 
+  const metadataOnlyManifest = structuredClone(manifest);
+  metadataOnlyManifest.images[0].path = 'images/not-materialized.png';
+  assert.doesNotThrow(() => buildVersionExport({ manifest: metadataOnlyManifest, versionDir: root, format: 'csv', includeNull: false, includeImages: false }));
+
   manifest.images[1].isExplicitNull = true;
   const explicitNull = buildVersionExport({ manifest, versionDir: root, format: 'yolo', includeNull: false, includeImages: false });
   assert.deepEqual(zipJson(explicitNull, 'export-manifest.json').images.map(image => image.id), ['image-one', 'image-null']);
