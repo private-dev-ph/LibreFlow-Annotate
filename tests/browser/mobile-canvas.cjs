@@ -79,10 +79,30 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await drag({ x: 400, y: 120 }, { x: 430, y: 140 });
     assert.notDeepEqual(await page.locator('canvas').screenshot(), beforePan, 'finger pans image');
     assert.deepEqual(await shapes(), rotationShapes, 'pan does not mutate shapes');
+    // A browser may suppress the first synthesized click after a touch pan.
+    // Pointer releases must still contribute exactly one vertex each.
+    for (const tool of ['polygon', 'line', 'skeleton']) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await page.evaluate(() => Canvas.setTool('pan'));
+        await drag({ x: 400, y: 120 }, { x: 430, y: 140 });
+        await page.evaluate(value => Canvas.setTool(value), tool);
+        const count = (await shapes()).length;
+        for (const point of [{ x: 350, y: 100 }, { x: 430, y: 100 }, { x: 390, y: 170 }]) await page.touchscreen.tap(point.x, point.y);
+        await page.evaluate(() => Canvas.finishDrawing());
+        const completed = await shapes();
+        assert.equal(completed.length, count + 1, `${tool}: rapid touch taps after pan create a shape`);
+        const vertices = tool === 'polygon' ? completed.at(-1).data : completed.at(-1).data.points;
+        assert.equal(vertices.length, 3, `${tool}: no missing or duplicated touch vertices`);
+      }
+    }
     await page.evaluate(() => Canvas.setTool('polygon'));
-    for (const point of [{ x: 350, y: 100 }, { x: 430, y: 100 }, { x: 390, y: 170 }]) await page.touchscreen.tap(point.x, point.y);
-    await page.evaluate(() => Canvas.finishDrawing());
-    assert.equal((await shapes()).length, rotationShapes.length + 1, 'touch taps and Finish create polygon');
+    const beforeMousePolygon = (await shapes()).length;
+    await page.mouse.click(350, 100);
+    await page.mouse.click(430, 100);
+    await page.mouse.dblclick(390, 170);
+    const mousePolygon = await shapes();
+    assert.equal(mousePolygon.length, beforeMousePolygon + 1, 'mouse double-click still completes polygon');
+    assert.equal(mousePolygon.at(-1).data.length, 3, 'mouse completion keeps exactly three vertices');
     await page.evaluate(() => { document.getElementById('wrapper').style.height = '8px'; });
     await page.waitForTimeout(80);
     assert.ok(await painted() > 0, 'very short canvas retains positive image scale');
