@@ -66,6 +66,7 @@ html, body { height: 100%; overflow: hidden; }
   padding: 2px 9px;
   border-radius: 12px;
   font-size: 12px;
+  font-family: inherit;
   cursor: pointer;
   border: 2px solid transparent;
   transition: border-color .12s;
@@ -218,7 +219,7 @@ html, body { height: 100%; overflow: hidden; }
 .autosave-toggle input { accent-color:var(--accent); }
 
 .image-filter-row {
-  display:grid; grid-template-columns:minmax(0, .9fr) minmax(0, 1.4fr); gap:6px;
+  display:grid; grid-template-columns:1fr; gap:6px;
   padding:6px 10px; border-bottom:1px solid var(--border); background:var(--bg2);
 }
 .image-filter-row select, .image-filter-row input {
@@ -814,6 +815,8 @@ html, body { height: 100%; overflow: hidden; }
   #left-sidebar { order: 1; max-height: 360px; overflow: hidden; }
   #canvas-area { order: 2; height: 600px; min-height: 540px; }
   #right-panel { order: 3; max-height: none; overflow: visible; }
+  #right-panel .annotations-sub { flex: 0 0 auto; min-height: 140px; max-height: 320px; overflow: hidden; }
+  #right-panel #annotation-list { flex: 0 0 auto; min-height: 48px; max-height: 240px; overflow-y: auto; }
   .images-section { min-height: 180px; }
   #toolbar { min-height: 0; }
   .toolbar-row { gap: 2px; }
