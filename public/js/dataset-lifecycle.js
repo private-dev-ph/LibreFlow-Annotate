@@ -54,7 +54,7 @@
     document.title = `${source.name || 'Dataset'} lifecycle – LibreFlow Annotate`;
     const back = document.getElementById('back-link');
     back.href = sourceType === 'project' ? `/project?projectId=${encodeURIComponent(sourceId)}` : '/datasets';
-    back.textContent = sourceType === 'project' ? '← Back to project' : '← Back to datasets';
+    back.innerHTML = `${LibreFlowIcons.icon('arrowLeft')} ${sourceType === 'project' ? 'Back to project' : 'Back to datasets'}`;
     if (sourceType !== 'project') document.getElementById('tab-import').classList.add('hidden');
   }
 
@@ -297,7 +297,7 @@
     document.getElementById('import-preview').innerHTML = `
       <div class="preview-metrics"><div class="preview-metric"><strong>${stats.importedImages || 0}</strong><span>New images</span></div><div class="preview-metric"><strong>${stats.linkedImages || 0}</strong><span>Matched images</span></div><div class="preview-metric"><strong>${stats.importedAnnotations || 0}</strong><span>Annotations</span></div><div class="preview-metric"><strong>${stats.createdClasses || 0}</strong><span>New classes</span></div><div class="preview-metric"><strong>${stats.skippedImages || 0}</strong><span>Skipped images</span></div><div class="preview-metric"><strong>${stats.skippedAnnotations || 0}</strong><span>Skipped labels</span></div></div>
       <div class="finding-title"><span>Class plan</span><span class="count-pill">${classes.length}</span></div>
-      <div>${classes.map(item => `<div class="class-plan-row"><span>${esc(item.source)}</span><span class="arrow">→</span><span>${esc(item.target || 'skip')}</span><span class="action">${esc(item.action)}</span></div>`).join('') || '<p class="help">No classes detected.</p>'}</div>
+      <div>${classes.map(item => `<div class="class-plan-row"><span>${esc(item.source)}</span><span class="arrow">${LibreFlowIcons.icon('arrowRight')}</span><span>${esc(item.target || 'skip')}</span><span class="action">${esc(item.action)}</span></div>`).join('') || '<p class="help">No classes detected.</p>'}</div>
       ${errors.length ? `<div class="finding-group"><div class="finding-title"><span>Blocking errors</span><span class="count-pill">${errors.length}</span></div><ul class="message-list error">${errors.map(item => `<li>${esc(item)}</li>`).join('')}</ul></div>` : ''}
       ${warnings.length ? `<div class="finding-group"><div class="finding-title"><span>Warnings</span><span class="count-pill">${warnings.length}</span></div><ul class="message-list">${warnings.map(item => `<li>${esc(item)}</li>`).join('')}</ul></div>` : ''}`;
   }

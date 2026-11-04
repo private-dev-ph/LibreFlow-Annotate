@@ -136,11 +136,11 @@
         <span class="label-name">${escHtml(lbl.name)}</span>
         <input class="label-rename-input hidden" type="text" data-idx="${i}"
                value="${escHtml(lbl.name)}" maxlength="80" />
-        <button class="label-rename-btn" data-idx="${i}" title="Rename label">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        <button class="label-rename-btn" data-idx="${i}" title="Rename label" aria-label="Rename label">
+          ${LibreFlowIcons.icon('pencil')}
         </button>
         <button class="label-rename-confirm hidden" data-idx="${i}" title="Save rename" aria-label="Save rename">${LibreFlowIcons.icon('check')}</button>
-        <button class="label-rename-cancel  hidden" data-idx="${i}" title="Cancel">×</button>
+        <button class="label-rename-cancel  hidden" data-idx="${i}" title="Cancel" aria-label="Cancel rename">${LibreFlowIcons.icon('close')}</button>
         <button class="label-del" data-idx="${i}" title="Remove" aria-label="Remove label">${LibreFlowIcons.icon('close')}</button>
       </span>
     `).join('');
@@ -864,7 +864,7 @@
       return `
         <div class="batch-card" id="bc-${escHtml(b.id)}">
           <div class="batch-header" data-batch-id="${escHtml(b.id)}">
-            <span class="batch-chevron">▶</span>
+            <span class="batch-chevron">${LibreFlowIcons.icon('chevronRight')}</span>
             <span class="batch-name">${escHtml(b.name)}</span>
             <span class="batch-meta">
               <span>${b.imageCount} images</span>

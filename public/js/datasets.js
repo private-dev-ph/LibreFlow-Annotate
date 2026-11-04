@@ -191,7 +191,7 @@
     grid.innerHTML = groups.map(g => {
       const cards = g.items.map(img => `
         <div class="img-card">
-          ${ds.userId === me.id ? `<button class="btn btn-del-img" data-id="${esc(img.id)}" title="Delete image">×</button>` : ''}
+          ${ds.userId === me.id ? `<button class="btn btn-del-img" data-id="${esc(img.id)}" title="Delete image" aria-label="Delete image">${LibreFlowIcons.icon('close')}</button>` : ''}
           <img src="/datasets-files/${esc(img.filename)}" alt="${esc(img.originalName)}" loading="lazy" />
           <div class="img-name">${esc(img.originalName)}</div>
           <div class="img-meta">${new Date(img.uploadedAt).toLocaleDateString()} · ${formatBytes(img.size)}</div>
