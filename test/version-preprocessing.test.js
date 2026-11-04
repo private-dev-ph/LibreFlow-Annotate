@@ -102,8 +102,20 @@ test('reflect repeats asymmetric pixels and emits clipped reflected annotation r
   const row0 = [...raw.data.slice(0, 8 * raw.info.channels)];
   const row1 = [...raw.data.slice(8 * raw.info.channels, 16 * raw.info.channels)];
   assert.deepEqual(row0, row1);
-  assert(output[0].annotations.some(annotation => annotation.libreflowReflection?.y === 'top'));
+  assert(output[0].annotations.some(annotation => annotation.libreflowReflection?.yTile === -1));
   assert(output[0].annotations.every(annotation => annotation.data.x >= 0 && annotation.data.y >= 0));
+});
+
+test('reflection bands match Sharp mirror coverage on asymmetric dimensions', async t => {
+  const fixtureData = await fixture(4, 2, 3, (x, y) => [x * 40 + y * 7, x * 40 + y * 7 + 1, x * 40 + y * 7 + 2]);
+  t.after(() => fs.promises.rm(fixtureData.directory, { recursive: true, force: true }));
+  const output = await preprocessImage({ source: fixtureData.source, annotations: [{ id: 'edge', type: 'bbox', data: { x: 1, y: 0, width: 1, height: 2 } }], config: { resize: { enabled: true, width: 20, height: 12, mode: 'reflect' } }, workDir: fixtureData.directory, helpers: helpers() });
+  const raw = await readRaw(output[0].path);
+  assert.deepEqual([raw.info.width, raw.info.height], [20, 12]);
+  const resized = await sharp(fixtureData.sourcePath).resize(20, 12, { fit: 'inside' }).png().toBuffer();
+  const expected = await sharp(resized).extend({ top: 1, bottom: 1, extendWith: 'mirror' }).raw().toBuffer({ resolveWithObject: true });
+  assert.deepEqual(raw.data, expected.data);
+  assert.deepEqual(new Set(output[0].annotations.map(annotation => annotation.libreflowReflection?.yTile ?? 0)), new Set([-1, 0, 1]));
 });
 
 test('static percentage crop happens before resize and clips annotations', async t => {
