@@ -13,7 +13,7 @@ Project and dataset pages link to it directly.
 
 ## Project Versions tab
 
-The project page also has a **Versions** tab (`/project?projectId=<id>#versions`). Its builder includes annotated images, explicitly marked backgrounds, and images marked completed/submitted/approved. Untouched uploads are excluded. Originals, annotations and existing versions are never rewritten.
+The project page also has a **Versions** tab (`/project?projectId=<id>#versions`). Its builder includes annotated images, explicitly marked backgrounds, and images marked completed/submitted/approved. Untouched uploads are excluded by default; select **Include unfinished uploads as null images** to save them in the snapshot. Version names are optional: blank or whitespace-only names become **Version 1**, **Version 2**, and so on. Originals, annotations and existing versions are never rewritten.
 
 Use the two handles to set the train/valid and valid/test boundaries, or type any of the three percentages. Editing one percentage distributes the remainder proportionally between the other two; the total remains 100%. Keyboard arrow keys work on both handles. **Check image counts** computes actual source assignments after tag/class/background filtering; exact duplicate images remain together, so small datasets may not exactly match the percentages.
 
@@ -23,7 +23,13 @@ Preprocessing supports auto-orientation, percentage static crop, object isolatio
 
 Image augmentation supports horizontal/vertical flips, quarter-turns, random crop, arbitrary rotation, shear, grayscale, hue, saturation, brightness, exposure, blur, salt-and-pepper noise, camera gain, motion blur, cutout and mosaic. Bounding-box settings support the documented geometric and lighting/noise operations. Geometric box-only operations cannot safely coexist with intersecting non-box spatial labels; use image-level operations for those images. Settings are stored with the immutable version, together with sampled transformation provenance and source IDs.
 
-**Export dataset** downloads the processed snapshot with YOLO labels, COCO annotations, split folders, a manifest and checksums. Object-isolation output also includes `classification/<split>/<class-folder>/`, with `classification/classes.json` mapping folder names back to labels. No model training service or paid augmentation feature is required.
+Each preprocessing and augmentation control has a **Preview effect** button. It samples the first readable image in the project, applies only that operation using its current values, and shows the original and processed images with annotation outlines. Previewing an unchecked effect does not enable it for version creation. Filters report whether the sample remains included; class changes show the original and resulting label names. Tiles and isolated objects show up to six outputs. Random effects use the augmentation seed. Previews are generated in temporary storage, capped at 32 megapixels, and never save a version or modify source data.
+
+**Export dataset** opens a format dialog offering YOLO TXT, Roboflow YOLO, COCO JSON, Pascal VOC XML, and CSV. **Include images in ZIP** controls all pixel files, including classification copies. **Include unannotated images as null images to dataset** includes unannotated images already saved in that version; explicitly marked backgrounds are retained regardless. It never adds later project uploads to an immutable version. To export unfinished uploads, include them when creating the version.
+
+Exports retain split folders, lossless LibreFlow annotation metadata, the unchanged original `manifest.json` and checksums. `export-manifest.json` identifies the selected subset and its counts separately from the original snapshot. Object-isolation output also includes `classification/<split>/<class-folder>/`, with `classification/classes.json` mapping folder names back to labels. No model training service or paid augmentation feature is required.
+
+`GET .../versions/:versionId/download?format=roboflow&images=true&includeNull=false` accepts the five formats above. Omitting `format` preserves the complete legacy archive. `POST .../versions/sample-preview` accepts `{operation, processing, seed}` and requires the same source access and `versions:read` scope as other previews; it returns PNG thumbnails and geometry, without persisted files.
 
 The controls follow these reference option families; this is an independent implementation, not a claim of byte-identical output to Roboflow:
 
@@ -82,7 +88,7 @@ GET /api/dataset-lifecycle/:sourceType/:sourceId/versions/:versionId?includeAnno
 GET /api/dataset-lifecycle/:sourceType/:sourceId/versions/:versionId/download
 ```
 
-`sourceType` is `project` or `dataset`. There are deliberately no update or delete endpoints. Snapshot image files are addressed by SHA-256. The manifest has a content hash and a separate manifest hash; downloads include the manifest, internal annotations, COCO JSON, ready-to-train YOLO split folders and labels, `data.yaml`, content-addressed snapshot images, and SHA-256 checksums. Downloads re-check the manifest and every snapshot asset before returning the ZIP.
+`sourceType` is `project` or `dataset`. There are deliberately no update or delete endpoints. Snapshot image files are addressed by SHA-256. The manifest has a content hash and a separate manifest hash. The default download includes the manifest, internal annotations, COCO JSON, ready-to-train YOLO split folders and labels, `data.yaml`, content-addressed snapshot images, and SHA-256 checksums. Format-specific downloads use the selected format and image options. Downloads re-check the manifest and each included snapshot asset before returning the ZIP; annotations-only downloads do not read image bytes.
 
 ## Dataset health
 

@@ -51,6 +51,26 @@
 .version-counts span { padding: 5px 10px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); font-size: 13px; }
 .version-config { max-width: 100%; max-height: 300px; overflow: auto; font-size: 12px; padding: 12px; background: var(--surface-2); border-radius: 6px; }
 .version-status { min-height: 24px; margin-top: 12px; color: var(--text-dim); }
+.version-simple-setting { min-width: 0; border: 1px solid var(--border); border-radius: 9px; padding: 12px; }
+.version-operation-preview { min-width: 0; padding: 0 14px 14px; }
+.version-simple-setting .version-operation-preview { padding: 8px 0 0; }
+.version-preview-result { margin-top: 12px; min-width: 0; }
+.version-preview-status { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.version-preview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.version-simple-setting .version-preview-grid { grid-template-columns: 1fr; }
+.version-preview-figure { min-width: 0; margin: 0; }
+.version-preview-figure p, .version-preview-caption { overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; }
+.version-preview-image { position: relative; background: var(--canvas-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.version-preview-image img { display: block; width: 100%; height: auto; }
+.version-preview-image svg { position: absolute; inset: 0; width: 100%; height: 100%; stroke: #41efb0; stroke-width: 2; fill: none; filter: drop-shadow(0 1px 1px #000); pointer-events: none; }
+.version-preview-stale .version-preview-grid { opacity: .55; }
+.version-preview-caption { display: block; margin-top: 6px; }
+.version-export-dialog { width: min(520px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); margin: auto; padding: 22px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); }
+.version-export-dialog::backdrop { background: var(--overlay); }
+.version-export-dialog .version-check { display: flex; margin-top: 12px; }
+.version-export-dialog h3 { margin: 0; }
+.version-export-dialog .version-note { overflow-wrap: anywhere; }
+.version-export-dialog .version-actions { justify-content: flex-end; }
 @media (max-width: 600px) {
   .version-stage, .version-history-card { padding: 16px; }
   .version-split-values { gap: 8px; }
@@ -60,4 +80,6 @@
   .version-actions > .version-primary { width: 100%; }
   .version-setting > summary { padding: 10px; }
   .version-setting-hint { font-size: 13px; }
+  .version-preview-grid { grid-template-columns: 1fr; }
+  .version-export-dialog { padding: 16px; }
 }

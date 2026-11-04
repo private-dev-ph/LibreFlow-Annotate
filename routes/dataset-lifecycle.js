@@ -2,12 +2,9 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
-const AdmZip = require('adm-zip');
 const { v4: uuidv4 } = require('uuid');
-const yaml = require('js-yaml');
 const {
   fileSha256,
-  sha256,
   readImageDimensions,
   analyzeHealth,
   createImmutableVersion,
@@ -18,6 +15,8 @@ const {
 } = require('../lib/dataset-lifecycle');
 const { normalizeProcessingConfig } = require('../lib/version-processing');
 const { selectVersionInputs } = require('../lib/version-selection');
+const { createProcessingPreview } = require('../lib/version-preview');
+const { buildVersionExport } = require('../lib/version-export');
 const {
   parseArchive,
   parseCocoObject,
@@ -31,7 +30,6 @@ const { dataDir, dataPath, uploadsDir } = require('../lib/data-store');
 const { ensureLegacyBaseline, createRevision } = require('../lib/annotation-history');
 const { touchAfterAnnotation } = require('../lib/review-state');
 const { appendAuditEvent } = require('../lib/audit-log');
-const { createCocoDocument, appendCocoAnnotation } = require('../lib/coco-export');
 
 const router = express.Router();
 const ROOT = path.join(__dirname, '..');
@@ -480,6 +478,22 @@ router.post('/:sourceType/:sourceId/versions/preview', requireScopes('versions:r
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
+let activeSamplePreviews = 0;
+router.post('/:sourceType/:sourceId/versions/sample-preview', requireScopes('versions:read'), async (req, res) => {
+  const { resolved } = resolveRequestSource(req);
+  if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+  res.setHeader('Cache-Control', 'no-store');
+  if (activeSamplePreviews >= 2) return res.status(429).json({ error: 'Two previews are already processing. Please try again when one finishes.' });
+  activeSamplePreviews += 1;
+  try {
+    const preview = await createProcessingPreview({ ...resolved,
+      classes: resolved.source.labelClasses || resolved.source.classes || [],
+      processing: req.body.processing || {}, operation: req.body.operation, seed: req.body.seed || 'preview' });
+    res.json(preview);
+  } catch (error) { res.status(400).json({ error: error.message || 'The image preview could not be generated.' }); }
+  finally { activeSamplePreviews -= 1; }
+});
+
 router.post('/:sourceType/:sourceId/versions', requireScopes('versions:write'), async (req, res) => {
   const { actor, resolved } = resolveRequestSource(req);
   if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
@@ -532,101 +546,20 @@ router.get('/:sourceType/:sourceId/versions/:versionId/download', requireScopes(
     return res.status(404).json({ error: 'Dataset version not found.' });
   }
   if (!manifest.integrityValid) return res.status(409).json({ error: 'Version manifest integrity check failed.' });
-  const versionDir = path.join(VERSIONS_ROOT, manifest.id);
-  const zip = new AdmZip();
-  const checksums = [];
-  const classIndex = new Map(manifest.classes.map((label, index) => [label.name, index]));
-  const classificationClasses = manifest.classes.map((label, index) => ({
-    label: label.name, folder: `${String(index).padStart(3, '0')}_${String(label.name).replace(/[^a-z0-9_.-]+/gi, '_').slice(0, 80) || 'class'}`,
-  }));
-  const classificationRows = [];
-  const annotationsByImage = new Map();
-  manifest.annotations.forEach(annotation => {
-    if (!annotationsByImage.has(annotation.imageId)) annotationsByImage.set(annotation.imageId, []);
-    annotationsByImage.get(annotation.imageId).push(annotation);
-  });
-  const coco = createCocoDocument(manifest);
-  let corruptAsset = null;
-  manifest.images.forEach((image, imageIndex) => {
-    const source = path.resolve(versionDir, image.path);
-    if (!source.startsWith(path.resolve(versionDir) + path.sep) || !fs.existsSync(source)) {
-      corruptAsset = image.path;
-      return;
-    }
-    const bytes = fs.readFileSync(source);
-    if (sha256(bytes) !== image.contentHash) {
-      corruptAsset = image.path;
-      return;
-    }
-    zip.addFile(image.path.replace(/\\/g, '/'), bytes);
-    checksums.push(`${image.contentHash}  ${image.path}`);
-    const extension = path.extname(image.originalName) || path.extname(image.path) || '.png';
-    const stem = path.basename(image.originalName, path.extname(image.originalName)).replace(/[^a-z0-9_.-]+/gi, '_') || `image_${imageIndex + 1}`;
-    const exportStem = `${String(imageIndex + 1).padStart(6, '0')}_${stem}`;
-    const exportImage = `training/${image.split}/images/${exportStem}${extension}`;
-    const exportLabel = `training/${image.split}/labels/${exportStem}.txt`;
-    zip.addFile(exportImage, bytes);
-    const imageAnnotations = annotationsByImage.get(image.id) || [];
-    imageAnnotations.filter(annotation => annotation.type === 'classification').forEach(annotation => {
-      const category = classIndex.get(annotation.label);
-      if (category === undefined) return;
-      const classificationPath = `classification/${image.split}/${classificationClasses[category].folder}/${exportStem}${extension}`;
-      zip.addFile(classificationPath, bytes);
-      classificationRows.push({ image: classificationPath, label: annotation.label, split: image.split });
-    });
-    const yolo = [];
-    imageAnnotations.forEach(annotation => {
-      const category = classIndex.get(annotation.label);
-      if (category === undefined || !(image.width > 0 && image.height > 0)) return;
-      if (annotation.type === 'bbox') {
-        const data = annotation.data || {};
-        const centerX = (Number(data.x) + Number(data.width) / 2) / image.width;
-        const centerY = (Number(data.y) + Number(data.height) / 2) / image.height;
-        yolo.push([category, centerX, centerY, Number(data.width) / image.width, Number(data.height) / image.height].map((value, idx) => idx ? Number(value).toFixed(8) : value).join(' '));
-      } else if (annotation.type === 'polygon') {
-        const points = Array.isArray(annotation.data) ? annotation.data : annotation.data?.points || [];
-        if (points.length >= 3) yolo.push([category, ...points.flatMap(point => [Number(point.x) / image.width, Number(point.y) / image.height])].map((value, idx) => idx ? Number(value).toFixed(8) : value).join(' '));
-      }
-    });
-    zip.addFile(exportLabel, Buffer.from(yolo.join('\n')));
-    coco.images.push({ id: imageIndex + 1, file_name: exportImage, width: image.width, height: image.height, split: image.split, libreflow_image_id: image.id });
-    imageAnnotations.forEach(annotation => {
-      const category = classIndex.get(annotation.label);
-      appendCocoAnnotation(coco, annotation, {
-        imageId: imageIndex + 1,
-        categoryId: category === undefined ? null : category + 1,
-        width: image.width,
-        height: image.height,
-      });
-    });
-  });
-  if (corruptAsset) return res.status(409).json({ error: 'Version image integrity check failed.', path: corruptAsset });
-  const exportedManifest = { ...manifest };
-  delete exportedManifest.integrityValid;
-  const manifestBuffer = Buffer.from(JSON.stringify(exportedManifest, null, 2));
-  zip.addFile('manifest.json', manifestBuffer);
-  zip.addFile('annotations.json', Buffer.from(JSON.stringify(manifest.annotations, null, 2)));
-  zip.addFile('annotations/coco.json', Buffer.from(JSON.stringify(coco, null, 2)));
-  if (classificationRows.length) {
-    zip.addFile('classification/classes.json', Buffer.from(JSON.stringify(classificationClasses, null, 2)));
-    zip.addFile('classification/labels.json', Buffer.from(JSON.stringify(classificationRows, null, 2)));
-    zip.addFile('classification/README.txt', Buffer.from('Images are grouped by train/valid/test and class folder. classes.json maps each folder to its original class name. Geometry exports and the complete manifest are included at the archive root.\n'));
+  try {
+    const format = String(req.query.format || 'all').toLowerCase();
+    const data = buildVersionExport({ manifest, versionDir: path.join(VERSIONS_ROOT, manifest.id), format,
+      includeImages: req.query.images === undefined ? true : req.query.images === 'true',
+      includeNull: req.query.includeNull === undefined ? format === 'all' : req.query.includeNull === 'true' });
+    const safeName = `${manifest.source.name || req.params.sourceType}-${manifest.name}-${format}`.replace(/[^a-z0-9_.-]+/gi, '_');
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.zip"`);
+    res.setHeader('Content-Length', data.length);
+    res.end(data);
+  } catch (error) {
+    res.status(['ASSET_INTEGRITY', 'MISSING_ASSET', 'INVALID_ASSET_PATH', 'INVALID_ARCHIVE_PATH'].includes(error.code) ? 409 : 400)
+      .json({ error: error.message || 'Dataset export failed.' });
   }
-  ['train', 'valid', 'test'].forEach(split => {
-    const lines = manifest.images.filter(image => image.split === split).map(image => image.path);
-    zip.addFile(`splits/${split}.txt`, Buffer.from(lines.join('\n')));
-  });
-  zip.addFile('data.yaml', Buffer.from(yaml.dump({
-    path: 'training', train: 'train/images', val: 'valid/images', test: 'test/images',
-    names: manifest.classes.map(label => label.name), nc: manifest.classes.length,
-  })));
-  zip.addFile('checksums.sha256', Buffer.from(`${checksums.join('\n')}\n${sha256(manifestBuffer)}  manifest.json\n`));
-  const safeName = `${manifest.source.name || req.params.sourceType}-${manifest.name}`.replace(/[^a-z0-9_.-]+/gi, '_');
-  const data = zip.toBuffer();
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="${safeName}.zip"`);
-  res.setHeader('Content-Length', data.length);
-  res.end(data);
 });
 
 router.get('/:sourceType/:sourceId/health', requireScopes('versions:read'), (req, res) => {

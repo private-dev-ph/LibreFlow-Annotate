@@ -29,7 +29,7 @@ const root = path.resolve(__dirname, '../..');
       };
     });
     for (const file of ['theme.css', 'project-versions.css']) await page.addStyleTag({ content: fs.readFileSync(path.join(root, 'public/css', file), 'utf8') });
-    for (const file of ['version-splits.js', 'version-processing-fields.js', 'project-versions.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'public/js', file), 'utf8') });
+    for (const file of ['version-splits.js', 'version-processing-fields.js', 'version-preview-ui.js', 'version-export-ui.js', 'project-versions.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'public/js', file), 'utf8') });
     await page.locator('[data-tab=versions]').click();
     await page.waitForFunction(() => document.querySelector('#version-status')?.textContent === '10 images ready');
     assert.deepEqual(await page.locator('.version-split-track input').evaluateAll(inputs => inputs.map(input => getComputedStyle(input).backgroundColor)), ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)']);

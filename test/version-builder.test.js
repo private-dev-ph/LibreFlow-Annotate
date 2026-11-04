@@ -90,4 +90,35 @@ test('project version builder exports processed training data without touching s
   const classZip = new AdmZip(Buffer.from(await (await fetch(`${base}/versions/${isolated.id}/download`)).arrayBuffer()));
   assert.equal(classZip.getEntries().filter(entry => /^classification\/(train|valid|test)\/[^/]+\/.*\.png$/.test(entry.entryName)).length, 5);
   assert.ok(classZip.getEntry('classification/classes.json'));
+
+  const unnamedResponse = await post('/versions', { name: '   ', selection: 'all', processing: { preprocessing: { autoOrient: true } } });
+  const unnamed = await unnamedResponse.json();
+  assert.equal(unnamedResponse.status, 201, JSON.stringify(unnamed));
+  assert.match(unnamed.name, /^Version \d+$/);
+  assert.equal(unnamed.stats.sourceImages, 7);
+  const expandedManifest = await (await fetch(`${base}/versions/${unnamed.id}`)).json();
+  assert.equal(expandedManifest.images.find(image => image.id === 'image-4').isExplicitNull, true);
+  assert.equal(expandedManifest.images.find(image => image.id === 'image-5').isExplicitNull, false);
+  const selectedZip = new AdmZip(Buffer.from(await (await fetch(`${base}/versions/${unnamed.id}/download?format=csv&images=false&includeNull=false`)).arrayBuffer()));
+  const exportedSubset = JSON.parse(selectedZip.readAsText('export-manifest.json'));
+  assert.equal(exportedSubset.images.length, 6);
+  assert.ok(!exportedSubset.images.some(image => image.id === 'image-5'));
+  assert.ok(selectedZip.getEntry('annotations.csv'));
+  assert.ok(!selectedZip.getEntries().some(entry => /\.(png|jpe?g|webp)$/i.test(entry.entryName)));
+  assert.equal((await fetch(`${base}/versions/${unnamed.id}/download?format=invalid`)).status, 400);
+
+  const versionIndexBefore = hash(path.join(data, 'dataset_versions.json'));
+  const sampleResponse = await post('/versions/sample-preview', { operation: 'preprocessing.resize', processing: options.processing });
+  const sample = await sampleResponse.json();
+  assert.equal(sampleResponse.status, 200, JSON.stringify(sample));
+  assert.equal(sample.sample.id, 'image-0');
+  assert.equal(sample.after[0].width, 32);
+  assert.equal(sample.after[0].height, 32);
+  assert.match(sample.before.dataUrl, /^data:image\/png;base64,/);
+  assert.equal(hash(path.join(data, 'dataset_versions.json')), versionIndexBefore);
+  assert.equal((await post('/versions/sample-preview', { operation: 'invalid' })).status, 400);
+  assert.equal((await fetch(`${base}/versions/sample-preview`, { method: 'POST', headers: { 'x-user': 'outsider', 'Content-Type': 'application/json' }, body: JSON.stringify({ operation: 'preprocessing.resize' }) })).status, 403);
+  assert.equal(hash(path.join(data, 'images.json')), originalIndex);
+  assert.equal(hash(path.join(data, 'annotations.json')), originalAnnotations);
+  assert.deepEqual(images.map(image => hash(path.join(uploads, image.filename))), imageHashes);
 });

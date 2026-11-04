@@ -38,6 +38,16 @@ test('class mappings merge labels and omissions affect background filtering with
   assert.equal(annotations[1].label, 'ic');
 });
 
+test('all-image snapshots distinguish unfinished nulls from intentionally marked backgrounds', () => {
+  const images = [{ id: 'unfinished' }, { id: 'marked', isNull: true }, { id: 'annotated' }];
+  const annotations = [{ imageId: 'annotated', label: 'chip' }];
+  const result = selectVersionInputs({ images, annotations, selection: 'all' });
+  assert.deepEqual(result.images.map(image => [image.id, image.isNull, image.isExplicitNull]), [
+    ['unfinished', true, false], ['marked', true, true], ['annotated', false, false],
+  ]);
+  assert.equal(images[0].isNull, undefined);
+});
+
 test('required tags all match and excluded tags win; background sampling is reproducible', () => {
   const filtered = selectVersionInputs({ images: [{ id: 'a', tags: ['ok', 'camera'] }, { id: 'b', tags: ['ok'] }, { id: 'c', tags: ['ok', 'camera', 'bad'] }], preprocessing: { filterTags: { required: ['ok', 'camera'], excluded: ['bad'] } } });
   assert.deepEqual(filtered.images.map(image => image.id), ['a']);
