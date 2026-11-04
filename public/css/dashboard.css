@@ -63,7 +63,7 @@
 /* Project cards grid */
 .projects-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
   gap: 20px;
 }
 
@@ -319,3 +319,12 @@
   transition: opacity .3s; z-index: 200;
 }
 .toast.show { opacity: 1; }
+
+@media (max-width: 600px) {
+  .dash-container { padding: 24px 16px 40px; }
+  .project-card { min-width: 0; padding: 18px 16px; }
+  .card-footer, .card-header { flex-wrap: wrap; }
+  .card-stats { flex-wrap: wrap; }
+  .modal { padding: 12px; }
+  .modal-box { padding: 24px 20px; max-height: calc(100dvh - 24px); overflow-y: auto; }
+}
