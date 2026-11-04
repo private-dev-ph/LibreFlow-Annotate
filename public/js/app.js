@@ -383,7 +383,7 @@
         <span class="ann-label-text">${esc(s.label)}</span>
         <span class="ann-type">${s.type}</span>
         ${s.source && s.source !== 'manual' ? `<span class="ann-source" title="Source: ${esc(s.source)}">${esc(s.source)}</span>` : ''}
-        ${s.confidence != null && s.confidence !== '' && Number.isFinite(Number(s.confidence)) ? `<span class="ann-confidence">${Math.round(Number(s.confidence)*100)}%</span>` : ''}
+        ${s.source !== 'manual' && s.confidence != null && s.confidence !== '' && Number.isFinite(Number(s.confidence)) ? `<span class="ann-confidence">${Math.round(Number(s.confidence)*100)}%</span>` : ''}
         <button class="ann-del-btn" title="Delete" aria-label="Delete annotation">${LibreFlowIcons.icon('trash')}</button>`;
       li.querySelector('.ann-del-btn').addEventListener('click', e => {
         e.stopPropagation();
