@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 global.document = { addEventListener() {} };
+global.window = { addEventListener() {} };
 global.ResizeObserver = class {
   constructor(callback) { this.callback = callback; }
   observe() {}
