@@ -301,6 +301,46 @@ test('processed versions materialize deterministic resize and augmentation linea
   assert.equal(manifest.images[0].split, manifest.images[1].split);
 });
 
+test('multiplier mode keeps duplicate train variants and leaves other splits unchanged', async t => {
+  const dir = tempDir(t);
+  const sourceFile = path.join(dir, 'tiny.png');
+  await sharp({ create: { width: 2, height: 2, channels: 3, background: '#778899' } }).png().toFile(sourceFile);
+  const images = Array.from({ length: 50 }, (_, index) => ({
+    id: `train-${index + 1}`, originalName: `tiny-${index + 1}.png`, sourcePath: sourceFile, split: 'train',
+  }));
+  const manifest = await createImmutableVersion({
+    versionsRoot: path.join(dir, 'versions'), indexFile: path.join(dir, 'index.json'), id: 'multiplier-version',
+    sourceType: 'project', source: { id: 'project-multiplier', name: 'Multiplier', labelClasses: [] }, images,
+    processing: { augmentation: { multiplier: 2, rotate: [0] } },
+  });
+  assert.equal(manifest.processing.augmentation.multiplier, 2);
+  assert.equal(manifest.processing.augmentation.count, 1);
+  assert.equal(manifest.stats.images, 100);
+  assert.equal(manifest.stats.generatedImages, 50);
+  assert.equal(manifest.stats.augmentationVariants, 50);
+  assert.equal(manifest.stats.duplicateVariantsKept, 50);
+  assert.equal(manifest.stats.duplicateVariantsSkipped, 0);
+  assert.equal(new Set(manifest.images.map(image => image.id)).size, 100);
+  assert.equal(manifest.images.filter(image => image.split === 'train').length, 100);
+});
+
+test('maximum multiplier creates fourteen copies per train image', async t => {
+  const dir = tempDir(t);
+  const sourceFile = path.join(dir, 'tiny.png');
+  await sharp({ create: { width: 2, height: 2, channels: 3, background: '#778899' } }).png().toFile(sourceFile);
+  const images = [1, 2].map(index => ({ id: `train-${index}`, originalName: `tiny-${index}.png`, sourcePath: sourceFile, split: 'train' }));
+  const manifest = await createImmutableVersion({
+    versionsRoot: path.join(dir, 'versions'), indexFile: path.join(dir, 'index.json'), id: 'maximum-multiplier-version',
+    sourceType: 'project', source: { id: 'project-maximum-multiplier', name: 'Multiplier', labelClasses: [] }, images,
+    processing: { augmentation: { multiplier: 15, rotate: [0] } },
+  });
+  assert.equal(manifest.stats.images, 30);
+  assert.equal(manifest.stats.generatedImages, 28);
+  assert.equal(manifest.stats.augmentationVariants, 28);
+  assert.equal(manifest.stats.duplicateVariantsKept, 28);
+  assert.equal(new Set(manifest.images.map(image => image.id)).size, 30);
+});
+
 test('processed versions retain every rich annotation and its provenance', async t => {
   const dir = tempDir(t);
   const sourceFile = path.join(dir, 'rich.png');
