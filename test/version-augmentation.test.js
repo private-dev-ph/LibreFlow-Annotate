@@ -54,6 +54,18 @@ test('normalization defaults every operation off and rejects active invalid valu
   assert.equal(staleDisabled.mosaic.tiles, 4);
 });
 
+test('augmentation multipliers normalize to count copies and reject invalid or mismatched values', () => {
+  const normalized = normalizeAugmentation({ multiplier: 15 });
+  assert.equal(normalized.count, 14);
+  assert.equal(normalized.multiplier, 15);
+  assert.deepEqual(normalizeAugmentation(normalized), normalized);
+  assert.deepEqual(normalizeAugmentation({ multiplier: 2, count: 1 }).count, 1);
+  for (const multiplier of [null, 1, 1.5, 16, 'invalid']) {
+    assert.throws(() => normalizeAugmentation({ multiplier }), /multiplier must be an integer between 2 and 15/);
+  }
+  assert.throws(() => normalizeAugmentation({ multiplier: 2, count: 2 }), /count must equal multiplier - 1/);
+});
+
 test('augmentImage requires injected helpers and seeded rng', async () => {
   const f = await fixture();
   const image = sourceImage(f);
