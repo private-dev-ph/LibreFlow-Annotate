@@ -63,7 +63,17 @@
   </nav>
 
   <!-- ── Annotator Layout ── -->
-  <div id="annotator-body">
+  <div id="annotator-body" data-mobile-panel="canvas">
+    <div class="mobile-workspace-bar" aria-label="Workspace controls">
+      <select id="mobile-tool" aria-label="Drawing tool"></select>
+      <select id="mobile-panel" aria-label="Workspace panel">
+        <option value="canvas">Canvas</option>
+        <option value="images">Images &amp; labels</option>
+        <option value="tools">More tools</option>
+        <option value="details">Annotations &amp; review</option>
+      </select>
+      <button id="mobile-save" type="button" class="btn-save">Save</button>
+    </div>
 
     <!-- Left: Image list + Labels -->
     <aside id="left-sidebar">
@@ -209,7 +219,8 @@
       </div>
 
       <div id="tool-context" class="tool-context" role="status" aria-live="polite">
-        <span class="tool-context-copy"><strong id="active-tool-name">Select / Move</strong><span id="active-tool-hint">Click an annotation to select it, then drag to move.</span></span>
+        <span class="tool-context-copy"><span id="mobile-image-name" class="mobile-image-name"></span><strong id="active-tool-name">Select / Move</strong><span id="active-tool-hint">Click an annotation to select it, then drag to move.</span></span>
+        <button id="btn-finish-shape" type="button" class="toolbar-help-btn hidden">Finish shape</button>
         <button id="btn-shortcuts" class="toolbar-help-btn" type="button" aria-haspopup="dialog"><span data-lf-icon="keyboard" aria-hidden="true"></span> Shortcuts</button>
       </div>
 

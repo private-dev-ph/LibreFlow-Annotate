@@ -705,3 +705,13 @@ summary:focus-visible,
   }
   .toggle-knob { top: 50%; margin-top: -8px; }
 }
+
+/* Short landscape screens reserve vertical space for the image workspace. */
+@media (min-width: 601px) and (max-width: 1000px) and (max-height: 500px) {
+  :root { --nav-h: 56px; }
+  #top-nav { flex-wrap: nowrap; gap: 12px; }
+  .nav-left { flex: 1; }
+  .nav-right { flex: 0 0 auto; }
+  .nav-links { justify-content: flex-start; }
+  .nav-user { display: none; }
+}

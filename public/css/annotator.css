@@ -876,3 +876,53 @@ html, body { height: 100%; overflow: hidden; }
 }
 .btn-cancel-sm:hover { background: var(--bg3); }
 
+
+.mobile-workspace-bar, .mobile-image-name { display: none; }
+#annotation-canvas { touch-action: none; }
+@media (max-width: 1000px) {
+  html, body { height: 100%; overflow: hidden; }
+  body #annotator-body {
+    position: relative; display: flex; flex-direction: column;
+    height: calc(100dvh - var(--nav-h)) !important;
+    min-height: 0; overflow: hidden;
+  }
+  .mobile-workspace-bar {
+    display: flex; flex: 0 0 52px; gap: 6px; padding: 4px 8px;
+    background: var(--bg2); border-bottom: 1px solid var(--border); z-index: 4;
+  }
+  .mobile-workspace-bar select { width: 0; min-width: 0; flex: 1; background: var(--bg3); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .mobile-workspace-bar button { flex-shrink: 0; }
+  .mobile-image-name { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+  #canvas-area { isolation: isolate; order: 0; flex: 1; width: 100%; min-width: 0; min-height: 0; height: auto; }
+  #left-sidebar, #right-panel { display: none; }
+  #annotator-body[data-mobile-panel="images"] #left-sidebar,
+  #annotator-body[data-mobile-panel="details"] #right-panel {
+    display: flex; position: absolute; top: 52px; bottom: 0; left: 0; right: 0;
+    z-index: 3; width: 100% !important; min-width: 0; max-height: none; overflow-y: auto;
+    background: var(--bg2);
+  }
+  #left-sidebar .images-section { min-height: 180px; }
+  #sidebar-resize-handle { display: none; }
+  #toolbar { display: none; }
+  #annotator-body[data-mobile-panel="tools"] #toolbar {
+    display: flex; max-height: 45dvh; overflow-y: auto; flex-shrink: 0; min-height: 0;
+  }
+  .tool-group { flex-wrap: wrap; max-width: 100%; }
+  .toolbar-row { gap: 4px; flex-shrink: 0; }
+  #canvas-wrapper { min-height: 100px; }
+  .tool-context { flex-shrink: 0; padding: 4px 8px; gap: 6px; }
+  .tool-context-copy { flex: 1; flex-direction: column; align-items: flex-start; gap: 1px; }
+  #active-tool-hint { white-space: normal; overflow-wrap: anywhere; font-size: 11px; }
+  #btn-shortcuts { font-size: 0; padding: 0; min-width: 44px; }
+  .tool-btn, .view-mode-btn, #image-nav button, .ann-del-btn, #btn-add-label, .label-chip { min-height: 44px; min-width: 44px; }
+  #image-nav { bottom: 8px; max-width: calc(100% - 16px); }
+  #image-nav-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .section-header, .section-header-right { flex-wrap: wrap; }
+  .add-label-row { min-width: 0; }
+  #new-label-input { min-width: 0; width: 140px; }
+  .image-tag-toolbar { flex-wrap: wrap; }
+  #right-panel .annotations-sub { max-height: none; min-height: 140px; }
+  #right-panel #annotation-list { max-height: 35dvh; }
+  .modal { padding: 12px; }
+  #modal-export .modal-box, .modal-box { min-width: 0; max-width: 100%; max-height: calc(100dvh - 24px); overflow-y: auto; }
+}

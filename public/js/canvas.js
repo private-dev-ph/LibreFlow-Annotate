@@ -318,17 +318,19 @@ const Canvas = (() => {
   let lastMouse = { x: 0, y: 0 };
 
   function resize() {
-    canvas.width = wrapper.clientWidth;
-    canvas.height = wrapper.clientHeight;
-    draw();
+    const width = Math.max(1, wrapper.clientWidth);
+    const height = Math.max(1, wrapper.clientHeight);
+    if (canvas.width === width && canvas.height === height) return;
+    cancelPointer();
+    canvas.width = width;
+    canvas.height = height;
+    if (img) fitImage();
+    else draw();
   }
 
   function fitImage() {
     if (!img || !canvas) return;
-    const padding = 40;
-    const scaleX = (canvas.width - padding * 2) / img.width;
-    const scaleY = (canvas.height - padding * 2) / img.height;
-    scale = Math.min(scaleX, scaleY, 1);
+    scale = getFitScale();
     offsetX = (canvas.width - img.width * scale) / 2;
     offsetY = (canvas.height - img.height * scale) / 2;
     draw();
@@ -336,17 +338,19 @@ const Canvas = (() => {
 
   function getFitScale() {
     if (!img || !canvas) return 1;
-    const padding = 40;
-    const scaleX = (canvas.width - padding * 2) / img.width;
-    const scaleY = (canvas.height - padding * 2) / img.height;
-    return Math.min(scaleX, scaleY, 1);
+    const padding = Math.min(40, canvas.width / 10, canvas.height / 10);
+    return Math.max(0.0001, Math.min(
+      Math.max(1, canvas.width - padding * 2) / img.width,
+      Math.max(1, canvas.height - padding * 2) / img.height,
+      1
+    ));
   }
 
   function setScaleAroundScreenPoint(targetScale, sx, sy) {
     if (!img || !canvas) return;
     const imgX = (sx - offsetX) / scale;
     const imgY = (sy - offsetY) / scale;
-    scale = targetScale;
+    scale = Math.max(0.0001, Math.min(100, targetScale));
     offsetX = sx - imgX * scale;
     offsetY = sy - imgY * scale;
     draw();
@@ -555,7 +559,7 @@ const Canvas = (() => {
 
   function onMouseDown(e) {
     // Middle-click always pans regardless of active tool
-    if (e.button === 1) {
+    if (e.button === 1 || (e.button === 0 && tool === 'pan')) {
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
         const now = Date.now();
@@ -582,6 +586,7 @@ const Canvas = (() => {
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
+    lastMouse = { x: sx, y: sy };
     const imgPt = toImg(sx, sy);
 
     // Place a pasted copy
@@ -848,12 +853,61 @@ const Canvas = (() => {
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
     const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    offsetX = mx - (mx - offsetX) * factor;
-    offsetY = my - (my - offsetY) * factor;
-    scale *= factor;
+    setScaleAroundScreenPoint(scale * factor, e.clientX - rect.left, e.clientY - rect.top);
+  }
+
+  // One captured pointer owns each gesture. A canceled drag never commits edits.
+  let activePointer = null;
+  let pointerSnapshot = null;
+  function cancelPointer() {
+    if (activePointer === null) return;
+    if (movingShape || resizingShape) {
+      shapes = JSON.parse(pointerSnapshot.shapes);
+      undoStack = pointerSnapshot.undo;
+      redoStack = pointerSnapshot.redo;
+      if (onShapesChange) onShapesChange(shapes, selectedId, false);
+    }
+    if (isDragging) {
+      offsetX = pointerSnapshot.x;
+      offsetY = pointerSnapshot.y;
+    }
+    const pointerId = activePointer;
+    activePointer = null;
+    pointerSnapshot = null;
+    drawing = false;
+    startPt = null;
+    freehandPts = [];
+    movingShape = null;
+    moveStart = null;
+    moveDidChange = false;
+    resizingShape = null;
+    resizeOrigData = null;
+    resizeHandleIdx = -1;
+    isDragging = false;
+    canvas.style.cursor = '';
+    if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
     draw();
+  }
+  function onPointerDown(e) {
+    if (!img || activePointer !== null || e.isPrimary === false || ![0, 1].includes(e.button)) return;
+    e.preventDefault();
+    activePointer = e.pointerId;
+    pointerSnapshot = { shapes: JSON.stringify(shapes), undo: [...undoStack], redo: [...redoStack], x: offsetX, y: offsetY };
+    canvas.setPointerCapture(e.pointerId);
+    onMouseDown(e);
+  }
+  function onPointerMove(e) {
+    if (activePointer !== null && activePointer !== e.pointerId) return;
+    if (activePointer === null && e.pointerType !== 'mouse') return;
+    onMouseMove(e);
+  }
+  function onPointerUp(e) {
+    if (activePointer !== e.pointerId) return;
+    onMouseMove(e);
+    onMouseUp(e);
+    activePointer = null;
+    pointerSnapshot = null;
+    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
   }
 
   return {
@@ -865,9 +919,13 @@ const Canvas = (() => {
       new ResizeObserver(resize).observe(wrapper);
       resize();
 
-      canvas.addEventListener('mousedown', onMouseDown);
-      canvas.addEventListener('mousemove', onMouseMove);
-      canvas.addEventListener('mouseup', onMouseUp);
+      canvas.style.touchAction = 'none';
+      canvas.addEventListener('pointerdown', onPointerDown);
+      canvas.addEventListener('pointermove', onPointerMove);
+      canvas.addEventListener('pointerup', onPointerUp);
+      canvas.addEventListener('pointercancel', cancelPointer);
+      canvas.addEventListener('lostpointercapture', cancelPointer);
+      window.addEventListener('blur', cancelPointer);
       canvas.addEventListener('click', onClick);
       canvas.addEventListener('dblclick', onDblClick);
       canvas.addEventListener('wheel', onWheel, { passive: false });
@@ -887,11 +945,13 @@ const Canvas = (() => {
 
       // Cancel paste on Escape
       document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') cancelPointer();
         if (e.key === 'Escape' && pasteActive) { pasteActive = false; canvas.style.cursor = ''; draw(); }
       });
     },
 
     loadImage(src, existingShapes = []) {
+      cancelPointer();
       undoStack = [];
       redoStack = [];
       shapes = existingShapes.map(a => ({
@@ -918,7 +978,8 @@ const Canvas = (() => {
       image.src = src;
     },
 
-    setTool(t) { tool = t; polygonPts = []; pathPts = []; freehandPts = []; drawing = false; draw(); },
+    finishDrawing() { onDblClick(); },
+    setTool(t) { cancelPointer(); tool = t; polygonPts = []; pathPts = []; freehandPts = []; drawing = false; draw(); },
     getCurrentTool() { return tool; },
     setContextMenuCallback(cb) { onContextMenu = cb; },
     setSmartPromptCallback(cb) { onSmartPrompt = cb; },
@@ -1067,18 +1128,8 @@ const Canvas = (() => {
     // Sync label→color map from project settings
     setLabelColorMap(map) { setLabelColorMap(map); },
 
-    zoomIn() {
-      scale *= 1.15;
-      offsetX = canvas.width / 2 - (canvas.width / 2 - offsetX) * 1.15;
-      offsetY = canvas.height / 2 - (canvas.height / 2 - offsetY) * 1.15;
-      draw();
-    },
-    zoomOut() {
-      scale /= 1.15;
-      offsetX = canvas.width / 2 - (canvas.width / 2 - offsetX) / 1.15;
-      offsetY = canvas.height / 2 - (canvas.height / 2 - offsetY) / 1.15;
-      draw();
-    },
+    zoomIn() { setScaleAroundScreenPoint(scale * 1.15, canvas.width / 2, canvas.height / 2); },
+    zoomOut() { setScaleAroundScreenPoint(scale / 1.15, canvas.width / 2, canvas.height / 2); },
     fitToScreen() { fitImage(); },
 
     highlightShape(id) { hoveredId = id; draw(); },

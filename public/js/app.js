@@ -309,6 +309,9 @@
     unsaved = false;
     saveIndicator.classList.remove('show');
     imageNavLabel.textContent = `${idx + 1} / ${images.length}`;
+    const mobileImageName = document.getElementById('mobile-image-name');
+    mobileImageName.textContent = img.originalName;
+    mobileImageName.title = img.originalName;
     document.getElementById('btn-prev-img').disabled = idx === 0;
     document.getElementById('btn-next-img').disabled = idx === images.length - 1;
     updateNullButton(img);
@@ -700,6 +703,7 @@
   };
   const toolBtnId = Object.fromEntries(Object.entries(toolBtns).map(([id, name]) => [name, id]));
   const toolContext = {
+    pan: ['Pan image', 'Drag to move the image view.'],
     select: ['Select / Move', 'Click an annotation to select it, then drag to move.'],
     bbox: ['Bounding box', 'Drag a rectangle around an object.'],
     rbox: ['Rotated box', 'Drag a box; use [ and ] to rotate 5°.'],
@@ -727,6 +731,8 @@
       b.setAttribute('aria-pressed', String(active));
     });
     Canvas.setTool(t);
+    document.getElementById('mobile-tool').value = t;
+    document.getElementById('btn-finish-shape').classList.toggle('hidden', !['polygon', 'line', 'skeleton'].includes(t));
     updateToolContext(t);
     // Shift is a negative prompt modifier in Smart Mask mode, never a visibility toggle.
     Canvas.setAnnotationsVisible(true);
@@ -740,6 +746,21 @@
     button.setAttribute('aria-pressed', String(t === 'select'));
     button.addEventListener('click', () => switchTool(t));
   });
+  const mobileTool = document.getElementById('mobile-tool');
+  Object.entries(toolContext).forEach(([value, [label]]) => mobileTool.add(new Option(label, value)));
+  mobileTool.value = 'select';
+  mobileTool.addEventListener('change', () => switchTool(mobileTool.value));
+  document.getElementById('mobile-panel').addEventListener('change', e => {
+    document.getElementById('annotator-body').dataset.mobilePanel = e.target.value;
+  });
+  const mobileSave = document.getElementById('mobile-save');
+  mobileSave.addEventListener('click', () => document.getElementById('btn-save').click());
+  new MutationObserver(() => {
+    const dirty = saveIndicator.classList.contains('show');
+    mobileSave.textContent = dirty ? 'Save •' : 'Save';
+    mobileSave.setAttribute('aria-label', dirty ? 'Save unsaved annotations' : 'Save annotations');
+  }).observe(saveIndicator, { attributes: true, attributeFilter: ['class'] });
+  document.getElementById('btn-finish-shape').addEventListener('click', () => Canvas.finishDrawing());
   updateToolContext('select');
 
   document.getElementById('tool-delete').addEventListener('click', () => Canvas.deleteSelected());

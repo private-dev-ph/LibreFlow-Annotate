@@ -30,3 +30,12 @@
 .job-details-modal { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--overlay); }.job-details-modal[hidden] { display: none; }.job-details-dialog { width: min(680px, 100%); max-height: min(720px, calc(100vh - 48px)); overflow: auto; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }.job-details-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 22px 16px; border-bottom: 1px solid var(--border); }.job-details-title { margin: 0; color: var(--text); font-size: 17px; }.job-details-close { display: grid; width: 34px; height: 34px; place-items: center; flex: 0 0 auto; padding: 0; font: inherit; font-size: 20px; }.job-details-content { padding: 18px 22px 22px; }.job-details-progress { margin-bottom: 18px; }.job-details-progress-label { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 7px; font-size: 12px; }.job-details-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }.job-details-item { padding: 10px 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2); color: var(--text); font-size: 12px; line-height: 1.45; }.job-details-item-status { display: inline-block; margin-right: 7px; color: var(--accent-strong); font-weight: 700; text-transform: capitalize; }.job-details-item-error { display: block; margin-top: 4px; color: var(--danger); }.job-details-empty { margin: 0; font-size: 12px; }
 @media (max-width: 850px) { .automation-grid.two-columns, .automation-grid.api-layout { grid-template-columns: 1fr; }.jobs-container { padding-inline: 14px; } }
 @media (max-width: 560px) { .form-row, .checkbox-grid { grid-template-columns: 1fr; }.compact-row { align-items: flex-start; flex-direction: column; }.compact-row-actions { width: 100%; }.jobs-header { align-items: flex-start; }.job-details-modal { padding: 14px; }.job-details-header, .job-details-content { padding-inline: 16px; } }
+
+@media (max-width: 600px) {
+  .automation-tabs { flex-wrap: wrap; }
+  .job-top { flex-wrap: wrap; }
+  .job-info { flex-basis: calc(100% - 46px); }
+  .job-badge { max-width: 100%; white-space: normal; }
+  .job-name { white-space: normal; overflow-wrap: anywhere; }
+  .job-actions, .compact-row-actions, .card-heading { flex-wrap: wrap; }
+}
