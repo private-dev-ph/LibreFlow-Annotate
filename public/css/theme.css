@@ -609,14 +609,60 @@ summary:focus-visible,
 }
 
 @media (max-width: 760px) {
-  #top-nav { padding: 0 12px !important; }
-  .nav-logo { margin-right: 10px !important; }
-  .nav-logo-name, .nav-link svg, .btn-theme-label, .btn-logout { display: none; }
-  .nav-links { gap: 0; }
-  .nav-link { padding: 8px !important; }
-  .nav-right { gap: 6px !important; }
-  .nav-user { padding-right: 6px !important; }
-  .nav-username { display: none; }
+  :root { --nav-h: 112px; }
+  #top-nav {
+    height: var(--nav-h) !important;
+    padding: 0 12px !important;
+    align-content: center;
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  .nav-left,
+  .nav-right {
+    flex: 0 0 100%;
+    min-width: 0;
+  }
+  .nav-left {
+    height: 56px;
+    flex-wrap: nowrap;
+  }
+  .nav-logo { flex: 0 0 auto; margin-right: 10px !important; }
+  .nav-logo-name,
+  .nav-username,
+  .nav-sep,
+  .nav-breadcrumb,
+  .nav-link svg,
+  .btn-theme-label { display: none !important; }
+  .nav-links {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: space-between;
+    gap: 0;
+  }
+  .nav-link {
+    gap: 0;
+    padding: 6px 5px !important;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .nav-right {
+    height: 56px;
+    justify-content: flex-end;
+    gap: 6px !important;
+  }
+  .nav-user { padding: 3px; }
+  .btn-theme-settings {
+    width: 36px;
+    min-height: 34px;
+    padding: 0;
+  }
+  .btn-logout {
+    display: inline-flex !important;
+    align-items: center;
+    min-height: 34px;
+    padding: 6px 10px;
+    white-space: nowrap;
+  }
   .theme-options { grid-template-columns: 1fr; }
   .theme-panel { padding: 20px; }
 }
