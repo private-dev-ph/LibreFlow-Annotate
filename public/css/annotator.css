@@ -670,6 +670,34 @@ html, body { height: 100%; overflow: hidden; }
 .auto-hint a { color: var(--accent); }.slider-row {
   display: flex; flex-direction: column; gap: 3px;
 }
+.inference-tiling-details {
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg2);
+}
+.inference-tiling-details > summary {
+  min-height: 44px; display: flex; align-items: center; padding: 7px 9px;
+  cursor: pointer; color: var(--text); font-size: 12px; font-weight: 600;
+}
+.tiling-body { padding: 0 9px 9px; min-width: 0; }
+.tiling-toggle { min-height: 44px; display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 12px; cursor: pointer; }
+.tiling-toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+.tiling-help { margin: 3px 0 7px; color: var(--text-muted); font-size: 10px; line-height: 1.4; }
+.tiling-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-bottom: 7px; }
+.tiling-grid label, .tiling-body > fieldset > label { display: flex; flex-direction: column; gap: 3px; min-width: 0; color: var(--text-muted); font-size: 10px; line-height: 1.2; }
+.tiling-unit { color: var(--text-muted); font-size: 9px; font-weight: 400; }
+.tiling-grid input, .tiling-grid select, .tiling-body > fieldset > label select {
+  box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; padding: 6px 7px;
+  border: 1px solid var(--border); border-radius: 5px; background: var(--bg3); color: var(--text); font: inherit; font-size: 11px;
+}
+.tiling-grid input:focus-visible, .tiling-grid select:focus-visible, .tiling-body > fieldset > label select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tiling-body fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.tiling-body fieldset:disabled { opacity: .58; }
+.tiling-estimate, .tiling-validation { margin: 7px 0 0; min-height: 14px; font-size: 10px; line-height: 1.35; }
+.tiling-estimate { color: var(--text-muted); }
+.tiling-validation { color: #e05c5c; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+@media (max-width: 380px) {
+  .tiling-grid { grid-template-columns: 1fr; }
+}
 .slider-label {
   font-size: 11px; color: var(--text-muted); display: flex; justify-content: space-between;
 }
