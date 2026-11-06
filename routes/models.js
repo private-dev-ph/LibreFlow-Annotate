@@ -31,6 +31,64 @@ const storage = multer.diskStorage({
 const ALLOWED_MODEL_EXT = /\.(onnx|tflite|pt|pth|bin|weights|pb)$/i;
 const ALLOWED_YAML_EXT  = /\.(ya?ml)$/i;
 
+function isContainedPath(parent, target) {
+  const relative = path.relative(parent, target);
+  return Boolean(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+function modelFileError(message = 'Model file is unavailable.') {
+  return Object.assign(new Error(message), { code: 'MODEL_FILE_UNAVAILABLE' });
+}
+
+async function resolveModelFile(filename, extensionPattern) {
+  if (typeof filename !== 'string' || !filename || path.basename(filename) !== filename || !extensionPattern.test(filename)) {
+    throw modelFileError();
+  }
+
+  let root;
+  let resolved;
+  try {
+    root = await fs.promises.realpath(MODELS_DIR);
+    resolved = await fs.promises.realpath(path.join(root, filename));
+    const stat = await fs.promises.stat(resolved);
+    if (!isContainedPath(root, resolved) || !stat.isFile()) throw modelFileError();
+  } catch (error) {
+    if (error.code === 'MODEL_FILE_UNAVAILABLE') throw error;
+    throw modelFileError();
+  }
+  return resolved;
+}
+
+function safeExistingModelFile(filename) {
+  if (typeof filename !== 'string' || !filename || path.basename(filename) !== filename) return null;
+  try {
+    const root = fs.realpathSync(MODELS_DIR);
+    const candidate = path.resolve(root, filename);
+    const stat = fs.lstatSync(candidate);
+    if (!isContainedPath(root, candidate) || !stat.isFile() || stat.isSymbolicLink()) return null;
+    return candidate;
+  } catch {
+    return null;
+  }
+}
+
+function cleanupCopiedFiles(files) {
+  files.forEach(file => {
+    try { if (fs.existsSync(file)) fs.unlinkSync(file); } catch {}
+  });
+}
+
+function sameSourceIdentity(a, b) {
+  return Boolean(a && b && a.id === b.id && a.projectId === b.projectId &&
+    a.userId === b.userId && a.filename === b.filename && a.yamlFilename === b.yamlFilename);
+}
+
+function isBlockedModel(model) {
+  // The policy helper accepts either a format string or a complete model. Use
+  // a scalar fallback for legacy records with no model metadata at all.
+  return shouldBlockPyTorchModel(model?.format || model?.originalName || model?.filename || '');
+}
+
 const modelUpload = multer({
   storage,
   limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB
@@ -51,6 +109,35 @@ const modelFields = modelUpload.fields([
 
 function readModels()   { return readJson(DATA_FILE); }
 function writeModels(d) { writeJson(DATA_FILE, d); }
+
+// ── GET /api/models/available?projectId= ─────────────────────────────────────
+// Returns accessible models from other projects that have not already been
+// copied into the requested project.
+router.get('/available', (req, res) => {
+  const uid = req.session.userId;
+  const projectId = req.query.projectId;
+  if (typeof projectId !== 'string' || !projectId.trim()) {
+    return res.status(400).json({ error: 'projectId is required.' });
+  }
+
+  const targetProject = getProject(projectId);
+  if (denyMissingOrForbidden(res, targetProject, isProjectMember(targetProject, uid), 'Project')) return;
+
+  const models = readModels();
+  const copiedSourceIds = new Set(
+    models.filter(model => model.projectId === projectId && model.sourceModelId).map(model => model.sourceModelId),
+  );
+  const eligible = models.filter(model => {
+    if (model.projectId === projectId || copiedSourceIds.has(model.id) || isBlockedModel(model)) return false;
+    const sourceProject = getProject(model.projectId);
+    return Boolean(sourceProject && isProjectMember(sourceProject, uid) && canAccessModel(model, uid, model.projectId));
+  });
+
+  return res.json(eligible.map(model => ({
+    ...model,
+    sourceProjectName: getProject(model.projectId)?.name || '',
+  })));
+});
 
 // ── GET /api/models?projectId=  ───────────────────────────────────────────────
 // Returns owner's models (optionally filtered by project) PLUS models shared with
@@ -153,6 +240,147 @@ router.post('/upload', (req, res) => {
   });
 });
 
+// ── POST /api/models/:id/copy ────────────────────────────────────────────────
+// Copy an accessible model into another accessible project, preserving the
+// source metadata while assigning independent files and ownership.
+router.post('/:id/copy', async (req, res) => {
+  const { projectId } = req.body || {};
+  if (typeof projectId !== 'string' || !projectId.trim()) {
+    return res.status(400).json({ error: 'projectId is required.' });
+  }
+
+  const targetProject = getProject(projectId);
+  if (denyMissingOrForbidden(res, targetProject, isProjectMember(targetProject, req.session.userId), 'Project')) return;
+
+  const models = readModels();
+  const source = models.find(model => model.id === req.params.id);
+  const sourceProject = source ? getProject(source.projectId) : null;
+  if (!source || !sourceProject || !isProjectMember(sourceProject, req.session.userId) ||
+      !canAccessModel(source, req.session.userId, source.projectId)) {
+    return res.status(404).json({ error: 'Model not found.' });
+  }
+  if (source.projectId === projectId) {
+    return res.status(409).json({ error: 'Model already belongs to this project.' });
+  }
+  if (isBlockedModel(source)) {
+    return res.status(415).json({ error: 'PyTorch .pt/.pth model copies are disabled in production because checkpoint deserialization can execute code.' });
+  }
+  if (models.some(model => model.projectId === projectId && model.sourceModelId === source.id)) {
+    return res.status(409).json({ error: 'This model has already been copied into the project.' });
+  }
+
+  const modelExt = path.extname(source.filename || '').toLowerCase();
+  if (!ALLOWED_MODEL_EXT.test(modelExt)) {
+    return res.status(404).json({ error: 'Model file is unavailable.' });
+  }
+  const yamlExt = source.yamlFilename ? path.extname(source.yamlFilename).toLowerCase() : null;
+  if (source.yamlFilename && !ALLOWED_YAML_EXT.test(yamlExt)) {
+    return res.status(404).json({ error: 'Model YAML file is unavailable.' });
+  }
+
+  const copiedFiles = [];
+  try {
+    const sourceFile = await resolveModelFile(source.filename, ALLOWED_MODEL_EXT);
+    const sourceYaml = source.yamlFilename ? await resolveModelFile(source.yamlFilename, ALLOWED_YAML_EXT) : null;
+    const filename = `${uuidv4()}${modelExt}`;
+    const destination = path.join(MODELS_DIR, filename);
+    await fs.promises.copyFile(sourceFile, destination, fs.constants.COPYFILE_EXCL);
+    copiedFiles.push(destination);
+
+    let yamlFilename = null;
+    if (sourceYaml) {
+      yamlFilename = `${uuidv4()}${yamlExt}`;
+      const yamlDestination = path.join(MODELS_DIR, yamlFilename);
+      await fs.promises.copyFile(sourceYaml, yamlDestination, fs.constants.COPYFILE_EXCL);
+      copiedFiles.push(yamlDestination);
+    }
+
+    // Files are copied before this point so the final synchronous metadata
+    // commit can re-check all access and duplicate conditions atomically.
+    const latestModels = readModels();
+    const latestSource = latestModels.find(model => model.id === source.id);
+    const latestSourceProject = latestSource ? getProject(latestSource.projectId) : null;
+    const latestTargetProject = getProject(projectId);
+    if (!sameSourceIdentity(source, latestSource) || !latestSourceProject ||
+        !isProjectMember(latestSourceProject, req.session.userId) ||
+        !canAccessModel(latestSource, req.session.userId, latestSource.projectId)) {
+      cleanupCopiedFiles(copiedFiles);
+      return res.status(404).json({ error: 'Model is no longer available.' });
+    }
+    if (!latestTargetProject || !isProjectMember(latestTargetProject, req.session.userId)) {
+      cleanupCopiedFiles(copiedFiles);
+      return res.status(latestTargetProject ? 403 : 404).json({ error: latestTargetProject ? 'No access to this project.' : 'Project not found.' });
+    }
+    if (latestSource.projectId === projectId) {
+      cleanupCopiedFiles(copiedFiles);
+      return res.status(409).json({ error: 'Model already belongs to this project.' });
+    }
+    if (isBlockedModel(latestSource)) {
+      cleanupCopiedFiles(copiedFiles);
+      return res.status(415).json({ error: 'PyTorch .pt/.pth model copies are disabled in production because checkpoint deserialization can execute code.' });
+    }
+    if (latestModels.some(model => model.projectId === projectId && model.sourceModelId === latestSource.id)) {
+      cleanupCopiedFiles(copiedFiles);
+      return res.status(409).json({ error: 'This model has already been copied into the project.' });
+    }
+
+    const copied = {
+      id: uuidv4(),
+      userId: req.session.userId,
+      projectId,
+      name: latestSource.name,
+      type: latestSource.type,
+      description: latestSource.description,
+      format: latestSource.format,
+      filename,
+      originalName: latestSource.originalName,
+      size: latestSource.size,
+      yamlFilename,
+      yamlOriginalName: latestSource.yamlOriginalName || (latestSource.yamlFilename ? path.basename(latestSource.yamlFilename) : null),
+      sharedWithCollaborators: false,
+      uploadedAt: new Date().toISOString(),
+      sourceModelId: latestSource.id,
+      sourceProjectId: latestSource.projectId,
+    };
+
+    latestModels.push(copied);
+    let metadataCommitted = false;
+    try {
+      writeModels(latestModels);
+      metadataCommitted = true;
+      appendAuditEvent({
+        projectId,
+        actorId: req.session.userId,
+        actorUsername: req.session.username || '',
+        type: 'model.copied',
+        details: {
+          modelId: copied.id,
+          sourceModelId: copied.sourceModelId,
+          sourceProjectId: copied.sourceProjectId,
+          name: copied.name,
+          format: copied.format,
+        },
+      });
+    } catch (error) {
+      if (metadataCommitted) {
+        try {
+          const rollback = readModels().filter(model => model.id !== copied.id);
+          writeModels(rollback);
+        } catch {}
+      }
+      cleanupCopiedFiles(copiedFiles);
+      throw error;
+    }
+    return res.status(201).json(copied);
+  } catch (error) {
+    cleanupCopiedFiles(copiedFiles);
+    if (error.code === 'MODEL_FILE_UNAVAILABLE') {
+      return res.status(404).json({ error: error.message });
+    }
+    return res.status(500).json({ error: 'Model copy failed.' });
+  }
+});
+
 // ── PATCH /api/models/:id ─────────────────────────────────────────────────────
 // Update name, type, description, sharedWithCollaborators
 router.patch('/:id', (req, res) => {
@@ -180,8 +408,14 @@ router.delete('/:id', (req, res) => {
   const [model] = models.splice(index, 1);
   writeModels(models);
 
-  const filePath = path.join(MODELS_DIR, model.filename);
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  const filePath = safeExistingModelFile(model.filename);
+  if (filePath) {
+    try { fs.unlinkSync(filePath); } catch {}
+  }
+  const yamlPath = safeExistingModelFile(model.yamlFilename);
+  if (yamlPath) {
+    try { fs.unlinkSync(yamlPath); } catch {}
+  }
 
   res.json({ message: 'Model deleted.' });
 });
