@@ -64,5 +64,5 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 })().catch(error => { console.error(error); process.exitCode = 1; });
 
 function rootOfRepo() {
-  return path.resolve(__dirname, '../../../');
+  return path.resolve(__dirname, '../../../../');
 }
