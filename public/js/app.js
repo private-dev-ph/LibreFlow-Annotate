@@ -29,6 +29,7 @@
   let imageStatusFilter = localStorage.getItem('annotator_status_filter') || 'all';
   let imageSearchQuery = '';
   let autoSaveEnabled = localStorage.getItem('annotator_autosave') === 'true';
+  let tilingUI = null;
   let showLabelsEnabled = true;
   try { showLabelsEnabled = localStorage.getItem('annotator_show_labels') !== 'false'; }
   catch (e) { /* use the visible default when storage is unavailable */ }
@@ -304,8 +305,15 @@
     const img = images[idx];
     const url = `/uploads/${img.filename}`;
     const annotations = await API.getAnnotations(img.id);
+    if (images[currentIndex]?.id !== img.id) return;
     canvasEmpty.classList.add('hidden');
-    Canvas.loadImage(url, annotations);
+    const imageIdAtLoad = img.id;
+    const knownSize = Number.isFinite(Number(img.width)) && Number.isFinite(Number(img.height))
+      ? { width: Number(img.width), height: Number(img.height) } : null;
+    tilingUI?.updateImageSize(knownSize);
+    Canvas.loadImage(url, annotations, size => {
+      if (images[currentIndex]?.id === imageIdAtLoad) tilingUI?.updateImageSize(size);
+    });
     unsaved = false;
     saveIndicator.classList.remove('show');
     imageNavLabel.textContent = `${idx + 1} / ${images.length}`;
@@ -561,6 +569,7 @@
         const rowBias = document.getElementById('slider-row-bias');
         if (rowDet)  rowDet.style.display  = (type === 'detection')      ? '' : 'none';
         if (rowBias) rowBias.style.display  = (type === 'classification') ? '' : 'none';
+        tilingUI?.setModelType(type);
         document.getElementById('btn-auto-infer').disabled = !sel.value || currentIndex < 0 || type === 'segmentation';
         if (type === 'segmentation') document.getElementById('btn-auto-infer').title = 'Use the Smart Mask tool on the canvas.';
         else document.getElementById('btn-auto-infer').title = '';
@@ -579,26 +588,47 @@
     const modelId = document.getElementById('auto-model-select')?.value;
     if (!modelId || currentIndex < 0) return;
     const img = images[currentIndex];
+    const tiling = tilingUI?.getRequestTiling() || null;
+    const tilingMaster = document.getElementById('tiling-enabled');
+    if (tilingMaster?.checked && selectedProjectModel()?.type === 'detection' && !tiling) return;
     const statusEl = document.getElementById('auto-status');
     const btn = document.getElementById('btn-auto-infer');
     const setInferenceButton = (iconName, label) => {
       btn.innerHTML = `${LibreFlowIcons.icon(iconName)} <span class="infer-button-label">${label}</span>`;
     };
-    btn.disabled = true; setInferenceButton('loader', 'Running...');
+    btn.disabled = true; document.getElementById('auto-model-select').disabled = true;
+    tilingUI?.setRunning(true);
+    setInferenceButton('loader', 'Running...');
     if (statusEl) { statusEl.textContent = ''; statusEl.className = 'auto-status'; }
 
     const confThreshold = parseFloat(document.getElementById('infer-conf-slider')?.value || '0.25');
     const goodBias      = parseFloat(document.getElementById('infer-good-bias-slider')?.value || '0.5');
+    const runImageId = img.id;
+    const requestBody = { imageId: img.id, confThreshold, goodBias };
+    if (tiling) requestBody.tiling = tiling;
+    if (statusEl && tiling) {
+      const runSummary = tilingUI?.getRunSummary?.();
+      statusEl.textContent = runSummary?.count
+        ? `Running tiled inference · ${runSummary.count.toLocaleString()} tiles · ${tiling.workers} parallel workers…`
+        : `Running tiled inference · ${tiling.workers} parallel workers…`;
+      statusEl.className = 'auto-status';
+    }
 
     try {
       const r = await fetch(`/api/models/${modelId}/infer`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageId: img.id, confThreshold, goodBias }),
+        body: JSON.stringify(requestBody),
       });
-      const data = await r.json();
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error?.message || data.error || data.detail || data.message || `Inference request failed (${r.status}).`);
+      if (tiling && data.tiling?.enabled !== true) throw new Error('The server did not confirm tiled inference; no results were applied.');
+      if (images[currentIndex]?.id !== runImageId) {
+        if (statusEl) { statusEl.textContent = 'Inference result discarded because the image changed while it was running.'; statusEl.className = 'auto-status warn'; }
+        return;
+      }
       if (data.results && data.results.length > 0) {
-        const applyResult = Canvas.addShapes(data.results);
+        const applyResult = tiling ? Canvas.addShapes(data.results, { classAwareIou: tiling.mergeIou }) : Canvas.addShapes(data.results);
         const added = applyResult?.added ?? data.results.length;
         const skipped = applyResult?.skipped ?? 0;
         const removedExisting = applyResult?.removedExisting ?? 0;
@@ -606,7 +636,8 @@
           unsaved = true; saveIndicator.classList.add('show');
           const skipText = skipped ? ` ${skipped} duplicate/overlap(s) skipped.` : '';
           const cleanText = removedExisting ? ` ${removedExisting} existing overlap(s) removed.` : '';
-          if (statusEl) { statusEl.textContent = `${added} annotation(s) applied.${skipText}${cleanText} Review and save.`; statusEl.className = 'auto-status success'; }
+          const tileStats = data.tiling?.enabled ? ` ${data.tiling.tileCount ?? 0} tiles${data.tiling.duplicatesRemoved != null ? ` · ${data.tiling.duplicatesRemoved} duplicates merged` : ''}${data.tiling.workers != null ? ` · ${data.tiling.workers} workers` : ''}.` : '';
+          if (statusEl) { statusEl.textContent = `${added} annotation(s) applied.${skipText}${cleanText}${tileStats} Review and save.`; statusEl.className = 'auto-status success'; }
           showToast(`${added} auto-annotation(s) applied.${skipped ? ` ${skipped} skipped.` : ''}${removedExisting ? ` ${removedExisting} cleaned.` : ''}`);
         } else {
           const msg = skipped
@@ -616,7 +647,8 @@
           showToast(msg, 'warn');
         }
       } else {
-        const msg = data.message || data.info || 'No detections returned.';
+        const tileStats = data.tiling?.enabled ? ` ${data.tiling.tileCount ?? 0} tiles${data.tiling.duplicatesRemoved != null ? ` · ${data.tiling.duplicatesRemoved} duplicates merged` : ''}${data.tiling.workers != null ? ` · ${data.tiling.workers} workers` : ''}.` : '';
+        const msg = `${data.message || data.info || 'No detections returned.'}${tileStats}`;
         if (statusEl) { statusEl.textContent = msg; statusEl.className = 'auto-status warn'; }
         showToast(msg, 'warn');
       }
@@ -626,7 +658,11 @@
       showToast('Inference failed - check console', 'warn');
       console.error('[Auto-Annotate]', e);
     } finally {
-      btn.disabled = false; setInferenceButton('play', 'Run Inference');
+      tilingUI?.setRunning(false);
+      document.getElementById('auto-model-select').disabled = false;
+      const selected = selectedProjectModel();
+      btn.disabled = !selected || currentIndex < 0 || selected.type === 'segmentation';
+      setInferenceButton('play', 'Run Inference');
     }
   });
 
@@ -992,6 +1028,7 @@
     document.getElementById('canvas-wrapper'),
     onShapesChange
   );
+  tilingUI = window.InferenceTilingUI?.init({});
 
   window.App = { promptLabel };
 

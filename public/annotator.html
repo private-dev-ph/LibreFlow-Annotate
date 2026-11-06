@@ -319,6 +319,62 @@
                    oninput="document.getElementById('infer-conf-val').textContent=parseFloat(this.value).toFixed(2)" />
           </div>
 
+          <details id="inference-tiling-details" class="inference-tiling-details">
+            <summary>Tiling settings</summary>
+            <div class="tiling-body">
+              <label class="tiling-toggle" for="tiling-enabled">
+                <input id="tiling-enabled" type="checkbox" />
+                <span>Use tiled inference</span>
+              </label>
+              <p class="tiling-help">Crop the image into tiles for detection. Crops use original image pixels; the board is unchanged.</p>
+              <fieldset id="tiling-fields" disabled>
+                <legend class="sr-only">Tiled inference options</legend>
+                <div class="tiling-grid">
+                  <label for="tiling-tile-width">Tile width <span class="tiling-unit">px</span>
+                    <input id="tiling-tile-width" type="number" min="64" max="8192" step="1" inputmode="numeric" />
+                  </label>
+                  <label for="tiling-tile-height">Tile height <span class="tiling-unit">px</span>
+                    <input id="tiling-tile-height" type="number" min="64" max="8192" step="1" inputmode="numeric" />
+                  </label>
+                  <label for="tiling-overlap-x">Horizontal overlap <span class="tiling-unit">%</span>
+                    <input id="tiling-overlap-x" type="number" min="0" max="95" step="0.1" inputmode="decimal" />
+                  </label>
+                  <label for="tiling-overlap-y">Vertical overlap <span class="tiling-unit">%</span>
+                    <input id="tiling-overlap-y" type="number" min="0" max="95" step="0.1" inputmode="decimal" />
+                  </label>
+                  <label for="tiling-stride-x">Horizontal stride <span class="tiling-unit">px</span>
+                    <input id="tiling-stride-x" type="number" min="1" max="8192" step="1" inputmode="numeric" />
+                  </label>
+                  <label for="tiling-stride-y">Vertical stride <span class="tiling-unit">px</span>
+                    <input id="tiling-stride-y" type="number" min="1" max="8192" step="1" inputmode="numeric" />
+                  </label>
+                  <label for="tiling-model-input-size">Model input size <span class="tiling-unit">px</span>
+                    <input id="tiling-model-input-size" type="number" min="64" max="4096" step="32" inputmode="numeric" />
+                  </label>
+                  <label for="tiling-max-detections">Max detections <span class="tiling-unit">per tile</span>
+                    <input id="tiling-max-detections" type="number" min="1" max="5000" step="1" inputmode="numeric" />
+                  </label>
+                  <label for="tiling-tile-nms-iou">Per-tile NMS IoU <span class="tiling-unit">0–1</span>
+                    <input id="tiling-tile-nms-iou" type="number" min="0" max="1" step="0.01" inputmode="decimal" />
+                  </label>
+                  <label for="tiling-merge-iou">Merge IoU <span class="tiling-unit">0–1</span>
+                    <input id="tiling-merge-iou" type="number" min="0" max="1" step="0.01" inputmode="decimal" />
+                  </label>
+                  <label for="tiling-workers">Parallel workers
+                    <select id="tiling-workers"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select>
+                  </label>
+                </div>
+                <label for="tiling-merge-method">Cross-tile merge
+                  <select id="tiling-merge-method"><option value="class-aware-nms">Class-aware NMS</option></select>
+                </label>
+                <p class="tiling-help">Overlap and stride stay linked; manually editing stride takes precedence. Edge tiles may overlap more. Model input size is applied per crop.</p>
+                <p class="tiling-help">More workers use more memory.</p>
+                <p id="tiling-estimate" class="tiling-estimate" role="status" aria-live="polite"></p>
+                <p id="tiling-validation" class="tiling-validation" role="alert" aria-live="polite"></p>
+              </fieldset>
+            </div>
+          </details>
+
           <div class="slider-row" id="slider-row-bias" style="display:none">
             <label class="slider-label">GOOD ↔ NG bias: <span id="infer-good-bias-val">0.50</span></label>
             <input type="range" id="infer-good-bias-slider" class="infer-slider"
@@ -412,6 +468,8 @@
   <script src="/js/nav-inbox.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/canvas.js"></script>
+  <script src="/js/inference-tiling-settings.js"></script>
+  <script src="/js/inference-tiling-ui.js"></script>
   <script src="/js/review-workflow.js"></script>
   <script src="/js/app.js"></script>
 </body>
