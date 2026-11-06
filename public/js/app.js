@@ -30,6 +30,7 @@
   let imageSearchQuery = '';
   let autoSaveEnabled = localStorage.getItem('annotator_autosave') === 'true';
   let tilingUI = null;
+  let inferenceRunning = false;
   let showLabelsEnabled = true;
   try { showLabelsEnabled = localStorage.getItem('annotator_show_labels') !== 'false'; }
   catch (e) { /* use the visible default when storage is unavailable */ }
@@ -570,7 +571,7 @@
         if (rowDet)  rowDet.style.display  = (type === 'detection')      ? '' : 'none';
         if (rowBias) rowBias.style.display  = (type === 'classification') ? '' : 'none';
         tilingUI?.setModelType(type);
-        document.getElementById('btn-auto-infer').disabled = !sel.value || currentIndex < 0 || type === 'segmentation';
+        document.getElementById('btn-auto-infer').disabled = inferenceRunning || !sel.value || currentIndex < 0 || type === 'segmentation';
         if (type === 'segmentation') document.getElementById('btn-auto-infer').title = 'Use the Smart Mask tool on the canvas.';
         else document.getElementById('btn-auto-infer').title = '';
       }
@@ -586,7 +587,7 @@
 
   document.getElementById('btn-auto-infer')?.addEventListener('click', async () => {
     const modelId = document.getElementById('auto-model-select')?.value;
-    if (!modelId || currentIndex < 0) return;
+    if (inferenceRunning || !modelId || currentIndex < 0) return;
     const img = images[currentIndex];
     const tiling = tilingUI?.getRequestTiling() || null;
     const tilingMaster = document.getElementById('tiling-enabled');
@@ -596,6 +597,7 @@
     const setInferenceButton = (iconName, label) => {
       btn.innerHTML = `${LibreFlowIcons.icon(iconName)} <span class="infer-button-label">${label}</span>`;
     };
+    inferenceRunning = true;
     btn.disabled = true; document.getElementById('auto-model-select').disabled = true;
     tilingUI?.setRunning(true);
     setInferenceButton('loader', 'Running...');
@@ -658,6 +660,7 @@
       showToast('Inference failed - check console', 'warn');
       console.error('[Auto-Annotate]', e);
     } finally {
+      inferenceRunning = false;
       tilingUI?.setRunning(false);
       document.getElementById('auto-model-select').disabled = false;
       const selected = selectedProjectModel();
