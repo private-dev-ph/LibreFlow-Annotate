@@ -377,18 +377,30 @@
   });
 
   // -- Shapes change callback -------------------------------------------------
+  let annotationListShapes = null;
   function onShapesChange(shapes, selectedId, dirty = false) {
     if (dirty) unsaved = true;
     saveIndicator.classList[unsaved ? 'add' : 'remove']('show');
-    renderAnnotationList(shapes, selectedId);
+    renderAnnotationList(shapes, selectedId, dirty);
   }
 
-  function renderAnnotationList(shapes, selectedId) {
-    annotationList.innerHTML = '';
+  function renderAnnotationList(shapes, selectedId, dirty = false) {
     annCountEl.textContent = shapes.length;
     annotationsEmpty?.classList.toggle('hidden', shapes.length > 0);
+    if (annotationListShapes === shapes && !dirty) {
+      const selected = selectedId == null ? null : String(selectedId);
+      [...annotationList.children].forEach(row => {
+        row.classList.toggle('selected', row.dataset.annotationId === selected);
+      });
+      return;
+    }
+    annotationListShapes = shapes;
+    annotationList.innerHTML = '';
     shapes.forEach(s => {
       const li = document.createElement('li');
+      li.dataset.annotationId = s.id;
+      li.tabIndex = 0;
+      li.title = 'Double-click or press Enter to zoom to annotation';
       if (s.id === selectedId) li.classList.add('selected');
       li.innerHTML = `
         <span class="ann-dot" style="background:${Canvas.colorFor(s.label)}"></span>
@@ -403,6 +415,28 @@
         Canvas.deleteSelected();
       });
       li.addEventListener('click', () => Canvas.setSelected(s.id));
+      const focusAnnotation = e => {
+        if (e.target instanceof Element && e.target.closest('button, a, input, select, textarea, [contenteditable]')) return;
+        if (!Canvas.focusShape(s.id)) return;
+        if (window.matchMedia('(max-width: 1000px)').matches) {
+          const mobilePanel = document.getElementById('mobile-panel');
+          const annotatorBody = document.getElementById('annotator-body');
+          if (mobilePanel) {
+            mobilePanel.value = 'canvas';
+            mobilePanel.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          if (annotatorBody) annotatorBody.dataset.mobilePanel = 'canvas';
+          document.getElementById('annotation-canvas')?.focus?.({ preventScroll: true });
+        }
+      };
+      li.addEventListener('dblclick', focusAnnotation);
+      li.addEventListener('keydown', e => {
+        if (e.target !== li || e.key !== 'Enter' || e.repeat || e.isComposing
+          || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+        e.preventDefault();
+        e.stopPropagation();
+        focusAnnotation(e);
+      });
       li.addEventListener('mouseenter', () => Canvas.highlightShape(s.id));
       li.addEventListener('mouseleave', () => Canvas.clearHighlight());
       annotationList.appendChild(li);
