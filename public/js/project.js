@@ -848,7 +848,8 @@
         try {
           await API.deleteModel(btn.dataset.id);
           Notify.success('Model deleted');
-          loadModels();
+          await loadModels();
+          if (existingPickerOpen) await loadAvailableModels();
         } catch(e) {
           Notify.error('Delete failed', e.message);
         }
