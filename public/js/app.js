@@ -573,7 +573,7 @@
         tilingUI?.setModelType(type);
         document.getElementById('btn-auto-infer').disabled = inferenceRunning || !sel.value || currentIndex < 0 || type === 'segmentation';
         if (type === 'segmentation') document.getElementById('btn-auto-infer').title = 'Use the Smart Mask tool on the canvas.';
-        else document.getElementById('btn-auto-infer').title = '';
+        else document.getElementById('btn-auto-infer').title = 'Run inference (X)';
       }
 
       // Only attach listener once (first call); subsequent calls just restore value + updateSliders
@@ -846,8 +846,11 @@
 
   function keyboardExcluded(target) {
     const el = target instanceof Element ? target : null;
+    const editable = Boolean(el?.isContentEditable)
+      || Boolean(el?.closest('input, textarea, select'));
     return Boolean(shortcutsDialog?.open)
-      || Boolean(el?.closest('input, textarea, select, [contenteditable="true"], dialog'));
+      || Boolean(document.querySelector('dialog[open], .modal:not(.hidden)'))
+      || editable;
   }
 
   // -- Shift: hold to hide all annotations ------------------------------------
@@ -922,7 +925,9 @@
     else if (e.key === 'f') Canvas.fitToScreen();
     else if (e.key === 'ArrowLeft'  || e.key === 'q') document.getElementById('btn-prev-img').click();
     else if (e.key === 'ArrowRight' || e.key === 'e') document.getElementById('btn-next-img').click();
-    else if (e.key === 'x') {
+    else if (typeof e.key === 'string' && e.key.toLowerCase() === 'x'
+      && !e.repeat && !e.isComposing && !e.defaultPrevented
+      && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const sel = document.getElementById('auto-model-select');
       const btn = document.getElementById('btn-auto-infer');
       if (sel && sel.value && btn && !btn.disabled) btn.click();

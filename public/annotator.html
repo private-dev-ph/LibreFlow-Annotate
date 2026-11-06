@@ -383,7 +383,7 @@
             <div class="slider-hint"><span>all GOOD</span><span>all NG</span></div>
           </div>
 
-          <button id="btn-auto-infer" class="btn-infer" disabled><span data-lf-icon="play" aria-hidden="true"></span> <span class="infer-button-label">Run Inference</span></button>
+          <button id="btn-auto-infer" class="btn-infer" aria-keyshortcuts="X" title="Run inference (X)" disabled><span data-lf-icon="play" aria-hidden="true"></span> <span class="infer-button-label">Run Inference</span></button>
           <div id="auto-status" class="auto-status"></div>
           <p class="auto-hint">Load ML models on the <a href="/models" target="_blank">Models page</a>. Start the inference server with <code>start_inference.bat</code>.</p>
         </div>
@@ -454,7 +454,9 @@
       <div><dt>Ctrl/Cmd + Enter</dt><dd>Save and next</dd></div>
       <div><dt>Q / E or ← / →</dt><dd>Previous / next image</dd></div>
       <div><dt>+ / − / F</dt><dd>Zoom in / out / fit</dd></div>
-      <div><dt>X / N / [ ]</dt><dd>Inference / null / rotate</dd></div>
+      <div><dt>X</dt><dd>Run auto-annotate inference</dd></div>
+      <div><dt>N</dt><dd>Mark image as null</dd></div>
+      <div><dt>[ / ]</dt><dd>Rotate selected annotation</dd></div>
     </dl>
     <button id="btn-close-shortcuts-footer" type="button" class="btn-modal-cancel">Close</button>
   </dialog>
