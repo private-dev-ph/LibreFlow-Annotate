@@ -15,6 +15,7 @@ function genId() {
 const Canvas = (() => {
   let canvas, ctx, wrapper;
   let img = null;
+  let imageLoadSequence = 0;
   let scale = 1, offsetX = 0, offsetY = 0;
   let isDragging = false, dragStart = { x: 0, y: 0 };
   let tool = 'select';
@@ -971,7 +972,8 @@ const Canvas = (() => {
       });
     },
 
-    loadImage(src, existingShapes = []) {
+    loadImage(src, existingShapes = [], onLoadedSize = null) {
+      const loadSequence = ++imageLoadSequence;
       cancelPointer();
       undoStack = [];
       redoStack = [];
@@ -992,10 +994,17 @@ const Canvas = (() => {
       if (onShapesChange) onShapesChange(shapes, null, false);
       const image = new Image();
       image.onload = () => {
+        if (loadSequence !== imageLoadSequence) return;
         img = image;
         fitImage();
+        if (typeof onLoadedSize === 'function') onLoadedSize({ width: image.width, height: image.height });
       };
-      image.onerror = () => { img = null; draw(); };
+      image.onerror = () => {
+        if (loadSequence !== imageLoadSequence) return;
+        img = null;
+        draw();
+        if (typeof onLoadedSize === 'function') onLoadedSize(null);
+      };
       image.src = src;
     },
 
