@@ -50,10 +50,18 @@
       };
     }
     function normalized() { return api.normalize(rawSettings(true)); }
-    function focusInvalid() {
+    function focusInvalid(error) {
+      const details = byId('inference-tiling-details');
+      if (details) details.open = true;
       const order = ['tileWidth', 'tileHeight', 'overlapX', 'overlapY', 'strideX', 'strideY', 'modelInputSize', 'maxDetections', 'tileNmsIou', 'mergeIou', 'workers'];
-      const invalid = order.find(name => !Number.isFinite(number(name)) || !controls[name]?.checkValidity?.());
-      if (invalid) controls[invalid]?.focus();
+      const message = String(error?.message || '').toLowerCase();
+      const invalid = order.find(name => message.includes(name.toLowerCase())) || order.find(name => !Number.isFinite(number(name)) || !controls[name]?.checkValidity?.());
+      if (invalid && controls[invalid]) {
+        controls[invalid].focus();
+      } else if (validation) {
+        validation.tabIndex = -1;
+        validation.focus();
+      }
     }
     function showValidation() {
       if (!master.checked || !modelIsDetection) { validation.textContent = ''; return true; }
@@ -119,7 +127,7 @@
           if (estimatedTotal > 1024) throw new Error('Estimated tile count exceeds the 1,024-tile limit.');
           validation.textContent = ''; return value;
         }
-        catch (error) { validation.textContent = error?.message || 'Check the tiling settings.'; focusInvalid(); return null; }
+        catch (error) { validation.textContent = error?.message || 'Check the tiling settings.'; focusInvalid(error); return null; }
       },
       isValid() { return showValidation(); },
     };
