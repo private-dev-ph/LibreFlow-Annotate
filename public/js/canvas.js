@@ -993,6 +993,7 @@ const Canvas = (() => {
   function onPointerDown(e) {
     if (!img || activePointer !== null || e.isPrimary === false || ![0, 1].includes(e.button)) return;
     e.preventDefault();
+    canvas.focus({ preventScroll: true });
     activePointer = e.pointerId;
     lastPointerType = e.pointerType;
     pointerSnapshot = { shapes: JSON.stringify(shapes), undo: [...undoStack], redo: [...redoStack], x: offsetX, y: offsetY, startX: e.clientX, startY: e.clientY };
@@ -1022,6 +1023,10 @@ const Canvas = (() => {
   return {
     init(canvasEl, wrapperEl, shapesChangeCb) {
       canvas = canvasEl;
+      if (!canvas.hasAttribute('tabindex')) canvas.setAttribute('tabindex', '0');
+      if (!canvas.hasAttribute('aria-label') && !canvas.hasAttribute('aria-labelledby')) {
+        canvas.setAttribute('aria-label', 'Annotation canvas');
+      }
       ctx = canvas.getContext('2d');
       wrapper = wrapperEl;
       onShapesChange = shapesChangeCb;
