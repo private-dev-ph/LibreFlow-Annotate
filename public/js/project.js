@@ -653,6 +653,158 @@
 
   //─── ── MODELS ─────────────────────────────────────────────────────────────
   let allModels = [];
+  let availableModels = [];
+  let existingPickerOpen = false;
+  let existingPickerLoading = false;
+  let existingPickerError = '';
+  let existingPickerPendingId = null;
+
+  const existingPickerBody = document.getElementById('existing-model-picker-body');
+  const existingPickerToggle = document.getElementById('btn-toggle-existing-models');
+  const existingPickerCancel = document.getElementById('btn-cancel-existing-models');
+  const existingPickerSearch = document.getElementById('existing-model-search');
+  const existingPickerStatus = document.getElementById('existing-model-status');
+  const existingPickerList = document.getElementById('existing-models-list');
+
+  function setExistingPickerStatus(message = '', kind = '') {
+    existingPickerStatus.textContent = message;
+    existingPickerStatus.className = `existing-model-status${kind ? ` ${kind}` : ''}`;
+  }
+
+  function filteredAvailableModels() {
+    const query = (existingPickerSearch.value || '').trim().toLowerCase();
+    if (!query) return availableModels;
+    return availableModels.filter(model => [model.name, model.sourceProjectName, model.type, model.format]
+      .filter(Boolean)
+      .some(value => String(value).toLowerCase().includes(query)));
+  }
+
+  function renderAvailableModels() {
+    if (existingPickerLoading) {
+      setExistingPickerStatus('Loading available models…', 'loading');
+      existingPickerList.innerHTML = '<div class="existing-model-state">Loading available models…</div>';
+      return;
+    }
+    if (existingPickerError) {
+      setExistingPickerStatus(existingPickerError, 'error');
+      existingPickerList.innerHTML = '<button class="btn-existing-retry" type="button" id="btn-retry-existing-models">Retry</button>';
+      document.getElementById('btn-retry-existing-models').addEventListener('click', loadAvailableModels);
+      return;
+    }
+
+    const models = filteredAvailableModels();
+    if (!availableModels.length) {
+      setExistingPickerStatus('', '');
+      existingPickerList.innerHTML = '<div class="existing-model-state">No models are available from other projects.</div>';
+      return;
+    }
+    if (!models.length) {
+      setExistingPickerStatus('', '');
+      existingPickerList.innerHTML = '<div class="existing-model-state">No models match your search.</div>';
+      return;
+    }
+
+    setExistingPickerStatus('', '');
+    existingPickerList.innerHTML = models.map(model => {
+      const modelId = String(model.id);
+      const pending = existingPickerPendingId === modelId;
+      return `
+        <div class="existing-model-card" data-model-id="${escHtml(modelId)}">
+          <div class="existing-model-info">
+            <div class="existing-model-name">${escHtml(model.name || 'Unnamed model')}</div>
+            <div class="existing-model-source">From ${escHtml(model.sourceProjectName || 'another project')}</div>
+            <div class="existing-model-meta">
+              <span class="badge-type badge-${escHtml(model.type || 'detection')}">${escHtml(model.type || 'Unknown')}</span>
+              <span>${escHtml(model.format?.toUpperCase() || 'Unknown format')}</span>
+              <span>${formatBytes(model.size)}</span>
+            </div>
+          </div>
+          <button class="btn-add-existing-model" type="button" data-copy-model="${escHtml(modelId)}"${existingPickerPendingId ? ' disabled' : ''}${pending ? ' aria-busy="true"' : ''}>
+            ${pending ? 'Adding…' : 'Add to project'}
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    existingPickerList.querySelectorAll('[data-copy-model]').forEach(button => {
+      button.addEventListener('click', () => copyExistingModel(button.dataset.copyModel));
+    });
+  }
+
+  async function loadAvailableModels() {
+    existingPickerLoading = true;
+    existingPickerError = '';
+    renderAvailableModels();
+    try {
+      const models = await API.getAvailableModels(projectId);
+      availableModels = Array.isArray(models) ? models : [];
+    } catch (error) {
+      existingPickerError = error.message || 'Failed to load available models.';
+      availableModels = [];
+    } finally {
+      existingPickerLoading = false;
+      renderAvailableModels();
+    }
+  }
+
+  function openExistingPicker() {
+    existingPickerOpen = true;
+    existingPickerBody.hidden = false;
+    existingPickerToggle.setAttribute('aria-expanded', 'true');
+    existingPickerSearch.focus();
+    loadAvailableModels();
+  }
+
+  function closeExistingPicker({ restoreFocus = true } = {}) {
+    existingPickerOpen = false;
+    existingPickerBody.hidden = true;
+    existingPickerToggle.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) existingPickerToggle.focus();
+  }
+
+  async function copyExistingModel(modelId) {
+    const id = String(modelId);
+    if (existingPickerPendingId) return;
+    const visibleModels = filteredAvailableModels();
+    const sourceIndex = visibleModels.findIndex(model => String(model.id) === id);
+    const nextFocusId = visibleModels[sourceIndex + 1]?.id || visibleModels[sourceIndex - 1]?.id || null;
+    existingPickerPendingId = id;
+    renderAvailableModels();
+    setExistingPickerStatus('Adding model to this project…', 'loading');
+    try {
+      await API.copyModel(id, projectId);
+      existingPickerPendingId = null;
+      await Promise.all([loadModels(), loadAvailableModels()]);
+      Notify.success('Model added', 'A separate copy was added to this project.');
+      setExistingPickerStatus('Model added to this project.', 'success');
+      requestAnimationFrame(() => {
+        const nextButton = nextFocusId && existingPickerList.querySelector(`[data-copy-model="${CSS.escape(String(nextFocusId))}"]`);
+        (existingPickerOpen ? (nextButton || existingPickerSearch) : existingPickerToggle).focus();
+      });
+    } catch (error) {
+      existingPickerPendingId = null;
+      renderAvailableModels();
+      setExistingPickerStatus(error.message || 'Failed to add model.', 'error');
+      Notify.error('Failed to add model', error.message);
+      requestAnimationFrame(() => {
+        const failedButton = existingPickerList.querySelector(`[data-copy-model="${CSS.escape(id)}"]`);
+        (failedButton || existingPickerSearch).focus();
+      });
+    }
+  }
+
+  existingPickerToggle.addEventListener('click', () => {
+    if (existingPickerOpen) closeExistingPicker();
+    else openExistingPicker();
+  });
+  existingPickerCancel.addEventListener('click', () => closeExistingPicker());
+  existingPickerSearch.addEventListener('input', renderAvailableModels);
+  document.addEventListener('keydown', event => {
+    if (existingPickerOpen && event.key === 'Escape') {
+      event.preventDefault();
+      closeExistingPicker();
+    }
+  });
 
   async function loadModels() {
     try {
@@ -684,6 +836,7 @@
             <span>${formatBytes(m.size)}</span>
             ${m.yamlOriginalName ? `<span title="Config: ${escHtml(m.yamlOriginalName)}">${LibreFlowIcons.icon('file')} ${escHtml(m.yamlOriginalName)}</span>` : ''}
             ${m.description ? `<span>${escHtml(m.description)}</span>` : ''}
+            ${m.sourceModelId || m.sourceProjectId ? '<span class="model-provenance">Copied from another project</span>' : ''}
           </div>
         </div>
         ${m.userId === me.id ? `<button class="btn-del-model" data-id="${escHtml(m.id)}">Delete</button>` : '<span class="model-shared-badge" title="Shared by project owner">Shared</span>'}
