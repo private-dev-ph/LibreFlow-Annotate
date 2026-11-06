@@ -37,6 +37,10 @@ from ultralytics.models.sam.build import (
     build_sam_vit_h,
     build_sam_vit_l,
 )
+try:  # Works both as ``py_scripts.infer_server`` and from ``py_scripts`` cwd.
+    from .tiled_inference import TilingValidationError, run_tiled_inference, validate_tiling_options
+except ImportError:  # pragma: no cover - exercised by local uvicorn script mode
+    from tiled_inference import TilingValidationError, run_tiled_inference, validate_tiling_options
 
 logging.basicConfig(level=logging.INFO, format="[INFER] %(message)s")
 log = logging.getLogger("infer")
@@ -206,6 +210,10 @@ class InferRequest(BaseModel):
     good_bias: float = Field(0.5, ge=0.0, le=1.0)
     # Optional YAML for class name overrides
     yaml_path: Optional[str] = Field(None, description="Path to data.yaml for class name overrides")
+    # Kept permissive at the transport boundary so disabled/stale options keep
+    # the historical non-tiled path; enabled options are strictly validated by
+    # validate_tiling_options in the API worker.
+    tiling: Optional[Any] = Field(None, description="Optional native-resolution tiled inference options")
 
 
 class ShapeData(BaseModel):
@@ -225,6 +233,7 @@ class InferResponse(BaseModel):
     results:  List[Dict[str, Any]]
     count:    int
     message:  str
+    tiling: Optional[Dict[str, Any]] = None
 
 
 class SegmentRequest(BaseModel):
@@ -373,11 +382,23 @@ def classify_combined(
 
 @app.post("/infer", response_model=InferResponse)
 def infer(req: InferRequest):
-    # ── Load detection model ──
+    # Validate in the request worker as well as at any client/schema boundary.
+    # This is deliberately repeated here so an older caller cannot silently
+    # fall back to non-tiled inference while asking for tiled output.
     try:
-        det_model = load_model(req.model_path)
-    except FileNotFoundError as e:
-        raise HTTPException(400, str(e))
+        tiling_settings = validate_tiling_options(req.tiling)
+    except TilingValidationError as exc:
+        raise HTTPException(422, str(exc))
+
+    det_model = None
+    if tiling_settings is None:
+        # ── Load detection model ──
+        try:
+            det_model = load_model(req.model_path)
+        except FileNotFoundError as e:
+            raise HTTPException(400, str(e))
+    elif not Path(req.model_path).exists():
+        raise HTTPException(400, f"Model file not found: {req.model_path}")
 
     # ── Load image ──
     img_bgr = cv2.imread(req.image_path)
@@ -401,24 +422,47 @@ def infer(req: InferRequest):
             log.warning(f"Failed to load yaml: {e}")
 
     # ── Stage 1: Detection ──
-    det_results = det_model.predict(img_bgr, conf=req.conf_threshold, verbose=False)
-    raw_detections = []
-    for r in det_results:
-        for box in r.boxes:
-            x1, y1, x2, y2 = map(float, box.xyxy[0].tolist())
-            conf  = float(box.conf[0])
-            cls_id = int(box.cls[0])
-            name = (
-                yaml_class_names.get(cls_id)
-                or det_model.names.get(cls_id, f"class_{cls_id}")
+    tiling_stats: Optional[Dict[str, Any]] = None
+    if tiling_settings is not None:
+        try:
+            raw_detections, tiling_stats = run_tiled_inference(
+                img_bgr, req.model_path, req.conf_threshold, req.tiling
             )
-            raw_detections.append({"box": [x1, y1, x2, y2], "conf": conf, "cls_id": cls_id, "cls_name": name})
+        except TilingValidationError as exc:
+            raise HTTPException(422, str(exc))
+        except FileNotFoundError as exc:
+            raise HTTPException(400, str(exc))
+        except Exception as exc:
+            log.exception("Tiled inference failed")
+            raise HTTPException(422, f"Tiled inference failed: {exc}") from exc
+        # Tiled detections must carry stats; fail closed if a replaced engine
+        # returns no metadata rather than silently violating the API contract.
+        if not isinstance(tiling_stats, dict) or tiling_stats.get("enabled") is not True:
+            raise HTTPException(422, "Tiled inference did not return required tiling statistics")
+        for det in raw_detections:
+            cls_id = det["cls_id"]
+            det["cls_name"] = yaml_class_names.get(cls_id) or det.get("cls_name", f"class_{cls_id}")
+    else:
+        det_results = det_model.predict(img_bgr, conf=req.conf_threshold, verbose=False)
+        raw_detections = []
+        for r in det_results:
+            for box in r.boxes:
+                x1, y1, x2, y2 = map(float, box.xyxy[0].tolist())
+                conf  = float(box.conf[0])
+                cls_id = int(box.cls[0])
+                name = (
+                    yaml_class_names.get(cls_id)
+                    or det_model.names.get(cls_id, f"class_{cls_id}")
+                )
+                raw_detections.append({"box": [x1, y1, x2, y2], "conf": conf, "cls_id": cls_id, "cls_name": name})
 
     if not raw_detections:
-        return InferResponse(results=[], count=0, message="No detections above threshold.")
+        return InferResponse(results=[], count=0, message="No detections above threshold.", tiling=tiling_stats)
 
     raw_detection_count = len(raw_detections)
-    raw_detections, overlap_removed = suppress_overlapping_detections(raw_detections)
+    overlap_removed = 0
+    if tiling_stats is None:
+        raw_detections, overlap_removed = suppress_overlapping_detections(raw_detections)
     if overlap_removed:
         log.info(f"Suppressed {overlap_removed} overlapping duplicate detection(s).")
 
@@ -497,7 +541,7 @@ def infer(req: InferRequest):
     )
     if overlap_removed:
         msg += f" Suppressed {overlap_removed} overlapping duplicate(s)."
-    return InferResponse(results=results, count=len(results), message=msg)
+    return InferResponse(results=results, count=len(results), message=msg, tiling=tiling_stats)
 
 
 @app.post("/segment", response_model=SegmentResponse)
