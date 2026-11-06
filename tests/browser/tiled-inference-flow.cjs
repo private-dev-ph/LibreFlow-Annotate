@@ -1,9 +1,10 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const os = require('node:os');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const express = require(path.join(process.cwd(),'node_modules/express'));
+const express = require('express');
 (async()=>{
- const app=express(); app.use(express.static(path.join(process.cwd(),'public'),{extensions:['html']}));
+ const app=express(); app.use(express.static(path.join(__dirname,'../../public'),{extensions:['html']}));
  const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s))});
  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH});
  try {
@@ -51,7 +52,7 @@ const express = require(path.join(process.cwd(),'node_modules/express'));
    assert.equal(await page.evaluate(()=>Canvas.getShapes().length),0);
    assert.deepEqual(errors,[]);
    await page.locator('#tiling-enabled').scrollIntoViewIfNeeded();
-   await page.screenshot({path:path.join(process.env.TEMP,`libreflow-tiling-${width}.png`)});
+   await page.screenshot({path:path.join(os.tmpdir(),`libreflow-tiling-${width}.png`)});
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
    await page.close();
   }
