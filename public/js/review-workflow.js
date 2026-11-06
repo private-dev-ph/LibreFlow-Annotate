@@ -18,6 +18,8 @@
   const feedback = document.getElementById('review-feedback');
   let currentImageId = null;
   let review = null;
+  let imageRequestGeneration = 0;
+  let refreshGeneration = 0;
 
   const statusLabels = {
     unannotated: 'Unannotated',
@@ -112,18 +114,19 @@
 
   async function refresh(imageId) {
     if (!imageId) return;
-    currentImageId = imageId;
+    const refreshId = ++refreshGeneration;
     setFeedback('Loading…');
     try {
       const [nextReview, revisions] = await Promise.all([
         API.getImageReview(imageId),
         API.getAnnotationRevisions(imageId),
       ]);
-      if (currentImageId !== imageId) return;
+      if (currentImageId !== imageId || refreshId !== refreshGeneration) return;
       review = nextReview;
       renderReview(revisions);
       setFeedback('');
     } catch (error) {
+      if (currentImageId !== imageId || refreshId !== refreshGeneration) return;
       setFeedback(error.message || 'Could not load review.', true);
     }
   }
@@ -131,15 +134,25 @@
   const originalGetAnnotations = API.getAnnotations.bind(API);
   API.getAnnotations = async imageId => {
     currentImageId = imageId;
+    const requestId = ++imageRequestGeneration;
     const annotations = await originalGetAnnotations(imageId);
-    refresh(imageId);
+    if (currentImageId === imageId && requestId === imageRequestGeneration) refresh(imageId);
     return annotations;
   };
 
   const originalSaveAnnotations = API.saveAnnotations.bind(API);
-  API.saveAnnotations = async (imageId, shapes, metadata) => {
+  API.saveAnnotations = async (imageId, shapes, metadata, options) => {
     const result = await originalSaveAnnotations(imageId, shapes, metadata);
-    refresh(imageId);
+    if (options?.refreshReview !== false && currentImageId === imageId) refresh(imageId);
+    return result;
+  };
+
+  const originalUpdateImage = API.updateImage.bind(API);
+  API.updateImage = async (imageId, data) => {
+    const result = await originalUpdateImage(imageId, data);
+    if (Object.prototype.hasOwnProperty.call(data || {}, 'isNull') && currentImageId === imageId) {
+      refresh(imageId);
+    }
     return result;
   };
 

@@ -25,6 +25,8 @@
   let images = [];
   let currentIndex = -1;
   let unsaved = false;
+  let editGeneration = 0;
+  const pendingNullMutations = new Map();
   let viewMode = localStorage.getItem('annotator_view_mode') || 'list';
   let imageStatusFilter = localStorage.getItem('annotator_status_filter') || 'all';
   let imageSearchQuery = '';
@@ -286,11 +288,26 @@
   const imageTagInput = document.getElementById('image-tag-input');
   const btnSaveTag = document.getElementById('btn-save-tag');
 
-  function updateNullButton(img) {
-    if (!img) { btnMarkNull.classList.remove('is-null'); btnMarkNull.textContent = ''; return; }
+  function updateNullButton(img, pending = pendingNullMutations.get(img?.id)) {
+    if (!img) {
+      btnMarkNull.classList.remove('is-null');
+      btnMarkNull.textContent = '';
+      btnMarkNull.disabled = false;
+      btnMarkNull.removeAttribute('aria-busy');
+      return;
+    }
+    if (pending) {
+      btnMarkNull.innerHTML = `${LibreFlowIcons.icon('circleSlash')} ${pending.markingNull ? 'Marking null…' : 'Unmarking null…'}`;
+      btnMarkNull.disabled = true;
+      btnMarkNull.setAttribute('aria-busy', 'true');
+      btnMarkNull.setAttribute('aria-label', pending.markingNull ? 'Marking image as null' : 'Unmarking image as null');
+      return;
+    }
     btnMarkNull.innerHTML = img.isNull
       ? `${LibreFlowIcons.icon('circleSlash')} Unmark Null`
       : `${LibreFlowIcons.icon('circleSlash')} Mark as Null`;
+    btnMarkNull.disabled = false;
+    btnMarkNull.removeAttribute('aria-busy');
     btnMarkNull.classList.toggle('is-null', Boolean(img.isNull));
     btnMarkNull.setAttribute('aria-pressed', String(Boolean(img.isNull)));
     btnMarkNull.setAttribute('aria-label', img.isNull ? 'Unmark image as null' : 'Mark image as null');
@@ -333,21 +350,46 @@
   btnMarkNull.addEventListener('click', async () => {
     if (currentIndex < 0) return;
     const img       = images[currentIndex];
+    const imageId = img.id;
+    if (pendingNullMutations.has(imageId)) return;
     const markingNull = !img.isNull;
-    if (markingNull) {
-      // Clear canvas and persist empty annotations, then flag as null
-      Canvas.loadImage(`/uploads/${img.filename}`, []);
-      await API.saveAnnotations(img.id, []);
+    const startGeneration = editGeneration;
+    const startShapes = JSON.stringify(Canvas.getShapes());
+    pendingNullMutations.set(imageId, { markingNull });
+    updateNullButton(img);
+    try {
+      if (markingNull) {
+        await API.saveAnnotations(imageId, [], {}, { refreshReview: false });
+        const stillCurrent = images[currentIndex]?.id === imageId;
+        const shapesUnchanged = editGeneration === startGeneration
+          && JSON.stringify(Canvas.getShapes()) === startShapes;
+        img.annotated = Boolean(img.isNull);
+        if (stillCurrent && shapesUnchanged) {
+          Canvas.clearShapes();
+          unsaved = false;
+          saveIndicator.classList.remove('show');
+          renderImageList();
+        }
+      }
+      const updated = await API.updateImage(imageId, { isNull: markingNull });
+      img.isNull = Boolean(updated.isNull);
+      if (updated.annotated != null) img.annotated = updated.annotated;
+      else if (markingNull && editGeneration === startGeneration) img.annotated = true;
+      if (images[currentIndex]?.id === imageId) {
+        updateNullButton(img);
+        renderImageList();
+      }
+      showToast(
+        markingNull ? 'Image marked as null.' : 'Null mark removed.',
+        markingNull ? 'success' : 'info'
+      );
+    } catch (error) {
+      if (images[currentIndex]?.id === imageId) updateNullButton(img);
+      showToast(error.message || (markingNull ? 'Failed to mark image as null.' : 'Failed to unmark image as null.'), 'warn');
+    } finally {
+      pendingNullMutations.delete(imageId);
+      if (images[currentIndex]?.id === imageId) updateNullButton(img);
     }
-    const updated = await API.updateImage(img.id, { isNull: markingNull });
-    images[currentIndex].isNull    = updated.isNull;
-    images[currentIndex].annotated = updated.annotated;
-    updateNullButton(images[currentIndex]);
-    renderImageList();
-    showToast(
-      markingNull ? 'Image marked as null.' : 'Null mark removed.',
-      markingNull ? 'success' : 'info'
-    );
   });
 
   async function saveCurrentImageTag() {
@@ -379,7 +421,7 @@
   // -- Shapes change callback -------------------------------------------------
   let annotationListShapes = null;
   function onShapesChange(shapes, selectedId, dirty = false) {
-    if (dirty) unsaved = true;
+    if (dirty) { unsaved = true; editGeneration += 1; }
     saveIndicator.classList[unsaved ? 'add' : 'remove']('show');
     renderAnnotationList(shapes, selectedId, dirty);
   }
@@ -447,16 +489,23 @@
   async function saveAnnotations() {
     if (currentIndex < 0) return;
     const img = images[currentIndex];
+    if (pendingNullMutations.has(img.id)) {
+      showToast('Finish the null-image update before saving.', 'warn');
+      return false;
+    }
+    const imageId = img.id;
     const shapes = Canvas.getShapes().map(({ color, ...shape }) => ({
       ...shape,
       source: shape.source || 'manual',
     }));
-    await API.saveAnnotations(img.id, shapes);
+    await API.saveAnnotations(imageId, shapes);
+    if (images[currentIndex]?.id !== imageId) return true;
     unsaved = false;
     saveIndicator.classList.remove('show');
-    images[currentIndex].annotated = shapes.length > 0 || Boolean(images[currentIndex].isNull);
+    img.annotated = shapes.length > 0 || Boolean(img.isNull);
     renderImageList();
     showToast('Annotations saved.', 'success');
+    return true;
   }
 
   document.getElementById('btn-save').addEventListener('click', saveAnnotations);
@@ -484,8 +533,15 @@
 
   async function navigateTo(idx) {
     if (idx < 0 || idx >= images.length || idx === currentIndex) return;
+    if (currentIndex >= 0 && pendingNullMutations.has(images[currentIndex].id)) {
+      showToast('Finish the null-image update before navigating.', 'warn');
+      return;
+    }
     if (unsaved && autoSaveEnabled) {
-      try { await saveAnnotations(); }
+      try {
+        const saved = await saveAnnotations();
+        if (saved === false) return;
+      }
       catch (e) { showToast(e.message || 'Auto-save failed.', 'warn'); return; }
     } else if (unsaved && !confirm('Unsaved changes - leave anyway?')) return;
     await loadImage(idx);
@@ -494,7 +550,8 @@
   document.getElementById('btn-save-next')?.addEventListener('click', async () => {
     if (currentIndex < 0) return;
     try {
-      await saveAnnotations();
+      const saved = await saveAnnotations();
+      if (!saved) return;
       if (currentIndex < images.length - 1) await loadImage(currentIndex + 1);
     } catch (e) { showToast(e.message || 'Save failed.', 'warn'); }
   });

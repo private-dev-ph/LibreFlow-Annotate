@@ -64,7 +64,9 @@ const API = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    return r.json();
+    const response = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(response.error || 'Failed to update image.');
+    return response;
   },
 
   // ── Annotations ───────────────────────────────────────────────────────────

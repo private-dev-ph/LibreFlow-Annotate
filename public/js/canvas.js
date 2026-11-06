@@ -1101,6 +1101,21 @@ const Canvas = (() => {
     getImageSize() { return img ? { width:img.width, height:img.height } : null; },
     getSelected() { return shapes.find(s => s.id === selectedId) || null; },
 
+    clearShapes() {
+      cancelPointer();
+      shapes = [];
+      selectedId = null;
+      hoveredId = null;
+      smartShapeId = null;
+      polygonPts = [];
+      pathPts = [];
+      freehandPts = [];
+      undoStack = [];
+      redoStack = [];
+      draw();
+      if (onShapesChange) onShapesChange(shapes, null, false);
+    },
+
     setSelected(id) { selectedId = id; draw(); if (onShapesChange) onShapesChange(shapes, id, false); },
 
     relabelSelected(newLabel) {
