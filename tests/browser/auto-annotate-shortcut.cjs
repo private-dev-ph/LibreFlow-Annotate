@@ -71,6 +71,10 @@ async function waitBriefly() {
       await request;
       await page.waitForFunction(() => !document.getElementById('btn-auto-infer').disabled);
     };
+    await page.locator('#auto-model-select').focus();
+    await page.locator('#annotation-canvas').click({ position: { x: 30, y: 30 } });
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'annotation-canvas', 'clicking the image returns keyboard focus from settings to the canvas');
+    await launch(() => page.keyboard.press('x'));
     const assertNoLaunch = async (action, message) => {
       const before = requestCount;
       await action();
