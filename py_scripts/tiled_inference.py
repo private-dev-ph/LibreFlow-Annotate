@@ -132,13 +132,15 @@ def validate_tiling_options(options: Any) -> Optional[TilingSettings]:
     if not 0 <= ox <= 0.95 or not 0 <= oy <= 0.95:
         raise TilingValidationError("tiling overlapX and overlapY must be between 0 and 0.95")
 
+    has_sx = "strideX" in options
+    has_sy = "strideY" in options
     raw_sx = options.get("strideX")
     raw_sy = options.get("strideY")
-    if raw_sx is None:
+    if not has_sx:
         sx = math.floor(tw * (1 - ox) + 0.5)
     else:
         sx = _number(raw_sx, "strideX", integer=True)
-    if raw_sy is None:
+    if not has_sy:
         sy = math.floor(th * (1 - oy) + 0.5)
     else:
         sy = _number(raw_sy, "strideY", integer=True)
@@ -353,7 +355,7 @@ def _predict_worker(
     """Construct and run one private model, returning tile-NMS results."""
     with _MODEL_SEMAPHORE:
         if stop.is_set():
-            return [], 0
+            return []
         model = model_factory(model_path)
         task = getattr(model, "task", None)
         if task is not None and str(task).lower() != "detect":
