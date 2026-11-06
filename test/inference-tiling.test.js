@@ -45,7 +45,7 @@ test('queued inference normalizes and transports tiling using configured data di
   let request;
   global.fetch = async (_url, options) => {
     request = JSON.parse(options.body);
-    return new Response(JSON.stringify({ results: [], count: 0, tiling: { enabled: true, stats: { tiles: 2 } } }), { status: 200 });
+    return new Response(JSON.stringify({ results: [], count: 0, message: 'No detections', tiling: { enabled: true, tileCount: 6, workers: 2, imageWidth: 2050, imageHeight: 1300, rawDetections: 10, mergedDetections: 8, duplicatesRemoved: 2 } }), { status: 200 });
   };
   try {
     const result = await inferImage({ userId: 'user-1', projectId: 'project-1', modelId: 'model-1', imageId: 'image-1', tiling: { enabled: true, strideX: '1024' } });
@@ -54,6 +54,18 @@ test('queued inference normalizes and transports tiling using configured data di
     assert.equal(result.tiling.enabled, true);
   } finally {
     global.fetch = originalFetch;
+  }
+});
+
+test('createInferenceJob persists normalized tiling settings before execution', () => {
+  const { createInferenceJob, getJob, cancelJob } = require('../lib/job-runner');
+  const job = createInferenceJob({ userId: 'user-1', projectId: 'project-1', modelId: 'model-1', imageIds: ['image-1'], tiling: { enabled: true, strideX: '1024' } });
+  try {
+    const stored = getJob('user-1', job.id);
+    assert.equal(stored.parameters.tiling.enabled, true);
+    assert.equal(stored.parameters.tiling.strideX, 1024);
+  } finally {
+    cancelJob('user-1', job.id);
   }
 });
 
@@ -67,21 +79,29 @@ test('direct inference transports tiling, keeps class overlaps, and audits only 
 
   let requests = 0;
   let responseStatus = 200;
+  let responseMode = 'tiled';
+  let lastPayload;
   const inferenceServer = http.createServer((req, res) => {
     const chunks = [];
     req.on('data', chunk => chunks.push(chunk));
     req.on('end', () => {
       requests += 1;
+      lastPayload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       res.writeHead(responseStatus, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(responseStatus === 200
+      res.end(JSON.stringify(responseStatus === 200 && responseMode === 'tiled'
         ? {
           results: [
             { label: 'class-a', type: 'bbox', data: { x: 1, y: 1, width: 100, height: 100 }, confidence: 0.9 },
             { label: 'class-b', type: 'bbox', data: { x: 1, y: 1, width: 100, height: 100 }, confidence: 0.8 },
           ],
-          tiling: { enabled: true, stats: { tileCount: 2 } },
+          tiling: { enabled: true, tileCount: 6, workers: 2, imageWidth: 2050, imageHeight: 1300, rawDetections: 10, mergedDetections: 8, duplicatesRemoved: 2 },
         }
-        : { error: 'upstream failed' }));
+        : responseStatus === 200
+          ? { results: [
+            { label: 'class-a', type: 'bbox', data: { x: 1, y: 1, width: 100, height: 100 }, confidence: 0.9 },
+            { label: 'class-a', type: 'bbox', data: { x: 1, y: 1, width: 100, height: 100 }, confidence: 0.8 },
+          ], count: 2 }
+          : { error: 'upstream failed' }));
     });
   });
   await new Promise(resolve => inferenceServer.listen(0, '127.0.0.1', resolve));
@@ -102,13 +122,16 @@ test('direct inference transports tiling, keeps class overlaps, and audits only 
   try {
     const valid = await fetch(`${base}/api/models/direct-model/infer`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ imageId: 'direct-image', confThreshold: '0.55', tiling: { enabled: true, strideX: 1024 } }),
+      body: JSON.stringify({ imageId: 'direct-image', confThreshold: '0.55', tiling: { enabled: true, tileWidth: 2048, tileHeight: 1024, strideX: 1024, strideY: 768, modelInputSize: 1024, maxDetections: 1000, tileNmsIou: 0.5, mergeMethod: 'class-aware-nms', mergeIou: 0.5, workers: 2 } }),
     });
     const validBody = await valid.json();
     assert.equal(valid.status, 200);
     assert.equal(validBody.results.length, 2);
     assert.equal(validBody.results[0].modelId, 'direct-model');
     assert.equal(validBody.results[0].source, 'model');
+    assert.equal(lastPayload.conf_threshold, 0.55);
+    assert.deepEqual(lastPayload.tiling, { enabled: true, tileWidth: 2048, tileHeight: 1024, overlapX: 0.5, overlapY: 0.25, strideX: 1024, strideY: 768, modelInputSize: 1024, maxDetections: 1000, tileNmsIou: 0.5, mergeMethod: 'class-aware-nms', mergeIou: 0.5, workers: 2 });
+    assert.deepEqual(validBody.tiling, { enabled: true, tileCount: 6, workers: 2, imageWidth: 2050, imageHeight: 1300, rawDetections: 10, mergedDetections: 8, duplicatesRemoved: 2 });
     const auditAfterSuccess = require('../lib/json-store').readJson(dataFile('audit-events.json'), []);
     assert.equal(auditAfterSuccess.length, 1);
 
@@ -127,6 +150,23 @@ test('direct inference transports tiling, keeps class overlaps, and audits only 
     assert.equal(invalidTiling.status, 400);
     assert.equal(requests, beforeInvalid);
 
+    responseMode = 'missing-tiling';
+    const missingTiling = await fetch(`${base}/api/models/direct-model/infer`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ imageId: 'direct-image', tiling: { enabled: true } }),
+    });
+    assert.equal(missingTiling.status, 502);
+
+    responseMode = 'legacy';
+    const legacy = await fetch(`${base}/api/models/direct-model/infer`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ imageId: 'direct-image' }),
+    });
+    const legacyBody = await legacy.json();
+    assert.equal(legacy.status, 200);
+    assert.equal(legacyBody.results.length, 1);
+    assert.equal(legacyBody.tiling, undefined);
+
     responseStatus = 500;
     const failed = await fetch(`${base}/api/models/direct-model/infer`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
@@ -134,7 +174,7 @@ test('direct inference transports tiling, keeps class overlaps, and audits only 
     });
     assert.equal(failed.status, 500);
     const auditAfterFailure = require('../lib/json-store').readJson(dataFile('audit-events.json'), []);
-    assert.equal(auditAfterFailure.length, 1);
+    assert.equal(auditAfterFailure.length, 2);
   } finally {
     await new Promise(resolve => appServer.close(resolve));
     await new Promise(resolve => inferenceServer.close(resolve));
