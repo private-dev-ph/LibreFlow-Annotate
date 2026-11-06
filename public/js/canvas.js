@@ -465,6 +465,93 @@ const Canvas = (() => {
     return { x:pts.reduce((n,p)=>n+p.x,0)/pts.length, y:pts.reduce((n,p)=>n+p.y,0)/pts.length };
   }
 
+  // Return finite image-space bounds for a spatial shape.  This is kept
+  // separate from shapeCenter because focus must reject malformed geometry
+  // before it can affect the current view.
+  function shapeFocusBounds(s) {
+    if (!s || typeof s !== 'object') return null;
+    let pts;
+    if (s.type === 'bbox') {
+      const d = s.data;
+      if (!d || typeof d !== 'object'
+          || ![d.x, d.y, d.width, d.height].every(Number.isFinite)
+          || d.width <= 0 || d.height <= 0) return null;
+      pts = [
+        { x:d.x, y:d.y },
+        { x:d.x + d.width, y:d.y },
+        { x:d.x + d.width, y:d.y + d.height },
+        { x:d.x, y:d.y + d.height },
+      ];
+    } else if (s.type === 'rbox') {
+      const d = s.data;
+      if (!d || typeof d !== 'object'
+          || ![d.cx, d.cy, d.width, d.height, d.angle ?? 0].every(Number.isFinite)
+          || d.width <= 0 || d.height <= 0) return null;
+      pts = rboxCorners(d);
+    } else if (s.type === 'point' || s.type === 'keypoint') {
+      const d = s.data;
+      if (!d || !Number.isFinite(d.x) || !Number.isFinite(d.y)) return null;
+      pts = [{ x:d.x, y:d.y }];
+    } else if (['polygon', 'line', 'skeleton', 'mask'].includes(s.type)) {
+      try {
+        pts = shapePoints(s);
+      } catch (_) {
+        return null;
+      }
+      if (!Array.isArray(pts)
+          || (s.type === 'polygon' && pts.length < 3)
+          || (s.type === 'line' && pts.length < 2)
+          || (s.type === 'mask' && pts.length < 3)
+          || (s.type === 'skeleton' && pts.length < 1)) return null;
+    } else {
+      return null;
+    }
+
+    if (!pts.length) return null;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of pts) {
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+    if (![minX, maxX, minY, maxY].every(Number.isFinite)) return null;
+    return { minX, maxX, minY, maxY };
+  }
+
+  function focusShape(id) {
+    if (!img || !canvas || !ctx
+        || !Number.isFinite(img.width) || !Number.isFinite(img.height)
+        || img.width <= 0 || img.height <= 0
+        || !Number.isFinite(canvas.width) || !Number.isFinite(canvas.height)
+        || canvas.width <= 0 || canvas.height <= 0) return false;
+    const shape = shapes.find(s => s.id === id);
+    const bounds = shapeFocusBounds(shape);
+    if (!bounds) return false;
+
+    const width = Math.max(32, bounds.maxX - bounds.minX);
+    const height = Math.max(32, bounds.maxY - bounds.minY);
+    const padding = Math.min(40, canvas.width / 10, canvas.height / 10);
+    const availableWidth = Math.max(1, canvas.width - padding * 2);
+    const availableHeight = Math.max(1, canvas.height - padding * 2);
+    const nextScale = Math.max(0.0001, Math.min(100, availableWidth / width, availableHeight / height));
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+    const nextOffsetX = canvas.width / 2 - centerX * nextScale;
+    const nextOffsetY = canvas.height / 2 - centerY * nextScale;
+    if (![nextScale, nextOffsetX, nextOffsetY].every(Number.isFinite)) return false;
+
+    scale = nextScale;
+    offsetX = nextOffsetX;
+    offsetY = nextOffsetY;
+    selectedId = id;
+    hoveredId = null;
+    draw();
+    if (onShapesChange) onShapesChange(shapes, id, false);
+    return true;
+  }
+
   /** Clamp a bbox so it stays fully within the loaded image bounds. */
   function clampBbox(d) {
     if (!img) return d;
@@ -1168,6 +1255,7 @@ const Canvas = (() => {
     zoomIn() { setScaleAroundScreenPoint(scale * 1.15, canvas.width / 2, canvas.height / 2); },
     zoomOut() { setScaleAroundScreenPoint(scale / 1.15, canvas.width / 2, canvas.height / 2); },
     fitToScreen() { fitImage(); },
+    focusShape,
 
     highlightShape(id) { hoveredId = id; draw(); },
     clearHighlight()   { hoveredId = null; draw(); },
