@@ -164,7 +164,26 @@ const API = {
   // ── Models ───────────────────────────────────────────────────────────────
   async getModels(projectId) {
     const r = await fetch(`/api/models?projectId=${projectId}`, { credentials: 'include' });
-    return r.json();
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to load models.');
+    return data;
+  },
+  async getAvailableModels(projectId) {
+    const r = await fetch(`/api/models/available?projectId=${encodeURIComponent(projectId)}`, { credentials: 'include' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to load available models.');
+    return data;
+  },
+  async copyModel(id, projectId) {
+    const r = await fetch(`/api/models/${encodeURIComponent(id)}/copy`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to add model to project.');
+    return data;
   },
   async deleteModel(id) {
     const r = await fetch(`/api/models/${id}`, { method: 'DELETE', credentials: 'include' });

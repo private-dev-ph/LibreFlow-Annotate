@@ -642,6 +642,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
+  min-width: 0;
   background: #0f1117;
   border: 1px solid #252a3d;
   border-radius: 10px;
@@ -656,9 +657,8 @@
   font-size: 14px;
   font-weight: 600;
   color: #e2e8f0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .model-meta {
   font-size: 12px;
@@ -706,6 +706,140 @@
   white-space: nowrap;
 }
 .models-empty { font-size: 13px; color: #8892a4; }
+
+/* Existing model picker */
+.existing-model-picker {
+  min-width: 0;
+}
+.existing-model-picker-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.existing-model-picker-header > div { min-width: 0; }
+.existing-model-picker-header h2 { margin-bottom: 5px; }
+.existing-model-picker-header .section-description { margin: 0; max-width: 680px; }
+.btn-existing-models,
+.btn-existing-cancel,
+.btn-existing-retry,
+.btn-add-existing-model {
+  min-height: 44px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s, opacity .15s;
+}
+.btn-existing-models,
+.btn-add-existing-model {
+  border: 1px solid var(--accent, #6c63ff);
+  background: var(--accent, #6c63ff);
+  color: var(--on-accent, #fff);
+  padding: 9px 15px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.btn-existing-models:hover,
+.btn-add-existing-model:hover { background: var(--accent-strong, #574fd6); }
+.btn-existing-models:focus-visible,
+.btn-existing-cancel:focus-visible,
+.btn-existing-retry:focus-visible,
+.btn-add-existing-model:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent, #6c63ff) 45%, transparent); outline-offset: 2px; }
+.btn-existing-models:disabled,
+.btn-existing-cancel:disabled,
+.btn-existing-retry:disabled,
+.btn-add-existing-model:disabled { cursor: wait; opacity: .65; }
+.existing-model-picker-body {
+  border-top: 1px solid var(--border, #252a3d);
+  margin-top: 18px;
+  padding-top: 18px;
+}
+.existing-model-picker-body[hidden] { display: none; }
+.existing-model-picker-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 10px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+.existing-model-search-label {
+  grid-column: 1 / -1;
+  color: var(--text-dim, #8892a4);
+  font-size: 12px;
+  font-weight: 600;
+}
+.existing-model-search {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--border, #252a3d);
+  border-radius: 8px;
+  background: var(--surface-2, #0f1117);
+  color: var(--text, #e2e8f0);
+  font: inherit;
+  outline: none;
+}
+.existing-model-search:focus { border-color: var(--accent, #6c63ff); }
+.btn-existing-cancel,
+.btn-existing-retry {
+  border: 1px solid var(--border, #252a3d);
+  background: var(--surface-2, #0f1117);
+  color: var(--text-dim, #8892a4);
+  padding: 9px 15px;
+}
+.btn-existing-cancel:hover,
+.btn-existing-retry:hover { border-color: var(--accent, #6c63ff); color: var(--accent-strong, #a89fff); }
+.existing-model-status {
+  min-height: 20px;
+  color: var(--text-dim, #8892a4);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.existing-model-status:empty { display: none; }
+.existing-model-status.error { color: var(--danger, #e05c5c); }
+.existing-model-status.success { color: var(--success, #48e5c2); }
+.existing-model-status.loading { color: var(--accent-strong, #a89fff); }
+.existing-models-list { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.existing-model-state { padding: 16px 4px; color: var(--text-dim, #8892a4); font-size: 13px; }
+.existing-model-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #252a3d);
+  border-radius: 9px;
+  background: var(--surface-2, #0f1117);
+}
+.existing-model-info { min-width: 0; flex: 1; }
+.existing-model-name,
+.existing-model-source { overflow-wrap: anywhere; }
+.existing-model-name { color: var(--text, #e2e8f0); font-size: 14px; font-weight: 600; }
+.existing-model-source { color: var(--text-dim, #8892a4); font-size: 12px; margin-top: 2px; }
+.existing-model-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 5px; color: var(--text-dim, #8892a4); font-size: 12px; }
+.btn-add-existing-model { min-width: 126px; }
+.model-provenance {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent, #6c63ff) 42%, var(--border, #252a3d));
+  border-radius: 999px;
+  color: var(--accent-strong, #a89fff);
+  padding: 2px 7px;
+  font-size: 11px;
+}
+
+@media (max-width: 600px) {
+  .existing-model-picker-header { flex-direction: column; gap: 12px; }
+  .btn-existing-models { width: 100%; }
+  .existing-model-picker-controls { grid-template-columns: 1fr; }
+  .btn-existing-cancel { width: 100%; }
+  .existing-model-card { align-items: stretch; flex-direction: column; gap: 10px; }
+  .btn-add-existing-model { width: 100%; }
+}
 
 /* ── Batches tab ──────────────────────────────────────────────────────────── */
 .batches-list     { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }

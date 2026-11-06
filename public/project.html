@@ -113,7 +113,7 @@
           Versions
         </button>
         <button class="tab-btn" data-tab="models">
-          <span data-lf-icon="settings" aria-hidden="true"></span>
+          <span data-lf-icon="brain" aria-hidden="true"></span>
           Models
         </button>
         <button class="tab-btn" data-tab="batches">
@@ -219,6 +219,24 @@
 
       <!-- ── MODELS panel ── -->
       <div class="tab-panel" id="panel-models">
+        <div class="section-card existing-model-picker" id="existing-model-picker">
+          <div class="existing-model-picker-header">
+            <div>
+              <h2>Add existing model</h2>
+              <p class="section-description">Copy a model from another project into this project. The copy is independent and changes to the original will not affect it.</p>
+            </div>
+            <button class="btn-existing-models" id="btn-toggle-existing-models" type="button" aria-expanded="false" aria-controls="existing-model-picker-body">Add existing model</button>
+          </div>
+          <div class="existing-model-picker-body" id="existing-model-picker-body" hidden>
+            <div class="existing-model-picker-controls">
+              <label class="existing-model-search-label" for="existing-model-search">Search models or projects</label>
+              <input id="existing-model-search" class="existing-model-search" type="search" placeholder="Search by model or project name" autocomplete="off" />
+              <button class="btn-existing-cancel" id="btn-cancel-existing-models" type="button">Cancel</button>
+            </div>
+            <div id="existing-model-status" class="existing-model-status" role="status" aria-live="polite"></div>
+            <div id="existing-models-list" class="existing-models-list" aria-live="polite"></div>
+          </div>
+        </div>
         <div class="section-card">
           <h2>Add Inference Model</h2>
           <div class="model-upload-form">
@@ -252,9 +270,9 @@
           </div>
         </div>
         <div class="section-card">
-          <h2>Uploaded Models</h2>
+          <h2>Project models</h2>
           <div id="models-list" class="models-list"></div>
-          <div id="models-empty" class="models-empty" style="display:none">No models uploaded yet.</div>
+          <div id="models-empty" class="models-empty" style="display:none">No project models yet — upload a model above or add an existing model.</div>
         </div>
       </div>
 
