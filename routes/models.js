@@ -13,6 +13,7 @@ const {
 } = require('../lib/access-control');
 const { appendAuditEvent } = require('../lib/audit-log');
 const { shouldBlockPyTorchModel } = require('../lib/security-model-policy');
+const InferenceTilingSettings = require('../public/js/inference-tiling-settings');
 
 const router = express.Router();
 const DATA_FILE    = dataPath('models.json');
@@ -491,6 +492,30 @@ router.post('/:id/infer', async (req, res) => {
     return res.status(403).json({ error: 'Model and image must belong to the same accessible project.' });
   }
 
+  const rawConfidenceThreshold = confThreshold === undefined ? 0.25 : confThreshold;
+  if (rawConfidenceThreshold === null || Array.isArray(rawConfidenceThreshold) || typeof rawConfidenceThreshold === 'boolean' || (typeof rawConfidenceThreshold !== 'number' && typeof rawConfidenceThreshold !== 'string') || String(rawConfidenceThreshold).trim() === '') {
+    return res.status(400).json({ error: 'confThreshold must be a finite number from 0.01 to 1.' });
+  }
+  const normalizedConfidenceThreshold = Number(rawConfidenceThreshold);
+  if (!Number.isFinite(normalizedConfidenceThreshold) || normalizedConfidenceThreshold < 0.01 || normalizedConfidenceThreshold > 1) {
+    return res.status(400).json({ error: 'confThreshold must be a finite number from 0.01 to 1.' });
+  }
+
+  let tiling;
+  try {
+    tiling = InferenceTilingSettings.normalize(req.body.tiling);
+    if (tiling.enabled && model.type !== undefined && model.type !== 'detection') {
+      return res.status(400).json({ error: 'Tiled inference is only supported for detection models.' });
+    }
+    const width = Number(img.width);
+    const height = Number(img.height);
+    if (tiling.enabled && Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 && InferenceTilingSettings.tileCount(width, height, tiling) > 1024) {
+      return res.status(400).json({ error: 'Tiling settings produce more than 1024 tiles for this image.' });
+    }
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
   const modelPath = path.join(MODELS_DIR, model.filename);
   const imagePath = path.join(UPLOADS_DIR, img.filename);
   const yamlPath  = model.yamlFilename ? path.join(MODELS_DIR, model.yamlFilename) : null;
@@ -520,47 +545,61 @@ router.post('/:id/infer', async (req, res) => {
   const payload = {
     model_path:          modelPath,
     image_path:          imagePath,
-    conf_threshold:      parseFloat(confThreshold),
+    conf_threshold:      normalizedConfidenceThreshold,
     good_bias:           parseFloat(goodBias),
     yaml_path:           yamlPath,
     cls_model_path:      modelPathById(clsModelId)        || null,
     cls_fine_model_path: modelPathById(clsFineModelId)    || null,
     cls_combined_path:   modelPathById(clsCombinedModelId) || null,
+    ...(tiling.enabled ? { tiling } : {}),
   };
 
+  let timeout = null;
+  let disconnectController = null;
+  let abortOnDisconnect = null;
   try {
     // Use native fetch (Node 18+) — clean async/await, no callback-hell
+    const timeoutMs = tiling.enabled ? 1_800_000 : 180_000;
+    disconnectController = new AbortController();
+    abortOnDisconnect = () => { if (!res.writableEnded) disconnectController.abort(new Error('Client disconnected.')); };
+    req.once('aborted', abortOnDisconnect);
+    res.once('close', abortOnDisconnect);
+    timeout = setTimeout(() => disconnectController.abort(new Error('Inference timed out.')), timeoutMs);
+    timeout.unref?.();
     const inferRes = await fetch(`${INFER_SERVER}/infer`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(payload),
-      signal:  AbortSignal.timeout(180_000), // 3-min timeout for large models
+      signal:  disconnectController.signal,
     });
     const data = await inferRes.json();
+    if (tiling.enabled && inferRes.ok && data.tiling?.enabled !== true) {
+      return res.status(502).json({ error: 'Update inference server to support tiled inference.' });
+    }
     if (Array.isArray(data.results)) {
-      const filtered = suppressOverlappingResults(data.results);
-      filtered.results = filtered.results.map(result => {
+      const filtered = tiling.enabled ? { results: data.results, removed: 0 } : suppressOverlappingResults(data.results);
+      const taggedResults = filtered.results.map(result => {
         const rawConfidence = result.confidence ?? result.conf;
         const confidence = Number.isFinite(Number(rawConfidence)) ? Number(rawConfidence) : null;
         return { ...result, source: 'model', modelId: model.id, confidence };
       });
-      if (filtered.removed > 0) {
-        data.results = filtered.results;
-        data.count = filtered.results.length;
+      if (!tiling.enabled && filtered.removed > 0) {
+        data.results = taggedResults;
+        data.count = taggedResults.length;
         const suffix = ` Suppressed ${filtered.removed} overlapping duplicate(s).`;
         data.message = data.message ? `${data.message}${suffix}` : suffix.trim();
       }
-      data.results = filtered.results;
-      data.count = filtered.results.length;
+      data.results = taggedResults;
+      data.count = taggedResults.length;
     }
-    appendAuditEvent({
-      projectId: context.project.id,
-      imageId: img.id,
-      actorId: req.session.userId,
-      actorUsername: req.session.username || '',
-      type: 'model.inference_completed',
-      details: { modelId: model.id, resultCount: Array.isArray(data.results) ? data.results.length : 0 },
-    });
+    if (inferRes.ok) appendAuditEvent({
+        projectId: context.project.id,
+        imageId: img.id,
+        actorId: req.session.userId,
+        actorUsername: req.session.username || '',
+        type: 'model.inference_completed',
+        details: { modelId: model.id, resultCount: Array.isArray(data.results) ? data.results.length : 0 },
+      });
     return res.status(inferRes.status).json(data);
   } catch (err) {
     const isRefused = err.cause?.code === 'ECONNREFUSED' || err.message?.includes('ECONNREFUSED');
@@ -572,6 +611,10 @@ router.post('/:id/infer', async (req, res) => {
       });
     }
     return res.status(502).json({ error: err.message || String(err) });
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    if (abortOnDisconnect) req.off('aborted', abortOnDisconnect);
+    if (abortOnDisconnect) res.off('close', abortOnDisconnect);
   }
 });
 
