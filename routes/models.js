@@ -573,8 +573,13 @@ router.post('/:id/infer', async (req, res) => {
       signal:  disconnectController.signal,
     });
     const data = await inferRes.json();
-    if (tiling.enabled && inferRes.ok && data.tiling?.enabled !== true) {
-      return res.status(502).json({ error: 'Update inference server to support tiled inference.' });
+    if (tiling.enabled && inferRes.ok) {
+      if (data.tiling?.enabled !== true) {
+        return res.status(502).json({ error: 'Update inference server to support tiled inference.' });
+      }
+      if (!Array.isArray(data.results)) {
+        return res.status(502).json({ error: 'Inference server returned an invalid results array for tiled inference.' });
+      }
     }
     if (Array.isArray(data.results)) {
       const filtered = tiling.enabled ? { results: data.results, removed: 0 } : suppressOverlappingResults(data.results);

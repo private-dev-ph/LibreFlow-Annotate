@@ -43,15 +43,21 @@ test('queued inference normalizes and transports tiling using configured data di
   writeJson(dataFile('images.json'), [{ id: 'image-1', projectId: 'project-1', width: 2048, height: 1024, filename: 'image.png' }]);
   const originalFetch = global.fetch;
   let request;
+  let includeTiling = true;
   global.fetch = async (_url, options) => {
     request = JSON.parse(options.body);
-    return new Response(JSON.stringify({ results: [], count: 0, message: 'No detections', tiling: { enabled: true, tileCount: 6, workers: 2, imageWidth: 2050, imageHeight: 1300, rawDetections: 10, mergedDetections: 8, duplicatesRemoved: 2 } }), { status: 200 });
+    return new Response(JSON.stringify({ results: [], count: 0, message: 'No detections', ...(includeTiling ? { tiling: { enabled: true, tileCount: 6, workers: 2, imageWidth: 2050, imageHeight: 1300, rawDetections: 10, mergedDetections: 8, duplicatesRemoved: 2 } } : {}) }), { status: 200 });
   };
   try {
     const result = await inferImage({ userId: 'user-1', projectId: 'project-1', modelId: 'model-1', imageId: 'image-1', tiling: { enabled: true, strideX: '1024' } });
     assert.equal(request.tiling.enabled, true);
     assert.equal(request.tiling.strideX, 1024);
     assert.equal(result.tiling.enabled, true);
+    includeTiling = false;
+    await assert.rejects(
+      () => inferImage({ userId: 'user-1', projectId: 'project-1', modelId: 'model-1', imageId: 'image-1', tiling: { enabled: true } }),
+      /support tiled inference/,
+    );
   } finally {
     global.fetch = originalFetch;
   }
@@ -96,6 +102,8 @@ test('direct inference transports tiling, keeps class overlaps, and audits only 
           ],
           tiling: { enabled: true, tileCount: 6, workers: 2, imageWidth: 2050, imageHeight: 1300, rawDetections: 10, mergedDetections: 8, duplicatesRemoved: 2 },
         }
+        : responseStatus === 200 && responseMode === 'malformed'
+          ? { tiling: { enabled: true, tileCount: 6 } }
         : responseStatus === 200
           ? { results: [
             { label: 'class-a', type: 'bbox', data: { x: 1, y: 1, width: 100, height: 100 }, confidence: 0.9 },
@@ -156,6 +164,13 @@ test('direct inference transports tiling, keeps class overlaps, and audits only 
       body: JSON.stringify({ imageId: 'direct-image', tiling: { enabled: true } }),
     });
     assert.equal(missingTiling.status, 502);
+
+    responseMode = 'malformed';
+    const malformedResults = await fetch(`${base}/api/models/direct-model/infer`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ imageId: 'direct-image', tiling: { enabled: true } }),
+    });
+    assert.equal(malformedResults.status, 502);
 
     responseMode = 'legacy';
     const legacy = await fetch(`${base}/api/models/direct-model/infer`, {
