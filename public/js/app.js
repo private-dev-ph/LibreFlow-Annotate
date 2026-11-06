@@ -400,7 +400,7 @@
       const li = document.createElement('li');
       li.dataset.annotationId = s.id;
       li.tabIndex = 0;
-      li.title = 'Double-click or press Enter to zoom to annotation';
+      li.title = 'Double-click or press Enter to center on annotation while keeping zoom';
       if (s.id === selectedId) li.classList.add('selected');
       li.innerHTML = `
         <span class="ann-dot" style="background:${Canvas.colorFor(s.label)}"></span>

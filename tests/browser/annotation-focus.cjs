@@ -68,41 +68,61 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     };
 
     const initialShapes = await page.evaluate(() => JSON.stringify(Canvas.getShapes()));
-    for (const id of ['bbox', 'rbox', 'polygon', 'line', 'skeleton', 'mask', 'point', 'keypoint']) {
-      const result = await page.evaluate(id => {
-        const before = JSON.stringify(Canvas.getShapes());
-        const ok = Canvas.focusShape(id);
+    const focusPhases = [
+      { name:'fit', deltaY:0 },
+      { name:'zoom-in', deltaY:-240 },
+      { name:'zoom-out', deltaY:240 },
+    ];
+    for (const phase of focusPhases) {
+      await page.evaluate(deltaY => {
         const canvas = document.getElementById('canvas');
-        const transform = window.imageTransforms.at(-1);
-        return {
-          ok,
-          before,
-          after:JSON.stringify(Canvas.getShapes()),
-          selected:Canvas.getSelected()?.id,
-          canUndo:Canvas.canUndo(),
-          transform,
-          event:window.focusEvents.at(-1),
-          canvas:{ width:canvas.width, height:canvas.height },
-        };
-      }, id);
-      const shape = (await page.evaluate(id => window.focusShapes.find(s => s.id === id), id));
-      const b = bounds(shape);
-      const padding = Math.min(40, result.canvas.width / 10, result.canvas.height / 10);
-      const expectedScale = Math.max(0.0001, Math.min(100,
-        Math.max(1, result.canvas.width - padding * 2) / Math.max(32, b.maxX - b.minX),
-        Math.max(1, result.canvas.height - padding * 2) / Math.max(32, b.maxY - b.minY)));
-      const centerX = (b.minX + b.maxX) / 2;
-      const centerY = (b.minY + b.maxY) / 2;
-      assert.equal(result.ok, true, `${id}: focus succeeds`);
-      assert.equal(result.after, initialShapes, `${id}: focus does not mutate shapes`);
-      assert.equal(result.selected, id, `${id}: selected`);
-      assert.equal(result.canUndo, false, `${id}: focus does not create history`);
-      assert.ok(Math.abs(result.transform.scaleX - expectedScale) < 1e-5, `${id}: expected scale`);
-      assert.ok(Math.abs(result.transform.scaleY - expectedScale) < 1e-5, `${id}: uniform scale`);
-      assert.ok(Math.abs(result.transform.x + centerX * expectedScale - result.canvas.width / 2) < 1e-3, `${id}: centered x`);
-      assert.ok(Math.abs(result.transform.y + centerY * expectedScale - result.canvas.height / 2) < 1e-3, `${id}: centered y`);
-      assert.deepEqual(result.event, { id, changed:false, shapes:initialShapes }, `${id}: view-only callback`);
-      await page.evaluate(() => { window.focusEvents = []; });
+        Canvas.fitToScreen();
+        if (deltaY) {
+          const rect = canvas.getBoundingClientRect();
+          canvas.dispatchEvent(new WheelEvent('wheel', {
+            deltaY,
+            clientX:rect.left + rect.width / 2,
+            clientY:rect.top + rect.height / 2,
+            bubbles:true,
+            cancelable:true,
+          }));
+        }
+      }, phase.deltaY);
+      for (const id of ['bbox', 'rbox', 'polygon', 'line', 'skeleton', 'mask', 'point', 'keypoint']) {
+        const result = await page.evaluate(id => {
+          const before = JSON.stringify(Canvas.getShapes());
+          const beforeTransform = window.imageTransforms.at(-1);
+          const ok = Canvas.focusShape(id);
+          const canvas = document.getElementById('canvas');
+          const transform = window.imageTransforms.at(-1);
+          return {
+            ok,
+            before,
+            after:JSON.stringify(Canvas.getShapes()),
+            selected:Canvas.getSelected()?.id,
+            canUndo:Canvas.canUndo(),
+            beforeTransform,
+            transform,
+            event:window.focusEvents.at(-1),
+            canvas:{ width:canvas.width, height:canvas.height },
+          };
+        }, id);
+        const shape = (await page.evaluate(id => window.focusShapes.find(s => s.id === id), id));
+        const b = bounds(shape);
+        const expectedScale = result.beforeTransform.scaleX;
+        const centerX = (b.minX + b.maxX) / 2;
+        const centerY = (b.minY + b.maxY) / 2;
+        assert.equal(result.ok, true, `${id}: focus succeeds`);
+        assert.equal(result.after, initialShapes, `${id}: focus does not mutate shapes`);
+        assert.equal(result.selected, id, `${id}: selected`);
+        assert.equal(result.canUndo, false, `${id}: focus does not create history`);
+        assert.ok(Math.abs(result.transform.scaleX - expectedScale) < 1e-5, `${id}: expected scale`);
+        assert.ok(Math.abs(result.transform.scaleY - expectedScale) < 1e-5, `${id}: uniform scale`);
+        assert.ok(Math.abs(result.transform.x + centerX * expectedScale - result.canvas.width / 2) < 1e-3, `${id}: centered x`);
+        assert.ok(Math.abs(result.transform.y + centerY * expectedScale - result.canvas.height / 2) < 1e-3, `${id}: centered y`);
+        assert.deepEqual(result.event, { id, changed:false, shapes:initialShapes }, `${id}: view-only callback`);
+        await page.evaluate(() => { window.focusEvents = []; });
+      }
     }
 
     const invalid = await page.evaluate(() => {

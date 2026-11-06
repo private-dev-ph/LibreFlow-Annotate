@@ -530,19 +530,12 @@ const Canvas = (() => {
     const bounds = shapeFocusBounds(shape);
     if (!bounds) return false;
 
-    const width = Math.max(32, bounds.maxX - bounds.minX);
-    const height = Math.max(32, bounds.maxY - bounds.minY);
-    const padding = Math.min(40, canvas.width / 10, canvas.height / 10);
-    const availableWidth = Math.max(1, canvas.width - padding * 2);
-    const availableHeight = Math.max(1, canvas.height - padding * 2);
-    const nextScale = Math.max(0.0001, Math.min(100, availableWidth / width, availableHeight / height));
     const centerX = (bounds.minX + bounds.maxX) / 2;
     const centerY = (bounds.minY + bounds.maxY) / 2;
-    const nextOffsetX = canvas.width / 2 - centerX * nextScale;
-    const nextOffsetY = canvas.height / 2 - centerY * nextScale;
-    if (![nextScale, nextOffsetX, nextOffsetY].every(Number.isFinite)) return false;
+    const nextOffsetX = canvas.width / 2 - centerX * scale;
+    const nextOffsetY = canvas.height / 2 - centerY * scale;
+    if (![scale, nextOffsetX, nextOffsetY].every(Number.isFinite)) return false;
 
-    scale = nextScale;
     offsetX = nextOffsetX;
     offsetY = nextOffsetY;
     selectedId = id;
