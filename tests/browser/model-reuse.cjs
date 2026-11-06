@@ -15,7 +15,27 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
     page.on('pageerror', error => errors.push(error.message));
 
     const html = read('public/project.html').replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
-    await page.setContent(html);
+    await page.route('http://fixture.test/**', async route => {
+      const requestUrl = new URL(route.request().url());
+      if (requestUrl.pathname === '/project') {
+        await route.fulfill({ contentType: 'text/html', body: html });
+        return;
+      }
+      if (requestUrl.pathname.startsWith('/css/')) {
+        const relative = requestUrl.pathname.slice(1);
+        const filePath = path.join(root, relative);
+        if (fs.existsSync(filePath)) {
+          await route.fulfill({ contentType: 'text/css', body: read(relative) });
+          return;
+        }
+      }
+      await route.continue();
+    });
+    await page.goto('http://fixture.test/project?projectId=target');
+    await page.evaluate(() => {
+      localStorage.setItem('libreflow_theme', 'clay-coral');
+      localStorage.setItem('libreflow_theme_mode', 'light');
+    });
     await page.evaluate(() => {
       const available = [
         { id: 'source-1', name: 'A very long source model name that should wrap safely on phones', sourceProjectName: 'Alpha project with a long name', type: 'detection', format: 'onnx', size: 2048 },
@@ -49,7 +69,6 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
       };
     });
 
-    for (const file of ['public/css/theme.css', 'public/css/project.css', 'public/css/icons.css']) await page.addStyleTag({ content: read(file) });
     for (const file of ['public/js/api.js', 'public/js/icons.js', 'public/js/notifications.js', 'public/js/jobs.js', 'public/js/nav-inbox.js', 'public/js/theme.js', 'public/js/project.js']) await page.addScriptTag({ content: read(file) });
 
     await page.locator('[data-tab="models"]').click();
@@ -73,7 +92,7 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
     await page.evaluate(() => window.copyResolve());
     await page.waitForFunction(() => document.querySelectorAll('.existing-model-card').length === 1);
     assert.equal(await page.locator('#models-list .model-provenance').count(), 1);
-    assert.equal(await page.locator('#existing-model-search').evaluate(element => document.activeElement === element), true);
+    assert.equal(await page.locator('[data-copy-model="source-2"]').evaluate(element => document.activeElement === element), true);
 
     await toggle.press('Escape');
     assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
@@ -96,9 +115,19 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
     await page.locator('#btn-retry-existing-models').click();
     await page.waitForFunction(() => document.querySelectorAll('.existing-model-card').length === 1);
 
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'clay-coral'; document.documentElement.dataset.mode = 'light'; });
+    assert.equal(await page.evaluate(() => [document.documentElement.dataset.theme, document.documentElement.dataset.mode].join('/')), 'clay-coral/light');
+    await page.evaluate(() => { document.documentElement.dataset.mode = 'dark'; });
+    assert.equal(await page.evaluate(() => [document.documentElement.dataset.theme, document.documentElement.dataset.mode].join('/')), 'clay-coral/dark');
+
     for (const width of [320, 375, 667, 768, 1024]) {
       await page.setViewportSize({ width, height: 667 });
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, `horizontal overflow at ${width}px`);
+      const overflow = await page.evaluate(() => ({
+        viewport: document.documentElement.clientWidth,
+        pickerScroll: document.getElementById('existing-model-picker').scrollWidth,
+        pickerRight: document.getElementById('existing-model-picker').getBoundingClientRect().right,
+      }));
+      assert.equal(overflow.pickerScroll <= overflow.viewport && overflow.pickerRight <= overflow.viewport + 1, true, `picker overflow at ${width}px: ${JSON.stringify(overflow)}`);
     }
     assert.deepEqual(errors, []);
     console.log('PASS: picker open/search/add/pending/error/retry/empty/keyboard focus and responsive widths.');
