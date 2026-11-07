@@ -74,9 +74,18 @@
         const multiplierLabel = Number.isInteger(multiplier) && multiplier >= 2 ? ` · ${multiplier}×` : '';
         const duplicateVariants = Number(version.stats?.duplicateVariantsKept) || 0;
         const duplicateLabel = duplicateVariants > 0 ? `<span>${duplicateVariants} duplicate variants retained</span>` : '';
-        return `<article class="version-history-card"><div class="version-history-top"><div><h4>v${version.sequence} · ${esc(version.name)}${multiplierLabel}</h4><span class="version-note">${esc(new Date(version.createdAt).toLocaleString())} · Immutable snapshot</span></div><button type="button" class="version-primary" data-export-version="${esc(version.id)}" data-version-name="${esc(version.name)}">${LibreFlowIcons.icon('download')} Export dataset</button></div>${version.description ? `<p>${esc(version.description)}</p>` : ''}<div class="version-counts"><span>${version.stats.images} images</span><span>Train ${counts.train || 0}</span><span>Valid ${counts.valid || 0}</span><span>Test ${counts.test || 0}</span><span>${version.stats.augmentationVariants || 0} augmented</span>${duplicateLabel}</div>${sources ? `<p class="version-note">Source split: ${sources.train} train / ${sources.valid} valid / ${sources.test} test. Final counts include preprocessing and training variants.</p>` : ''}<details><summary>Processing settings and reproducibility</summary><pre class="version-config">${esc(JSON.stringify({ splits: version.splits, processing: version.processing, contentHash: version.contentHash }, null, 2))}</pre></details></article>`;
+        const stats = version.stats || {};
+        const deleteButton = version.canDelete === true ? `<button type="button" class="version-danger" data-delete-version="${esc(version.id)}" data-version-sequence="${esc(version.sequence)}" data-version-name="${esc(version.name)}" data-version-bytes="${esc(stats.bytes || 0)}" aria-label="Delete v${esc(version.sequence)} ${esc(version.name)}">${LibreFlowIcons.icon('trash')} Delete</button>` : '';
+        return `<article class="version-history-card"><div class="version-history-top"><div><h4>v${version.sequence} · ${esc(version.name)}${multiplierLabel}</h4><span class="version-note">${esc(new Date(version.createdAt).toLocaleString())} · Immutable snapshot</span></div><button type="button" class="version-primary" data-export-version="${esc(version.id)}" data-version-name="${esc(version.name)}">${LibreFlowIcons.icon('download')} Export dataset</button></div>${version.description ? `<p>${esc(version.description)}</p>` : ''}<div class="version-counts"><span>${stats.images || 0} images</span><span>≈ ${formatBytes(stats.bytes)} image storage</span><span>Train ${counts.train || 0}</span><span>Valid ${counts.valid || 0}</span><span>Test ${counts.test || 0}</span><span>${stats.augmentationVariants || 0} augmented</span>${duplicateLabel}</div>${sources ? `<p class="version-note">Source split: ${sources.train} train / ${sources.valid} valid / ${sources.test} test. Final counts include preprocessing and training variants.</p>` : ''}<details><summary>Processing settings and reproducibility</summary><pre class="version-config">${esc(JSON.stringify({ splits: version.splits, processing: version.processing, contentHash: version.contentHash }, null, 2))}</pre></details><div class="version-actions">${deleteButton}</div></article>`;
       }).join('') : '<p class="version-note">No versions yet. Your first version will appear here with an export link.</p>';
     } catch (err) { list.textContent = err.message; }
+  }
+  function formatBytes(value) {
+    const amount = Number(value || 0);
+    if (!amount) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const index = Math.min(units.length - 1, Math.floor(Math.log(amount) / Math.log(1024)));
+    return `${(amount / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
   }
   async function initialize() {
     if (initialized || loading) return;
@@ -92,6 +101,7 @@
       VersionProcessingFields.mount($('version-processing'), project.labelClasses || [], initial.tags);
       VersionPreviewUI.mount($('version-processing'), { endpoint: `${base}/versions/sample-preview`, readProcessing: () => VersionProcessingFields.read($('version-processing')) });
       VersionExportUI.mount(mount, base);
+      if (window.VersionDeleteUI) VersionDeleteUI.mount(mount, base, { onDeleted: async target => { await loadHistory(); $('version-status').textContent = `Version v${target.sequence} deleted. Source images and annotations are unchanged.`; } });
       $('version-include-unfinished').addEventListener('change', preview);
       $('version-train-boundary').addEventListener('input', event => { splits = VersionSplits.fromBoundaries(Math.min(Number(event.target.value), splits.train + splits.valid), splits.train + splits.valid); drawSplits(); });
       $('version-valid-boundary').addEventListener('input', event => { splits = VersionSplits.fromBoundaries(splits.train, event.target.value); drawSplits(); });

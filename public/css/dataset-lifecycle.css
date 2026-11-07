@@ -57,6 +57,8 @@ summary { color: var(--text-dim); cursor: pointer; font-size: 12px; font-weight:
 .primary-btn:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
 .ghost-btn:hover { border-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
 .primary-btn:disabled, .ghost-btn:disabled { opacity: .42; cursor: default; transform: none; }
+.danger-btn { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 70%, var(--border)); }
+.danger-btn svg { width: 15px; height: 15px; }
 .create-version-card > .primary-btn { width: 100%; margin-top: 2px; }
 .button-row { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .versions-list { display: flex; flex-direction: column; gap: 11px; max-height: 690px; overflow: auto; padding-right: 3px; }
@@ -125,6 +127,14 @@ summary { color: var(--text-dim); cursor: pointer; font-size: 12px; font-weight:
 .modal-card pre { max-height: 70vh; overflow: auto; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 15px; font-size: 11px; line-height: 1.5; }
 .toast { position: fixed; z-index: 1200; right: 24px; bottom: 24px; max-width: 420px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 12px 15px; box-shadow: var(--shadow); font-size: 12px; }
 .toast.error { border-color: var(--danger); }
+.version-delete-dialog { width: min(480px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); margin: auto; padding: 22px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); }
+.version-delete-dialog::backdrop { background: var(--overlay); }
+.version-delete-dialog h3 { margin: 0; }
+.version-delete-dialog p { line-height: 1.55; overflow-wrap: anywhere; }
+.version-delete-dialog .version-history-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.version-delete-dialog .version-actions { justify-content: flex-end; }
+.version-delete-dialog button { min-height: 44px; }
+.version-delete-dialog .version-delete-primary { color: var(--danger); border-color: var(--danger); background: transparent; }
 @media (max-width: 950px) { .two-column, .import-columns { grid-template-columns: 1fr; } .metric-grid { grid-template-columns: repeat(3, 1fr); } .health-toolbar, .lifecycle-header { align-items: flex-start; flex-direction: column; } .health-actions { min-width: 0; width: 100%; } .header-proof { justify-content: flex-start; } }
 @media (max-width: 620px) { .lifecycle-page { padding: 76px 14px 50px; } .health-grid { grid-template-columns: 1fr; } .metric-grid { grid-template-columns: repeat(2, 1fr); } .form-grid { grid-template-columns: 1fr; } .health-actions { flex-direction: column; align-items: stretch; } .lifecycle-tabs { overflow-x: auto; } }
 
@@ -146,4 +156,7 @@ summary { color: var(--text-dim); cursor: pointer; font-size: 12px; font-weight:
   .lifecycle-tabs { flex-wrap: wrap; }
   .lifecycle-tab { padding: 12px; }
   .back-link, summary { min-height: 44px; display: inline-flex; align-items: center; }
+  .version-delete-dialog { padding: 16px; }
+  .version-delete-dialog .version-actions { flex-direction: column-reverse; align-items: stretch; }
+  .version-delete-dialog .version-actions button { width: 100%; }
 }

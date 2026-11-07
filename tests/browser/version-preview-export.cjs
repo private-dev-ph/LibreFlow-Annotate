@@ -11,7 +11,11 @@ const root = path.resolve(__dirname, '../..');
     const page = await browser.newPage({ viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.route('http://fixture.test/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><button data-tab="versions" class="tab-btn">Versions</button><div id="panel-versions" class="tab-panel"><div id="project-versions"></div></div>' }));
+    await page.route('http://fixture.test/**', route => {
+      const url = new URL(route.request().url());
+      if (url.pathname.endsWith('/download')) return route.fulfill({ status: 200, headers: { 'Content-Type': 'application/zip', 'Content-Disposition': 'attachment; filename="fixture.zip"' }, body: 'fixture ZIP' });
+      return route.fulfill({ contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><button data-tab="versions" class="tab-btn">Versions</button><div id="panel-versions" class="tab-panel"><div id="project-versions"></div></div>' });
+    });
     await page.goto('http://fixture.test/project?projectId=fixture');
     await page.evaluate(() => {
       window.LibreFlowIcons = { icon: () => '' };
@@ -28,9 +32,14 @@ const root = path.resolve(__dirname, '../..');
           if (window.delayPreview) return new Promise(resolve => { window.finishPreview = () => resolve(response(data)); });
           return response(data);
         }
+        if (url.includes('/download-check?')) {
+          exportRequests.push(url);
+          const query = new URL(url).search;
+          return response({ downloadUrl: `/api/dataset-lifecycle/project/fixture/versions/fixture-version/download${query}`, filename: 'fixture.zip', estimatedBytes: 11 });
+        }
         if (url.includes('/download?')) {
           exportRequests.push(url);
-          return new Response(new Blob(['fixture ZIP']), { headers: { 'Content-Type': 'application/zip', 'Content-Disposition': 'attachment; filename="fixture.zip"' } });
+          return response({ downloadUrl: '/api/dataset-lifecycle/project/fixture/versions/fixture-version/download', filename: 'fixture.zip', estimatedBytes: 11 });
         }
         if (url.includes('/api/projects/')) return response({ labelClasses: [{ name: 'Sample' }] });
         if (url.endsWith('/preview')) return response({ selection: { selected: 10, annotated: 9, background: 1, excludedUnfinished: 1, excludedByFilters: 0 }, splits: { counts: { train: 7, valid: 2, test: 1 } }, tags: ['camera'], message: 'Ready' });
@@ -85,7 +94,7 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#version-export-download').click();
     assert.equal((await downloadPromise).suggestedFilename(), 'fixture.zip');
     const query = await page.evaluate(() => exportRequests.at(-1));
-    assert.match(query, /format=csv&images=false&includeNull=false/);
+    assert.match(query, /download-check\?format=csv&images=false&includeNull=false/);
     await page.keyboard.press('Escape');
     await page.locator('#version-include-unfinished').check();
     await page.waitForFunction(() => !document.getElementById('version-preview').disabled);
