@@ -27,6 +27,10 @@ window.VersionExportUI = (() => {
     root.addEventListener('click', event => {
       const button = event.target.closest('[data-export-version]');
       if (!button) return;
+      dialogSequence += 1;
+      controller?.abort();
+      controller = null;
+      $('download').disabled = false;
       versionId = button.dataset.exportVersion;
       $('name').textContent = button.dataset.versionName || 'Saved dataset version';
       $('status').textContent = '';
@@ -37,6 +41,7 @@ window.VersionExportUI = (() => {
       dialogSequence += 1;
       controller?.abort();
       controller = null;
+      $('download').disabled = false;
     });
     $('download').addEventListener('click', async () => {
       if (controller || !versionId) return;

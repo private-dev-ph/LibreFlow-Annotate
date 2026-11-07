@@ -13,11 +13,11 @@ const root = path.resolve(__dirname, '../..');
     await page.addStyleTag({ content: fs.readFileSync(path.join(root, 'public/css/project-versions.css'), 'utf8') });
     await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'public/js/version-delete-ui.js'), 'utf8') });
     await page.evaluate(() => {
-      window.deleteCalls = 0; window.deleteMode = 'ok'; window.deleted = [];
+      window.deleteCalls = 0; window.deleteMode = 'ok'; window.desiredStatus = 200; window.deleted = [];
       window.fetch = async (url, options) => {
         deleteCalls += 1;
         if (deleteMode === 'slow') await new Promise(resolve => { window.finishDelete = resolve; });
-        const status = deleteMode === 'ok' ? 200 : Number(deleteMode);
+        const status = deleteMode === 'ok' || deleteMode === 'slow' ? desiredStatus : Number(deleteMode);
         return { ok: status === 200, json: async () => status === 200 ? ({ deleted: true, id: 'v1' }) : ({ error: `Server refused (${status}).` }) };
       };
       VersionDeleteUI.mount(document.getElementById('history'), '/api/dataset-lifecycle/project/fixture', { onDeleted: target => { deleted.push(target.id); document.querySelector('article')?.remove(); } });
@@ -53,11 +53,12 @@ const root = path.resolve(__dirname, '../..');
     });
     await page.locator('[data-delete-version]').first().click();
     await page.locator('#version-delete-confirm').click();
-    await page.locator('#version-delete-confirm').click();
+    await page.locator('#version-delete-confirm').dispatchEvent('click');
     assert.equal(await page.evaluate(() => deleteCalls), 5);
+    assert.equal(await page.locator('.version-delete-close').isDisabled(), true);
     await page.evaluate(() => finishDelete());
     await page.waitForFunction(() => !document.getElementById('version-delete-confirm').disabled);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-    console.log('PASS: native confirmation, cancel/Escape, permission-gated delegated delete, server errors, duplicate-submit guard and mobile fit.');
+    console.log('PASS: native confirmation, cancel/Escape, server errors, duplicate-submit guard and mobile fit.');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -19,11 +19,11 @@ const root = path.resolve(__dirname, '../..');
     await page.goto('http://fixture.test/project?projectId=fixture');
     await page.evaluate(() => {
       window.LibreFlowIcons = { icon: () => '' };
-      window.previewRequests = []; window.exportRequests = []; window.created = [];
+      window.previewRequests = []; window.exportRequests = []; window.created = []; window.delayDownloadCheck = false;
       const canvas = document.createElement('canvas'); canvas.width = 80; canvas.height = 60;
       canvas.getContext('2d').fillRect(0, 0, 80, 60);
       const image = { dataUrl: canvas.toDataURL(), width: 80, height: 60, annotations: [{ type: 'bbox', label: 'Sample', data: { x: 2, y: 2, width: 10, height: 10 } }] };
-      const history = [{ id: 'fixture-version', sequence: 1, name: 'Version 1', createdAt: '2026-11-04T00:00:00Z', stats: { images: 10 }, splits: { counts: { train: 7, valid: 2, test: 1 } } }];
+      const history = [{ id: 'fixture-version', sequence: 1, name: 'Version 1', canDelete: true, createdAt: '2026-11-04T00:00:00Z', stats: { images: 10, bytes: 1048576 }, splits: { counts: { train: 7, valid: 2, test: 1 } } }, { id: 'owner-version', sequence: 2, name: 'Owner only', canDelete: false, createdAt: '2026-11-03T00:00:00Z', stats: { images: 2, bytes: 2048 }, splits: { counts: { train: 1, valid: 1, test: 0 } } }];
       const response = data => ({ ok: true, json: async () => data });
       window.fetch = async (url, options = {}) => {
         if (url.endsWith('/sample-preview')) {
@@ -34,8 +34,9 @@ const root = path.resolve(__dirname, '../..');
         }
         if (url.includes('/download-check?')) {
           exportRequests.push(url);
-          const query = new URL(url).search;
-          return response({ downloadUrl: `/api/dataset-lifecycle/project/fixture/versions/fixture-version/download${query}`, filename: 'fixture.zip', estimatedBytes: 11 });
+          const data = { downloadUrl: `/api/dataset-lifecycle/project/fixture/versions/fixture-version/download${new URL(url, location.origin).search}`, filename: 'fixture.zip', estimatedBytes: 11 };
+          if (window.delayDownloadCheck) return new Promise(resolve => { window.finishDownloadCheck = () => resolve(response(data)); });
+          return response(data);
         }
         if (url.includes('/download?')) {
           exportRequests.push(url);
@@ -48,9 +49,10 @@ const root = path.resolve(__dirname, '../..');
       };
     });
     for (const file of ['theme.css', 'project-versions.css']) await page.addStyleTag({ content: fs.readFileSync(path.join(root, 'public/css', file), 'utf8') });
-    for (const file of ['version-splits.js', 'version-processing-fields.js', 'version-preview-ui.js', 'version-export-ui.js', 'project-versions.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'public/js', file), 'utf8') });
+    for (const file of ['version-splits.js', 'version-processing-fields.js', 'version-preview-ui.js', 'version-export-ui.js', 'version-delete-ui.js', 'project-versions.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'public/js', file), 'utf8') });
     await page.locator('[data-tab=versions]').click();
     await page.waitForFunction(() => document.querySelector('#version-status')?.textContent === 'Ready');
+    assert.equal(await page.locator('[data-delete-version]').count(), 1);
     const operations = await page.locator('[data-preview-operation]').evaluateAll(buttons => buttons.map(button => button.dataset.previewOperation));
     assert.equal(new Set(operations).size, 37);
     await page.locator('[data-path="augmentation.boundingBox.enabled"]').check();
@@ -77,24 +79,41 @@ const root = path.resolve(__dirname, '../..');
     for (const [width, height] of [[320,568],[375,667],[430,932],[667,375],[768,1024],[820,1180],[1024,768]]) {
       await page.setViewportSize({ width, height });
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `previews fit ${width}`);
-      await page.locator('[data-export-version]').click();
+      await page.locator('[data-export-version]').first().click();
       const dialog = page.locator('#version-export-dialog');
       assert.ok(await dialog.evaluate(el => { const r=el.getBoundingClientRect(); return r.left>=0 && r.right<=innerWidth+1 && r.top>=0 && r.bottom<=innerHeight+1; }), `dialog fits ${width}`);
       await page.keyboard.press('Escape');
       assert.equal(await dialog.evaluate(el => el.open), false);
     }
-    await page.locator('[data-export-version]').click();
+    await page.locator('[data-export-version]').first().click();
     assert.equal(await page.locator('#version-export-format option').count(), 5);
     await page.locator('#version-export-null').check();
     await page.locator('#version-export-images').uncheck();
     assert.equal(await page.locator('#version-export-null').isDisabled(), true);
     assert.equal(await page.locator('#version-export-null').isChecked(), false);
     await page.locator('#version-export-format').selectOption('csv');
+    let downloadCount = 0;
+    page.on('download', () => { downloadCount += 1; });
     const downloadPromise = page.waitForEvent('download');
     await page.locator('#version-export-download').click();
     assert.equal((await downloadPromise).suggestedFilename(), 'fixture.zip');
     const query = await page.evaluate(() => exportRequests.at(-1));
     assert.match(query, /download-check\?format=csv&images=false&includeNull=false/);
+    await page.keyboard.press('Escape');
+    await page.locator('[data-export-version]').first().click();
+    await page.evaluate(() => { delayDownloadCheck = true; });
+    await page.locator('#version-export-download').click();
+    await page.waitForFunction(() => typeof finishDownloadCheck === 'function');
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => { delayDownloadCheck = false; });
+    await page.locator('[data-export-version]').first().click();
+    const reopenedDownload = page.waitForEvent('download');
+    await page.locator('#version-export-download').click();
+    await reopenedDownload;
+    assert.equal(downloadCount, 2);
+    await page.evaluate(() => finishDownloadCheck());
+    await page.waitForTimeout(50);
+    assert.equal(downloadCount, 2);
     await page.keyboard.press('Escape');
     await page.locator('#version-include-unfinished').check();
     await page.waitForFunction(() => !document.getElementById('version-preview').disabled);

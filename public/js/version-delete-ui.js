@@ -10,6 +10,8 @@ window.VersionDeleteUI = (() => {
     root.append(dialog);
     const summary = dialog.querySelector('#version-delete-summary');
     const status = dialog.querySelector('#version-delete-status');
+    const form = dialog.querySelector('form');
+    const close = dialog.querySelector('.version-delete-close');
     const cancel = dialog.querySelector('#version-delete-cancel');
     const confirm = dialog.querySelector('#version-delete-confirm');
     let active = null;
@@ -22,19 +24,20 @@ window.VersionDeleteUI = (() => {
       const index = Math.min(units.length - 1, Math.floor(Math.log(amount) / Math.log(1024)));
       return `${(amount / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
     };
-    const reset = () => { status.textContent = ''; confirm.disabled = false; cancel.disabled = false; };
+    const reset = () => { status.textContent = ''; confirm.disabled = false; close.disabled = false; cancel.disabled = false; };
     root.addEventListener('click', event => {
       const button = event.target.closest('[data-delete-version]');
       if (!button || pending) return;
       const id = button.dataset.deleteVersion;
       if (!id) return;
       sequence += 1;
-      active = { id, sequence, name: button.dataset.versionName || 'Saved dataset version', sequence: button.dataset.versionSequence || '?', bytes: button.dataset.versionBytes };
-      summary.textContent = `Delete v${active.sequence} · ${active.name} (${formatBytes(active.bytes)}).`;
+      active = { id, name: button.dataset.versionName || 'Saved dataset version', sequence: button.dataset.versionSequence || '?', bytes: button.dataset.versionBytes };
+      summary.textContent = `Delete v${active.sequence} · ${active.name} (≈ ${formatBytes(active.bytes)}).`;
       reset();
       dialog.showModal();
       cancel.focus();
     });
+    form.addEventListener('submit', event => { if (pending) event.preventDefault(); });
     dialog.addEventListener('cancel', event => { if (pending) event.preventDefault(); });
     dialog.addEventListener('close', () => { if (!pending) { active = null; sequence += 1; reset(); } });
     confirm.addEventListener('click', async () => {
@@ -43,6 +46,7 @@ window.VersionDeleteUI = (() => {
       const requestSequence = ++sequence;
       pending = { requestSequence };
       confirm.disabled = true;
+      close.disabled = true;
       cancel.disabled = true;
       status.textContent = 'Deleting generated version files…';
       try {
