@@ -147,7 +147,7 @@ test('fails closed on a malformed sequence ledger', async t => {
     deleteDatasetVersion({ ...fixture, sourceType: 'project', sourceId: 'project-1', versionId: 'version-one' }),
     SyntaxError,
   );
-  assert.equal(fs.existsSync(path.join(fixture.versionsRoot, 'version-one')), false);
+  assert.equal(fs.existsSync(path.join(fixture.versionsRoot, 'version-one')), true);
   assert.equal(JSON.parse(fs.readFileSync(fixture.indexFile, 'utf8')).some(version => version.id === 'version-one'), true);
 });
 
