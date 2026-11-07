@@ -27,36 +27,58 @@ window.VersionExportUI = (() => {
     root.addEventListener('click', event => {
       const button = event.target.closest('[data-export-version]');
       if (!button) return;
+      dialogSequence += 1;
+      controller?.abort();
+      controller = null;
+      $('download').disabled = false;
       versionId = button.dataset.exportVersion;
       $('name').textContent = button.dataset.versionName || 'Saved dataset version';
       $('status').textContent = '';
       dialog.showModal();
     });
-    dialog.addEventListener('close', () => { controller?.abort(); });
+    let dialogSequence = 0;
+    dialog.addEventListener('close', () => {
+      dialogSequence += 1;
+      controller?.abort();
+      controller = null;
+      $('download').disabled = false;
+    });
     $('download').addEventListener('click', async () => {
-      if (controller) return;
+      if (controller || !versionId) return;
       const pending = new AbortController();
       controller = pending;
+      const sequence = dialogSequence;
+      const requestedVersionId = versionId;
       $('download').disabled = true;
       $('status').textContent = 'Preparing your ZIP…';
       const query = new URLSearchParams({ format: $('format').value, images: String($('images').checked), includeNull: String($('null').checked && $('images').checked) });
       try {
-        const response = await fetch(`${base}/versions/${encodeURIComponent(versionId)}/download?${query}`, { credentials: 'include', signal: pending.signal });
-        if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || `Export failed (${response.status}).`); }
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
+        const preflight = await fetch(`${base}/versions/${encodeURIComponent(requestedVersionId)}/download-check?${query}`, { credentials: 'include', signal: pending.signal });
+        const data = await preflight.json().catch(() => ({}));
+        if (!preflight.ok) throw new Error(data.error || `Export failed (${preflight.status}).`);
+        if (sequence !== dialogSequence || controller !== pending || !dialog.open || versionId !== requestedVersionId) return;
+        if (!data.downloadUrl || !data.filename) throw new Error('Export did not provide a valid download link.');
+        const expectedPath = new URL(`${base}/versions/${encodeURIComponent(requestedVersionId)}/download`, location.origin).pathname;
+        const downloadUrl = new URL(data.downloadUrl, location.origin);
+        if (downloadUrl.origin !== location.origin || downloadUrl.pathname !== expectedPath) throw new Error('Export returned an invalid download link.');
         const link = document.createElement('a');
-        link.href = url;
-        const filename = response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1];
-        link.download = filename || 'dataset.zip';
+        link.href = downloadUrl.href;
+        link.download = data.filename;
+        link.rel = 'noopener';
         document.body.append(link);
         link.click();
         link.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 30000);
-        $('status').textContent = 'Download ready. Your saved version is unchanged.';
-      } catch (error) { if (error.name !== 'AbortError') $('status').textContent = error.message; }
+        if (sequence === dialogSequence && controller === pending) $('status').textContent = `Download started. Follow progress in your browser downloads.${data.estimatedBytes ? ` Approx. ${bytes(data.estimatedBytes)}.` : ''}`;
+      } catch (error) { if (error.name !== 'AbortError' && sequence === dialogSequence && controller === pending) $('status').textContent = error.message; }
       finally { if (controller === pending) { controller = null; $('download').disabled = false; } }
     });
+  }
+  function bytes(value) {
+    const amount = Number(value || 0);
+    if (!amount) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const index = Math.min(units.length - 1, Math.floor(Math.log(amount) / Math.log(1024)));
+    return `${(amount / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
   }
   return { mount };
 })();

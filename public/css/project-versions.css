@@ -42,6 +42,9 @@
 .version-split-values label:nth-child(3) { border-color: #b36a20; }
 .version-split-values output { font-size: 13px; color: var(--text-dim); }
 .version-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 16px; }
+.version-danger, .version-delete-primary { color: var(--danger) !important; border-color: var(--danger) !important; background: transparent !important; }
+.version-danger { min-height: 44px; }
+.version-danger svg { width: 16px; height: 16px; }
 .version-ready-count { padding: 14px; border-radius: 8px; background: var(--accent-soft); color: var(--text); line-height: 1.6; margin-bottom: 18px; }
 .augmentation-controls { display: grid; gap: 12px; margin: 16px 0; padding: 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2); min-width: 0; }
 .augmentation-multiplier-field { max-width: 560px; }
@@ -81,6 +84,14 @@
 .version-export-dialog h3 { margin: 0; }
 .version-export-dialog .version-note { overflow-wrap: anywhere; }
 .version-export-dialog .version-actions { justify-content: flex-end; }
+.version-delete-dialog { width: min(480px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); margin: auto; padding: 22px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); }
+.version-delete-dialog::backdrop { background: var(--overlay); }
+.version-delete-dialog h3 { margin: 0; }
+.version-delete-dialog p { line-height: 1.55; overflow-wrap: anywhere; }
+.version-delete-dialog .version-actions { justify-content: flex-end; }
+.version-delete-dialog button { min-height: 44px; }
+.version-delete-dialog .version-delete-close { padding-inline: 12px; }
+.version-delete-dialog .version-delete-primary { font-weight: 700; }
 @media (max-width: 600px) {
   .version-stage, .version-history-card { padding: 16px; }
   .version-split-values { gap: 8px; }
@@ -92,5 +103,7 @@
   .version-setting-hint { font-size: 13px; }
   .version-flip-fields { grid-template-columns: 1fr; }
   .version-preview-grid { grid-template-columns: 1fr; }
-  .version-export-dialog { padding: 16px; }
+  .version-export-dialog, .version-delete-dialog { padding: 16px; }
+  .version-delete-dialog .version-actions { flex-direction: column-reverse; align-items: stretch; }
+  .version-delete-dialog .version-actions button { width: 100%; }
 }

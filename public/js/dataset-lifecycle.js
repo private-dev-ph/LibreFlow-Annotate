@@ -136,6 +136,7 @@
           <button class="ghost-btn btn-view-manifest" data-id="${esc(version.id)}">Manifest</button>
           <button class="ghost-btn btn-version-health" data-id="${esc(version.id)}">Health</button>
           <a class="primary-btn" href="${baseUrl}/versions/${encodeURIComponent(version.id)}/download">Download ZIP</a>
+          ${version.canDelete === true ? `<button class="ghost-btn danger-btn" data-delete-version="${esc(version.id)}" data-version-sequence="${esc(version.sequence)}" data-version-name="${esc(version.name)}" data-version-bytes="${esc(stats.bytes || 0)}" aria-label="Delete v${esc(version.sequence)} ${esc(version.name)}">${LibreFlowIcons.icon('trash')} Delete</button>` : ''}
         </div>
       </article>`;
     }).join('');
@@ -196,6 +197,7 @@
     finally { button.disabled = false; button.textContent = 'Create immutable version'; }
   });
   document.getElementById('btn-refresh-versions').addEventListener('click', loadVersions);
+  if (window.VersionDeleteUI) VersionDeleteUI.mount(document.getElementById('versions-list').parentElement, baseUrl, { onDeleted: async target => { await loadVersions(); toast(`Deleted v${target.sequence} · ${target.name}. Source images and annotations are unchanged.`); } });
 
   function renderHealth(report) {
     document.getElementById('health-empty').classList.add('hidden');
