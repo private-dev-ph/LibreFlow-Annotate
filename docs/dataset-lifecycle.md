@@ -94,9 +94,17 @@ GET /api/dataset-lifecycle/:sourceType/:sourceId/versions
 GET /api/dataset-lifecycle/:sourceType/:sourceId/versions/:versionId
 GET /api/dataset-lifecycle/:sourceType/:sourceId/versions/:versionId?includeAnnotations=false
 GET /api/dataset-lifecycle/:sourceType/:sourceId/versions/:versionId/download
+GET /api/dataset-lifecycle/:sourceType/:sourceId/versions/:versionId/download-check
+DELETE /api/dataset-lifecycle/:sourceType/:sourceId/versions/:versionId
 ```
 
-`sourceType` is `project` or `dataset`. There are deliberately no update or delete endpoints. Snapshot image files are addressed by SHA-256. The manifest has a content hash and a separate manifest hash. The default download includes the manifest, internal annotations, COCO JSON, ready-to-train YOLO split folders and labels, `data.yaml`, content-addressed snapshot images, and SHA-256 checksums. Format-specific downloads use the selected format and image options. Downloads re-check the manifest and each included snapshot asset before returning the ZIP; annotations-only downloads do not read image bytes.
+`sourceType` is `project` or `dataset`. Saved versions cannot be edited. The project or dataset owner can delete a version from either history view after confirmation. Deletion removes only that version's generated files and catalog entry; source images, annotations, other versions, existing downloads, and external backups are unaffected. API deletion requires `versions:write` and ownership, returns `{ "deleted": true, "id": "..." }`, and returns 409 while that version is being downloaded or deleted. Version numbers continue increasing after deletion, including when the latest or all versions are removed.
+
+Snapshot image files are addressed by SHA-256. The manifest has a content hash and a separate manifest hash. The default `all` download retains the full archival bundle: original snapshot paths, internal annotations, COCO JSON, YOLO split folders, `data.yaml`, and checksums. Explicit YOLO, Roboflow, COCO, VOC, and CSV downloads store one main training image copy per image, with additional classification folders only where needed. The signed `manifest.json` stays unchanged; `export-manifest.json` records each image's `sourcePath`, `exportPath`, and `archivePaths`. Checksum paths refer to files actually present in the ZIP.
+
+Downloads stream ZIP bytes with backpressure and automatic ZIP64 support instead of buffering the full archive. Image checksums are verified during transfer; corruption aborts the download. Canceling a download stops image reads and releases its deletion lock. No ZIP cache or extra image copies are retained on the server. Annotations-only exports do not read image bytes.
+
+The export dialog first calls `download-check` with the same `format`, `images`, and `includeNull` query parameters as `download`. This validates the manifest, format, and asset paths/existence, and returns `downloadUrl`, `filename`, `estimatedBytes`, and `imageCount`. The size is an estimate before compression. The browser then manages the download directly, so progress is shown in its downloads list and the web page does not need to hold the ZIP in memory.
 
 ## Dataset health
 

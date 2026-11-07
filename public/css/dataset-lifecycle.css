@@ -133,7 +133,8 @@ summary { color: var(--text-dim); cursor: pointer; font-size: 12px; font-weight:
 .version-delete-dialog p { line-height: 1.55; overflow-wrap: anywhere; }
 .version-delete-dialog .version-history-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .version-delete-dialog .version-actions { justify-content: flex-end; }
-.version-delete-dialog button { min-height: 44px; }
+.version-delete-dialog button { min-height: 44px; padding: 9px 13px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer; }
+.version-delete-dialog button:disabled { opacity: .5; cursor: progress; }
 .version-delete-dialog .version-delete-primary { color: var(--danger); border-color: var(--danger); background: transparent; }
 @media (max-width: 950px) { .two-column, .import-columns { grid-template-columns: 1fr; } .metric-grid { grid-template-columns: repeat(3, 1fr); } .health-toolbar, .lifecycle-header { align-items: flex-start; flex-direction: column; } .health-actions { min-width: 0; width: 100%; } .header-proof { justify-content: flex-start; } }
 @media (max-width: 620px) { .lifecycle-page { padding: 76px 14px 50px; } .health-grid { grid-template-columns: 1fr; } .metric-grid { grid-template-columns: repeat(2, 1fr); } .form-grid { grid-template-columns: 1fr; } .health-actions { flex-direction: column; align-items: stretch; } .lifecycle-tabs { overflow-x: auto; } }
