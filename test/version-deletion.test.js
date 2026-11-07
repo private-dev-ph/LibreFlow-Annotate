@@ -105,6 +105,52 @@ test('re-reads the catalog after filesystem work and preserves concurrent additi
   assert.equal(readSequenceHighWater(fixture.indexFile, 'project', 'project-1'), 3);
 });
 
+test('does not overwrite a catalog that becomes malformed during filesystem cleanup', async t => {
+  const fixture = catalogFixture(t);
+  const originalRm = fs.promises.rm;
+  fs.promises.rm = async (...args) => {
+    await originalRm(...args);
+    fs.writeFileSync(fixture.indexFile, '{ malformed catalog');
+  };
+  try {
+    await assert.rejects(
+      deleteDatasetVersion({ ...fixture, sourceType: 'project', sourceId: 'project-1', versionId: 'version-one' }),
+      SyntaxError,
+    );
+  } finally {
+    fs.promises.rm = originalRm;
+  }
+  assert.equal(fs.readFileSync(fixture.indexFile, 'utf8'), '{ malformed catalog');
+});
+
+test('rejects a selected version containing a symlink to a sibling version', async t => {
+  const fixture = catalogFixture(t);
+  const link = path.join(fixture.versionsRoot, 'version-one', 'sibling-link');
+  try {
+    fs.symlinkSync(path.join(fixture.versionsRoot, 'version-two'), link, 'junction');
+  } catch (error) {
+    t.skip(`symlinks unavailable: ${error.code || error.message}`);
+    return;
+  }
+  await assert.rejects(
+    deleteDatasetVersion({ ...fixture, sourceType: 'project', sourceId: 'project-1', versionId: 'version-one' }),
+    error => error.code === 'INVALID_VERSION_PATH',
+  );
+  assert.equal(fs.existsSync(path.join(fixture.versionsRoot, 'version-one')), true);
+  assert.equal(fs.existsSync(path.join(fixture.versionsRoot, 'version-two')), true);
+});
+
+test('fails closed on a malformed sequence ledger', async t => {
+  const fixture = catalogFixture(t);
+  fs.writeFileSync(path.join(fixture.root, 'dataset_version_sequences.json'), '{ malformed ledger');
+  await assert.rejects(
+    deleteDatasetVersion({ ...fixture, sourceType: 'project', sourceId: 'project-1', versionId: 'version-one' }),
+    SyntaxError,
+  );
+  assert.equal(fs.existsSync(path.join(fixture.versionsRoot, 'version-one')), false);
+  assert.equal(JSON.parse(fs.readFileSync(fixture.indexFile, 'utf8')).some(version => version.id === 'version-one'), true);
+});
+
 test('creation uses a persistent high-water sequence after deletion', async t => {
   const root = tempDir(t);
   const versionsRoot = path.join(root, 'versions');
