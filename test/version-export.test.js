@@ -58,8 +58,9 @@ test('all and five explicit formats export split data, rich metadata, and safe n
     const names = entries(buffer);
     assert.ok(names.includes('manifest.json'));
     assert.ok(names.includes('export-manifest.json'));
-    assert.ok(names.some(name => name.includes('/images/') || name.startsWith('images/')), `${format} should contain split image output`);
-    assert.ok(names.some(name => name.includes('one.png')), `${format} should contain image bytes`);
+    assert.ok(names.some(name => name.includes('/images/') || name.startsWith('images/') || name.startsWith('JPEGImages/')), `${format} should contain split image output`);
+    assert.ok(names.some(name => /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i.test(name)), `${format} should contain image bytes`);
+    if (format !== 'all') assert.ok(!names.includes('images/one.png'), `${format} should not duplicate the source image path`);
     assert.ok(names.includes('libreflow/annotations.json'));
     if (format === 'all') assert.ok(names.includes('classification/classes.json'));
     else assert.ok(names.includes('classification/classes.json'), `${format} should retain classification sidecars`);
