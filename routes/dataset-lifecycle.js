@@ -16,7 +16,9 @@ const {
 const { normalizeProcessingConfig } = require('../lib/version-processing');
 const { selectVersionInputs } = require('../lib/version-selection');
 const { createProcessingPreview } = require('../lib/version-preview');
-const { buildVersionExport } = require('../lib/version-export');
+const { inspectVersionExport, createVersionExportStream } = require('../lib/version-export');
+const { deleteDatasetVersion } = require('../lib/version-deletion');
+const { acquireVersionOperation } = require('../lib/version-operations');
 const {
   parseArchive,
   parseCocoObject,
@@ -73,7 +75,7 @@ function apiKeySourceProjectId(sourceType, source) {
     : (source?.sourceProjectId || source?.shareProjectId || null);
 }
 
-function resolveSource(sourceType, sourceId, userId, authContext) {
+function resolveSource(sourceType, sourceId, userId, authContext, { includeData = true } = {}) {
   const projects = readJson(PROJECTS_FILE, []);
   if (sourceType === 'project') {
     const source = getProject(sourceId) || projects.find(project => project.id === sourceId);
@@ -82,6 +84,7 @@ function resolveSource(sourceType, sourceId, userId, authContext) {
     if (!apiKeyAllowsProject(authContext, apiKeySourceProjectId(sourceType, source))) {
       return { status: 403, error: 'This API key is not scoped to the project.' };
     }
+    if (!includeData) return { source };
     const images = readJson(IMAGES_FILE, []).filter(image => image.projectId === sourceId)
       .map(image => ({ ...image, sourcePath: path.join(UPLOADS_DIR, image.filename) }));
     const imageIds = new Set(images.map(image => image.id));
@@ -95,6 +98,7 @@ function resolveSource(sourceType, sourceId, userId, authContext) {
     if (!apiKeyAllowsProject(authContext, apiKeySourceProjectId(sourceType, source))) {
       return { status: 403, error: 'This API key is not scoped to the dataset project.' };
     }
+    if (!includeData) return { source };
     const images = (source.images || []).map(image => ({ ...image, sourcePath: path.join(DATASETS_DIR, image.filename) }));
     const annotations = (source.annotations || []).map(annotation => ({ ...annotation }));
     return { source, images, annotations };
@@ -151,11 +155,11 @@ function requestActor(req) {
   return { userId, username };
 }
 
-function resolveRequestSource(req) {
+function resolveRequestSource(req, options) {
   const actor = requestActor(req);
   return {
     actor,
-    resolved: resolveSource(req.params.sourceType, req.params.sourceId, actor.userId, req.authContext),
+    resolved: resolveSource(req.params.sourceType, req.params.sourceId, actor.userId, req.authContext, options),
   };
 }
 
@@ -457,10 +461,18 @@ router.post('/projects/:projectId/import', requireSession, (req, res) => {
   });
 });
 
+function canDeleteVersionSource(req, source, actor) {
+  const writable = req.authContext?.type !== 'api_key' ||
+    (req.authContext.scopes || []).some(scope => scope === '*' || scope === 'versions:write');
+  return source.userId === actor.userId && writable;
+}
+
 router.get('/:sourceType/:sourceId/versions', requireScopes('versions:read'), (req, res) => {
-  const { resolved } = resolveRequestSource(req);
+  const { resolved, actor } = resolveRequestSource(req, { includeData: false });
   if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
-  res.json(listVersions(VERSION_INDEX_FILE, req.params.sourceType, req.params.sourceId));
+  const canDelete = canDeleteVersionSource(req, resolved.source, actor);
+  res.json(listVersions(VERSION_INDEX_FILE, req.params.sourceType, req.params.sourceId)
+    .map(version => ({ ...version, canDelete })));
 });
 
 router.post('/:sourceType/:sourceId/versions/preview', requireScopes('versions:read'), (req, res) => {
@@ -528,38 +540,121 @@ router.post('/:sourceType/:sourceId/versions', requireScopes('versions:write'), 
   }
 });
 
-router.get('/:sourceType/:sourceId/versions/:versionId', requireScopes('versions:read'), (req, res) => {
-  const { resolved } = resolveRequestSource(req);
-  if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
-  const manifest = readVersionManifest(VERSIONS_ROOT, req.params.versionId);
-  if (!manifest || manifest.source?.type !== req.params.sourceType || manifest.source?.id !== req.params.sourceId) {
-    return res.status(404).json({ error: 'Dataset version not found.' });
+function savedVersion(req) {
+  const id = req.params.versionId;
+  if (!/^[a-zA-Z0-9-]+$/.test(id || '')) {
+    throw Object.assign(new Error('Dataset version not found.'), { code: 'NOT_FOUND' });
   }
-  res.json(publicManifest(manifest, String(req.query.includeAnnotations || 'true') !== 'false'));
+  const root = fs.realpathSync(VERSIONS_ROOT);
+  const directory = path.resolve(VERSIONS_ROOT, id);
+  if (!fs.existsSync(directory)) throw Object.assign(new Error('Dataset version not found.'), { code: 'NOT_FOUND' });
+  const realDirectory = fs.realpathSync(directory);
+  if (fs.lstatSync(directory).isSymbolicLink() || !realDirectory.startsWith(`${root}${path.sep}`)) {
+    throw Object.assign(new Error('Invalid dataset version storage path.'), { code: 'INVALID_ASSET_PATH' });
+  }
+  const manifest = readVersionManifest(VERSIONS_ROOT, id);
+  if (!manifest || manifest.id !== id || manifest.source?.type !== req.params.sourceType || manifest.source?.id !== req.params.sourceId) {
+    throw Object.assign(new Error('Dataset version not found.'), { code: 'NOT_FOUND' });
+  }
+  if (!manifest.integrityValid) throw Object.assign(new Error('Version manifest integrity check failed.'), { code: 'ASSET_INTEGRITY' });
+  return manifest;
+}
+
+function exportOptions(req, manifest) {
+  const format = String(req.query.format || 'all').toLowerCase();
+  return { manifest, versionDir: path.join(VERSIONS_ROOT, manifest.id), format,
+    includeImages: req.query.images === undefined ? true : req.query.images === 'true',
+    includeNull: req.query.includeNull === undefined ? format === 'all' : req.query.includeNull === 'true' };
+}
+
+function exportFilename(manifest, format) {
+  return `${manifest.source.name || manifest.source.type}-${manifest.name}-${format}`.replace(/[^a-z0-9_.-]+/gi, '_') + '.zip';
+}
+
+function versionError(res, error) {
+  if (res.destroyed) return;
+  if (res.headersSent) return res.destroy(error);
+  res.removeHeader('Content-Disposition');
+  res.removeHeader('Content-Length');
+  const status = error.code === 'NOT_FOUND' ? 404
+    : ['VERSION_BUSY', 'ASSET_INTEGRITY', 'MISSING_ASSET', 'INVALID_ASSET_PATH', 'INVALID_ARCHIVE_PATH'].includes(error.code) ? 409
+    : ['INVALID_FORMAT', 'INVALID_VERSION_PATH', 'INVALID_MANIFEST', 'INVALID_VERSION_DIR'].includes(error.code) ? 400 : 500;
+  res.status(status).json({ error: error.message || 'Dataset version operation failed.' });
+}
+
+router.get('/:sourceType/:sourceId/versions/:versionId', requireScopes('versions:read'), (req, res) => {
+  const { resolved } = resolveRequestSource(req, { includeData: false });
+  if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+  try { res.json(publicManifest(savedVersion(req), String(req.query.includeAnnotations || 'true') !== 'false')); }
+  catch (error) { versionError(res, error); }
 });
 
-router.get('/:sourceType/:sourceId/versions/:versionId/download', requireScopes('versions:read'), (req, res) => {
-  const { resolved } = resolveRequestSource(req);
+router.delete('/:sourceType/:sourceId/versions/:versionId', requireScopes('versions:write'), async (req, res) => {
+  const { resolved, actor } = resolveRequestSource(req, { includeData: false });
   if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
-  const manifest = readVersionManifest(VERSIONS_ROOT, req.params.versionId);
-  if (!manifest || manifest.source?.type !== req.params.sourceType || manifest.source?.id !== req.params.sourceId) {
-    return res.status(404).json({ error: 'Dataset version not found.' });
-  }
-  if (!manifest.integrityValid) return res.status(409).json({ error: 'Version manifest integrity check failed.' });
+  if (!canDeleteVersionSource(req, resolved.source, actor)) return res.status(403).json({ error: 'Only the project or dataset owner can delete its versions.' });
+  const indexed = listVersions(VERSION_INDEX_FILE, req.params.sourceType, req.params.sourceId)
+    .find(version => version.id === req.params.versionId);
+  if (!indexed) return res.status(404).json({ error: 'Dataset version not found.' });
+  let release;
   try {
-    const format = String(req.query.format || 'all').toLowerCase();
-    const data = buildVersionExport({ manifest, versionDir: path.join(VERSIONS_ROOT, manifest.id), format,
-      includeImages: req.query.images === undefined ? true : req.query.images === 'true',
-      includeNull: req.query.includeNull === undefined ? format === 'all' : req.query.includeNull === 'true' });
-    const safeName = `${manifest.source.name || req.params.sourceType}-${manifest.name}-${format}`.replace(/[^a-z0-9_.-]+/gi, '_');
+    release = acquireVersionOperation(indexed.id, 'delete');
+    res.json(await deleteDatasetVersion({ versionsRoot: VERSIONS_ROOT, indexFile: VERSION_INDEX_FILE,
+      sourceType: req.params.sourceType, sourceId: req.params.sourceId, versionId: indexed.id }));
+  } catch (error) { versionError(res, error); }
+  finally { release?.(); }
+});
+
+router.get('/:sourceType/:sourceId/versions/:versionId/download-check', requireScopes('versions:read'), async (req, res) => {
+  const { resolved } = resolveRequestSource(req, { includeData: false });
+  if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+  let release;
+  try {
+    const manifest = savedVersion(req);
+    release = acquireVersionOperation(manifest.id, 'download');
+    const options = exportOptions(req, manifest);
+    const summary = await inspectVersionExport(options);
+    const query = new URLSearchParams({ format: options.format, images: String(options.includeImages), includeNull: String(options.includeNull) });
+    const downloadUrl = `${req.baseUrl}/${encodeURIComponent(req.params.sourceType)}/${encodeURIComponent(req.params.sourceId)}/versions/${encodeURIComponent(manifest.id)}/download?${query}`;
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({ downloadUrl, filename: exportFilename(manifest, options.format), estimatedBytes: summary.estimatedBytes, imageCount: summary.imageCount });
+  } catch (error) { versionError(res, error); }
+  finally { release?.(); }
+});
+
+router.get('/:sourceType/:sourceId/versions/:versionId/download', requireScopes('versions:read'), async (req, res) => {
+  const { resolved } = resolveRequestSource(req, { includeData: false });
+  if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+  const controller = new AbortController();
+  let release, output, finished = false;
+  const cleanup = (cancel = true) => {
+    if (finished) return;
+    finished = true;
+    if (cancel) { controller.abort(); output?.cancel(); }
+    release?.();
+  };
+  res.once('close', cleanup);
+  try {
+    const manifest = savedVersion(req);
+    release = acquireVersionOperation(manifest.id, 'download');
+    const options = { ...exportOptions(req, manifest), signal: controller.signal };
+    if (req.method === 'HEAD') {
+      await inspectVersionExport(options);
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${exportFilename(manifest, options.format)}"`);
+      res.end();
+      cleanup(false);
+      return;
+    }
+    output = await createVersionExportStream(options);
+    if (controller.signal.aborted || res.destroyed) { output.cancel(); release?.(); return; }
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.zip"`);
-    res.setHeader('Content-Length', data.length);
-    res.end(data);
-  } catch (error) {
-    res.status(['ASSET_INTEGRITY', 'MISSING_ASSET', 'INVALID_ASSET_PATH', 'INVALID_ARCHIVE_PATH'].includes(error.code) ? 409 : 400)
-      .json({ error: error.message || 'Dataset export failed.' });
-  }
+    res.setHeader('Content-Disposition', `attachment; filename="${exportFilename(manifest, options.format)}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    output.stream.once('error', error => { versionError(res, error); cleanup(); });
+    res.once('finish', () => cleanup(false));
+    output.stream.pipe(res);
+  } catch (error) { versionError(res, error); cleanup(); }
 });
 
 router.get('/:sourceType/:sourceId/health', requireScopes('versions:read'), (req, res) => {
