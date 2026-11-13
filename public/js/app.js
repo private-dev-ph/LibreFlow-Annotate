@@ -20,6 +20,8 @@
 
   document.getElementById('nav-project-name').textContent = project.name;
   document.title = `${project.name} - LibreFlow Annotate`;
+  const projectLink = document.getElementById('annotator-project-link');
+  if (projectLink) projectLink.href = `/project?projectId=${encodeURIComponent(projectId)}`;
 
   // -- State ------------------------------------------------------------------
   let images = [];
@@ -494,12 +496,19 @@
       return false;
     }
     const imageId = img.id;
+    const startGeneration = editGeneration;
     const shapes = Canvas.getShapes().map(({ color, ...shape }) => ({
       ...shape,
       source: shape.source || 'manual',
     }));
     await API.saveAnnotations(imageId, shapes);
     if (images[currentIndex]?.id !== imageId) return true;
+    if (editGeneration !== startGeneration) {
+      unsaved = true;
+      saveIndicator.classList.add('show');
+      showToast('New edits were made while saving. Save again before leaving.', 'warn');
+      return false;
+    }
     unsaved = false;
     saveIndicator.classList.remove('show');
     img.annotated = shapes.length > 0 || Boolean(img.isNull);
@@ -546,6 +555,45 @@
     } else if (unsaved && !confirm('Unsaved changes - leave anyway?')) return;
     await loadImage(idx);
   }
+
+  let projectNavigationPending = false;
+  async function navigateToProject() {
+    if (!projectLink || projectNavigationPending) return;
+    if (currentIndex >= 0 && pendingNullMutations.has(images[currentIndex].id)) {
+      showToast('Finish the null-image update before navigating.', 'warn');
+      return;
+    }
+    if (!unsaved && projectLink.href) {
+      window.location.assign(projectLink.href);
+      return;
+    }
+    if (unsaved && !autoSaveEnabled && !confirm('Unsaved changes - leave anyway?')) return;
+    projectNavigationPending = true;
+    projectLink.setAttribute('aria-busy', 'true');
+    projectLink.classList.add('is-pending');
+    const projectLinkLabel = projectLink.querySelector('.annotator-project-link-label');
+    if (projectLinkLabel) projectLinkLabel.textContent = 'Saving…';
+    try {
+      if (unsaved && autoSaveEnabled) {
+        const saved = await saveAnnotations();
+        if (saved === false) return;
+      }
+      window.location.assign(projectLink.href);
+    } catch (e) {
+      showToast(e.message || 'Auto-save failed.', 'warn');
+    } finally {
+      projectNavigationPending = false;
+      projectLink.removeAttribute('aria-busy');
+      projectLink.classList.remove('is-pending');
+      if (projectLinkLabel) projectLinkLabel.textContent = 'Back to project';
+    }
+  }
+
+  projectLink?.addEventListener('click', e => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    void navigateToProject();
+  });
 
   document.getElementById('btn-save-next')?.addEventListener('click', async () => {
     if (currentIndex < 0) return;
