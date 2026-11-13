@@ -6,6 +6,43 @@
   --toolbar-h: 48px;
 }
 
+/* Project navigation stays available even when the shared breadcrumb collapses. */
+.annotator-project-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.annotator-project-link:hover {
+  background: var(--bg3);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.annotator-project-link.is-pending { opacity: .7; pointer-events: none; }
+.annotator-project-link .lf-icon { width: 16px; height: 16px; }
+
+@media (max-width: 600px) {
+  .annotator-project-link { padding-inline: 7px; font-size: 11px; }
+}
+
+@media (max-width: 380px) {
+  #top-nav .nav-user { display: none; }
+  #top-nav .btn-logout { width: 44px; padding-inline: 0; justify-content: center; font-size: 0; }
+  #top-nav .btn-logout .lf-icon { width: 18px; height: 18px; }
+}
+
 html, body { height: 100%; overflow: hidden; }
 
 /* ── Layout ── */
