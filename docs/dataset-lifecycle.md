@@ -15,6 +15,8 @@ Project and dataset pages link to it directly.
 
 The project page also has a **Versions** tab (`/project?projectId=<id>#versions`). Its builder includes annotated images, explicitly marked backgrounds, and images marked completed/submitted/approved. Untouched uploads are excluded by default; select **Include unfinished uploads as null images** to save them in the snapshot. Version names are optional: blank or whitespace-only names become **Version 1**, **Version 2**, and so on. Originals, annotations and existing versions are never rewritten.
 
+Choose **All images** (the default) or **Selected batches** in the source section. Select one or more upload batches or sub-batches, and optionally **Images without a batch**. A parent batch includes its sub-batches; overlapping choices include each image only once. Ready/total counts help identify batches with unfinished work. Eligibility, preprocessing filters, split assignment and augmentation apply after this source selection. The same choice is available on the project lifecycle page; standalone dataset sources do not have project batches. Saved versions retain the selected batch names and IDs even if live batches are later renamed.
+
 Use the two handles to set the train/valid and valid/test boundaries, or type any of the three percentages. Editing one percentage distributes the remainder proportionally between the other two; the total remains 100%. Keyboard arrow keys work on both handles. **Check image counts** computes actual source assignments after tag/class/background filtering; exact duplicate images remain together, so small datasets may not exactly match the percentages.
 
 Splits are assigned **before** preprocessing and augmentation. Tiles and isolated objects inherit their source split. Augmentation and mosaic sources use training images only. The history shows both source and final counts.
@@ -29,13 +31,13 @@ Preprocessing supports auto-orientation, percentage static crop, object isolatio
 
 Image augmentation supports horizontal/vertical flips, quarter-turns, random crop, arbitrary rotation, shear, grayscale, hue, saturation, brightness, exposure, blur, salt-and-pepper noise, camera gain, motion blur, cutout and mosaic. Bounding-box settings support the documented geometric and lighting/noise operations. Geometric box-only operations cannot safely coexist with intersecting non-box spatial labels; use image-level operations for those images. Settings are stored with the immutable version, together with sampled transformation provenance and source IDs.
 
-Each preprocessing and augmentation control has a **Preview effect** button. It samples the first readable image in the project, applies only that operation using its current values, and shows the original and processed images with annotation outlines. Previewing an unchecked effect does not enable it for version creation. Filters report whether the sample remains included; class changes show the original and resulting label names. Tiles and isolated objects show up to six outputs. Random effects use the augmentation seed. Previews are generated in temporary storage, capped at 32 megapixels, and never save a version or modify source data.
+Each preprocessing and augmentation control has a **Preview effect** button. It samples the first readable image within the chosen source, applies only that operation using its current values, and shows the original and processed images with annotation outlines. Previewing an unchecked effect does not enable it for version creation. Filters report whether the sample remains included; class changes show the original and resulting label names. Tiles and isolated objects show up to six outputs. Random effects use the augmentation seed. Previews are generated in temporary storage, capped at 32 megapixels, and never save a version or modify source data.
 
 **Export dataset** opens a format dialog offering YOLO TXT, Roboflow YOLO, COCO JSON, Pascal VOC XML, and CSV. **Include images in ZIP** controls all pixel files, including classification copies. **Include unannotated images as null images to dataset** includes unannotated images already saved in that version; explicitly marked backgrounds are retained regardless. It never adds later project uploads to an immutable version. To export unfinished uploads, include them when creating the version.
 
 Exports retain split folders, lossless LibreFlow annotation metadata, the unchanged original `manifest.json` and checksums. `export-manifest.json` identifies the selected subset and its counts separately from the original snapshot. Object-isolation output also includes `classification/<split>/<class-folder>/`, with `classification/classes.json` mapping folder names back to labels. No model training service or paid augmentation feature is required.
 
-`GET .../versions/:versionId/download?format=roboflow&images=true&includeNull=false` accepts the five formats above. Omitting `format` preserves the complete legacy archive. `POST .../versions/sample-preview` accepts `{operation, processing, seed}` and requires the same source access and `versions:read` scope as other previews; it returns PNG thumbnails and geometry, without persisted files.
+`GET .../versions/:versionId/download?format=roboflow&images=true&includeNull=false` accepts the five formats above. Omitting `format` preserves the complete legacy archive. `POST .../versions/sample-preview` accepts `{operation, processing, seed, sourceScope}` and requires the same source access and `versions:read` scope as other previews; it returns PNG thumbnails and geometry, without persisted files.
 
 For new API clients, set `processing.augmentation.multiplier` to an integer from 2 through 15. The saved configuration also records the derived additional-copy count (`multiplier - 1`). If both fields are supplied, they must agree. To disable augmentation, omit `multiplier` and use `count: 0`. The 50,000-image version limit still applies, and multiplier requests exceeding it are rejected before generating augmented copies.
 
@@ -45,6 +47,20 @@ The controls follow these reference option families; this is an independent impl
 - [Image augmentation reference](https://docs.roboflow.com/datasets/versions/dataset-versions/image-augmentation)
 
 To preview a project version, `POST /api/dataset-lifecycle/project/:projectId/versions/preview` accepts the same selection, processing and split settings as creation. It returns selected/excluded counts, classes, tags and source split counts, without creating a version. Send `selection: "annotated"` and `preserveExistingSplits: false` to match the new tab. Existing API clients may retain `selection: "all"` and imported split assignments.
+
+`GET /api/dataset-lifecycle/:sourceType/:sourceId/versions/source-options` returns available project batches and sub-batches, ready/total counts, and unbatched counts. It requires source access and `versions:read`. Project preview, sample-preview and creation requests accept the same optional `sourceScope`:
+
+```json
+{
+  "mode": "batches",
+  "batchIds": ["batch-id"],
+  "subBatchIds": ["sub-batch-id"],
+  "includeUnbatched": false
+}
+```
+
+Omit `sourceScope` or use `{"mode":"all"}` to retain the full source. Batch mode requires at least one batch, sub-batch or unbatched selection. Unknown, foreign or malformed selections fail with HTTP 400; they never fall back to all images. Filtering uses current batch membership when the request starts and excludes images outside the project. The immutable manifest and history summary record the resolved names and IDs in `selection.sourceScope`. Existing versions remain unchanged.
+
 
 ## Immutable versions
 
