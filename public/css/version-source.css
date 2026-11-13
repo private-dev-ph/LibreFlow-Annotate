@@ -6,7 +6,7 @@
 .version-source-choice { flex-wrap: wrap; align-content: center; }
 .version-source-choice span, .version-source-row span { min-width: 0; overflow-wrap: anywhere; }
 .version-source-choice small, .version-source-row small { margin-left: auto; color: var(--text-dim); font-size: 12px; text-align: right; white-space: nowrap; }
-.version-source-choice input, .version-source-row input { width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--accent); }
+.version-source-choice input, .version-source-row input { width: 20px; height: 20px; min-height: 20px; margin: 0; padding: 0; flex: 0 0 auto; accent-color: var(--accent); }
 .version-source-options { margin-top: 10px; }
 .version-source-list { display: grid; gap: 7px; }
 .version-source-group { display: grid; gap: 5px; }
@@ -23,3 +23,5 @@
   .version-source-choice small, .version-source-row small { white-space: normal; }
   .version-source-subrow { margin-left: 10px; }
 }
+
+.version-source-controls .version-source-choice, .version-source-controls .version-source-row { display: flex; margin-bottom: 0; color: var(--text); font-size: 14px; font-weight: 400; }
