@@ -14,6 +14,7 @@ const {
 const { appendAuditEvent } = require('../lib/audit-log');
 const { shouldBlockPyTorchModel } = require('../lib/security-model-policy');
 const InferenceTilingSettings = require('../public/js/inference-tiling-settings');
+const { normalizeClassIds, validateClassSelectionResponse } = require('../lib/inference-classes');
 
 const router = express.Router();
 const DATA_FILE    = dataPath('models.json');
@@ -424,6 +425,38 @@ router.delete('/:id', (req, res) => {
 const UPLOADS_DIR  = uploadsDir();
 const INFER_SERVER = process.env.INFER_SERVER_URL || 'http://127.0.0.1:7878';
 
+// Model class names come from the same runtime and YAML mapping as inference.
+router.get('/:id/classes', async (req, res) => {
+  const model = readModels().find(item => item.id === req.params.id);
+  const projectId = req.query.projectId || model?.projectId;
+  if (!model || !isProjectMember(getProject(projectId), req.session.userId) ||
+      !canAccessModel(model, req.session.userId, projectId)) {
+    return res.status(404).json({ error: 'Model not found or not accessible in this project.' });
+  }
+  if (shouldBlockPyTorchModel(model)) return res.status(415).json({ error: 'PyTorch .pt/.pth inference is disabled in production.' });
+  if (model.type && model.type !== 'detection') return res.status(400).json({ error: 'Class selection is available for detection models.' });
+  try {
+    const modelPath = await resolveModelFile(model.filename, ALLOWED_MODEL_EXT);
+    const yamlPath = model.yamlFilename ? await resolveModelFile(model.yamlFilename, ALLOWED_YAML_EXT) : null;
+    const response = await fetch(`${INFER_SERVER}/model-info`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model_path: modelPath, yaml_path: yamlPath }),
+      signal: AbortSignal.timeout(180_000),
+    });
+    const data = await response.json();
+    if (!response.ok) return res.status(response.status === 404 ? 502 : response.status).json({ error: typeof data.detail === 'string' ? data.detail : data.error || 'Could not load model classes. Check the inference service.' });
+    if (data.task !== 'detect' || !Array.isArray(data.classes) || !data.classes.length ||
+        data.classes.some(item => !Number.isSafeInteger(item?.id) || item.id < 0 || typeof item.name !== 'string') ||
+        new Set(data.classes.map(item => item.id)).size !== data.classes.length) {
+      return res.status(502).json({ error: 'The inference service did not return detection classes for this model.' });
+    }
+    return res.json({ task: data.task, classes: data.classes.map(({ id, name }) => ({ id, name })) });
+  } catch (error) {
+    if (error.code === 'MODEL_FILE_UNAVAILABLE') return res.status(404).json({ error: 'The model file is unavailable.' });
+    return res.status(502).json({ error: 'Could not load model classes. Make sure the inference service is running and try again.' });
+  }
+});
+
 function bboxOverlap(a, b) {
   const ax1 = a.x, ay1 = a.y, ax2 = a.x + a.width, ay2 = a.y + a.height;
   const bx1 = b.x, by1 = b.y, bx2 = b.x + b.width, by2 = b.y + b.height;
@@ -449,7 +482,8 @@ function bboxOverlap(a, b) {
   };
 }
 
-function isDuplicateResult(a, b) {
+function isDuplicateResult(a, b, classAware = false) {
+  if (classAware && (a?.class_id !== undefined && b?.class_id !== undefined ? a.class_id !== b.class_id : a?.label !== b?.label)) return false;
   if (a?.type !== 'bbox' || b?.type !== 'bbox' || !a.data || !b.data) return false;
   const overlap = bboxOverlap(a.data, b.data);
   if (overlap.iou >= 0.45) return true;
@@ -457,12 +491,12 @@ function isDuplicateResult(a, b) {
   return overlap.containment >= 0.60 && overlap.centerRatio <= 0.35;
 }
 
-function suppressOverlappingResults(results) {
+function suppressOverlappingResults(results, classAware = false) {
   const kept = [];
   let removed = 0;
 
   (results || []).forEach(result => {
-    if (kept.some(existing => isDuplicateResult(result, existing))) {
+    if (kept.some(existing => isDuplicateResult(result, existing, classAware))) {
       removed += 1;
       return;
     }
@@ -502,7 +536,12 @@ router.post('/:id/infer', async (req, res) => {
   }
 
   let tiling;
+  let classIds;
   try {
+    classIds = normalizeClassIds(req.body.classIds);
+    if (classIds !== null && model.type && model.type !== 'detection') {
+      return res.status(400).json({ error: 'Class selection is available for detection models.' });
+    }
     tiling = InferenceTilingSettings.normalize(req.body.tiling);
     if (tiling.enabled && model.type !== undefined && model.type !== 'detection') {
       return res.status(400).json({ error: 'Tiled inference is only supported for detection models.' });
@@ -552,6 +591,7 @@ router.post('/:id/infer', async (req, res) => {
     cls_fine_model_path: modelPathById(clsFineModelId)    || null,
     cls_combined_path:   modelPathById(clsCombinedModelId) || null,
     ...(tiling.enabled ? { tiling } : {}),
+    class_ids: classIds,
   };
 
   let timeout = null;
@@ -573,6 +613,10 @@ router.post('/:id/infer', async (req, res) => {
       signal:  disconnectController.signal,
     });
     const data = await inferRes.json();
+    if (inferRes.ok) {
+      try { validateClassSelectionResponse(data, classIds); }
+      catch (error) { return res.status(502).json({ error: error.message }); }
+    }
     if (tiling.enabled && inferRes.ok) {
       if (data.tiling?.enabled !== true) {
         return res.status(502).json({ error: 'Update inference server to support tiled inference.' });
@@ -582,7 +626,7 @@ router.post('/:id/infer', async (req, res) => {
       }
     }
     if (Array.isArray(data.results)) {
-      const filtered = tiling.enabled ? { results: data.results, removed: 0 } : suppressOverlappingResults(data.results);
+      const filtered = tiling.enabled ? { results: data.results, removed: 0 } : suppressOverlappingResults(data.results, classIds !== null);
       const taggedResults = filtered.results.map(result => {
         const rawConfidence = result.confidence ?? result.conf;
         const confidence = Number.isFinite(Number(rawConfidence)) ? Number(rawConfidence) : null;
@@ -603,7 +647,7 @@ router.post('/:id/infer', async (req, res) => {
         actorId: req.session.userId,
         actorUsername: req.session.username || '',
         type: 'model.inference_completed',
-        details: { modelId: model.id, resultCount: Array.isArray(data.results) ? data.results.length : 0 },
+        details: { modelId: model.id, resultCount: Array.isArray(data.results) ? data.results.length : 0, ...(classIds !== null ? { classIds } : {}) },
       });
     return res.status(inferRes.status).json(data);
   } catch (err) {
