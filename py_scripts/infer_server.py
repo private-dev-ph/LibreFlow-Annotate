@@ -17,8 +17,9 @@ from __future__ import annotations
 import os
 import sys
 import logging
+import threading
 from pathlib import Path
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Mapping, Sequence
 
 import cv2
 import numpy as np
@@ -59,6 +60,8 @@ app.add_middleware(
 # ── Model cache (avoid reloading on every request) ─────────────────────────────
 _model_cache: Dict[str, YOLO] = {}
 _sam_cache: Dict[str, SAM] = {}
+_model_cache_lock = threading.RLock()
+_model_predict_locks: Dict[str, threading.RLock] = {}
 
 
 class UploadedSAM(SAM):
@@ -97,13 +100,76 @@ class UploadedSAM(SAM):
 
 def load_model(model_path: str) -> YOLO:
     """Load and cache a YOLO model by its absolute path."""
-    if model_path not in _model_cache:
-        if not Path(model_path).exists():
-            raise FileNotFoundError(f"Model file not found: {model_path}")
-        log.info(f"Loading model: {model_path}")
-        _model_cache[model_path] = YOLO(model_path)
-        log.info(f"Model loaded. Classes: {_model_cache[model_path].names}")
-    return _model_cache[model_path]
+    with _model_cache_lock:
+        if model_path not in _model_cache:
+            if not Path(model_path).exists():
+                raise FileNotFoundError(f"Model file not found: {model_path}")
+            log.info(f"Loading model: {model_path}")
+            _model_cache[model_path] = YOLO(model_path)
+            log.info(f"Model loaded. Classes: {_model_cache[model_path].names}")
+        _model_predict_locks.setdefault(model_path, threading.RLock())
+        return _model_cache[model_path]
+
+
+def predict_detection(model_path: str, model: Any, image: Any, **kwargs: Any) -> Any:
+    """Serialize cached detection predictions, including predictor setup."""
+    with _model_cache_lock:
+        predict_lock = _model_predict_locks.setdefault(model_path, threading.RLock())
+    # Ultralytics mutates predictor.args before its internal predictor lock;
+    # this outer lock prevents selected classes leaking between requests.
+    with predict_lock:
+        return model.predict(image, **kwargs)
+
+
+def _model_class_names(model: Any) -> Dict[int, str]:
+    """Return the model's authoritative class-ID/name mapping."""
+    names = getattr(model, "names", {}) or {}
+    if isinstance(names, Mapping):
+        return {int(class_id): str(name) for class_id, name in names.items()}
+    if isinstance(names, (list, tuple)):
+        return {class_id: str(name) for class_id, name in enumerate(names)}
+    return {}
+
+
+def _yaml_class_names(yaml_path: Optional[str], known_ids: Sequence[int]) -> Dict[int, str]:
+    """Read YAML names, retaining only IDs present in the model catalog."""
+    if not yaml_path or not Path(yaml_path).exists():
+        return {}
+    try:
+        with open(yaml_path) as stream:
+            ydata = yaml.safe_load(stream) or {}
+        names = ydata.get("names", {}) if isinstance(ydata, Mapping) else {}
+        if isinstance(names, list):
+            candidates = {i: str(name) for i, name in enumerate(names)}
+        elif isinstance(names, Mapping):
+            candidates = {int(class_id): str(name) for class_id, name in names.items()}
+        else:
+            candidates = {}
+        known = set(known_ids)
+        return {class_id: name for class_id, name in candidates.items() if class_id in known}
+    except Exception as exc:
+        log.warning(f"Failed to load yaml: {exc}")
+        return {}
+
+
+def normalize_class_ids(class_ids: Optional[List[Any]], model_names: Mapping[int, str]) -> Optional[List[int]]:
+    """Validate and normalize a requested class selection against a model."""
+    if class_ids is None:
+        return None
+    if not isinstance(class_ids, list) or not class_ids:
+        raise ValueError("class_ids must be a non-empty list when provided")
+    normalized: List[int] = []
+    for class_id in class_ids:
+        if isinstance(class_id, bool) or not isinstance(class_id, int):
+            raise ValueError("class_ids must contain only integer IDs")
+        if class_id < 0:
+            raise ValueError("class_ids must contain non-negative integer IDs")
+        if class_id not in model_names:
+            raise ValueError(f"Unknown class ID: {class_id}")
+        if class_id in normalized:
+            raise ValueError("class_ids must not contain duplicates")
+        normalized.append(class_id)
+    return normalized
 
 
 def load_sam_model(model_path: str, checkpoint_name: Optional[str] = None) -> SAM:
@@ -166,12 +232,18 @@ def is_duplicate_box(a: List[float], b: List[float]) -> bool:
 
 def suppress_overlapping_detections(
     detections: List[Dict[str, Any]],
+    *,
+    class_aware: bool = False,
 ) -> tuple[List[Dict[str, Any]], int]:
     """Remove duplicate detections by keeping the highest-confidence box."""
     kept: List[Dict[str, Any]] = []
     removed = 0
     for det in sorted(detections, key=lambda d: d["conf"], reverse=True):
-        if any(is_duplicate_box(det["box"], existing["box"]) for existing in kept):
+        if any(
+            (not class_aware or det["cls_id"] == existing["cls_id"])
+            and is_duplicate_box(det["box"], existing["box"])
+            for existing in kept
+        ):
             removed += 1
             continue
         kept.append(det)
@@ -210,6 +282,8 @@ class InferRequest(BaseModel):
     good_bias: float = Field(0.5, ge=0.0, le=1.0)
     # Optional YAML for class name overrides
     yaml_path: Optional[str] = Field(None, description="Path to data.yaml for class name overrides")
+    # Optional detection class filter.  None means all classes.
+    class_ids: Optional[List[Any]] = Field(None, description="Optional non-empty list of model class IDs")
     # Kept permissive at the transport boundary so disabled/stale options keep
     # the historical non-tiled path; enabled options are strictly validated by
     # validate_tiling_options in the API worker.
@@ -234,6 +308,12 @@ class InferResponse(BaseModel):
     count:    int
     message:  str
     tiling: Optional[Dict[str, Any]] = None
+    class_ids: Optional[List[int]] = None
+
+
+class ModelInfoRequest(BaseModel):
+    model_path: str = Field(..., description="Absolute path to the YOLO model")
+    yaml_path: Optional[str] = Field(None, description="Optional data.yaml class name overrides")
 
 
 class SegmentRequest(BaseModel):
@@ -380,6 +460,26 @@ def classify_combined(
 
 # ── Main inference endpoint ────────────────────────────────────────────────────
 
+@app.post("/model-info")
+def model_info(req: ModelInfoRequest):
+    """Return the cached model's authoritative class catalog."""
+    try:
+        model = load_model(req.model_path)
+    except HTTPException:
+        raise
+    except FileNotFoundError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(422, f"Unable to load model metadata: {exc}") from exc
+    model_names = _model_class_names(model)
+    names = dict(model_names)
+    names.update(_yaml_class_names(req.yaml_path, model_names.keys()))
+    return {
+        "classes": [{"id": class_id, "name": names[class_id]} for class_id in sorted(names)],
+        "task": str(getattr(model, "task", "detect") or "detect"),
+    }
+
+
 @app.post("/infer", response_model=InferResponse)
 def infer(req: InferRequest):
     # Validate in the request worker as well as at any client/schema boundary.
@@ -397,8 +497,30 @@ def infer(req: InferRequest):
             det_model = load_model(req.model_path)
         except FileNotFoundError as e:
             raise HTTPException(400, str(e))
+    elif req.class_ids is not None or req.yaml_path:
+        # Tiled all-mode can rely on each worker's model metadata.  A selected
+        # request (or YAML override) needs one catalog load for validation and
+        # authoritative names; avoid that extra load for the common all-mode.
+        try:
+            det_model = load_model(req.model_path)
+        except FileNotFoundError as exc:
+            raise HTTPException(400, str(exc))
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(422, f"Unable to load model metadata: {exc}") from exc
     elif not Path(req.model_path).exists():
         raise HTTPException(400, f"Model file not found: {req.model_path}")
+
+    model_names = _model_class_names(det_model) if det_model is not None else {}
+    if req.class_ids is not None:
+        task = str(getattr(det_model, "task", "detect") or "detect").lower()
+        if task != "detect":
+            raise HTTPException(422, "class_ids are supported only for detection models")
+    try:
+        normalized_class_ids = normalize_class_ids(req.class_ids, model_names) if req.class_ids is not None else None
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
     # ── Load image ──
     img_bgr = cv2.imread(req.image_path)
@@ -407,31 +529,24 @@ def infer(req: InferRequest):
     img_h, img_w = img_bgr.shape[:2]
 
     # ── Optional data.yaml class name override ──
-    yaml_class_names: Dict[int, str] = {}
-    if req.yaml_path and Path(req.yaml_path).exists():
-        try:
-            with open(req.yaml_path) as f:
-                ydata = yaml.safe_load(f)
-            names = ydata.get("names", {})
-            if isinstance(names, list):
-                yaml_class_names = {i: n for i, n in enumerate(names)}
-            elif isinstance(names, dict):
-                yaml_class_names = {int(k): str(v) for k, v in names.items()}
-            log.info(f"YAML class names: {yaml_class_names}")
-        except Exception as e:
-            log.warning(f"Failed to load yaml: {e}")
+    yaml_class_names = _yaml_class_names(req.yaml_path, model_names.keys())
+    if yaml_class_names:
+        log.info(f"YAML class names: {yaml_class_names}")
 
     # ── Stage 1: Detection ──
     tiling_stats: Optional[Dict[str, Any]] = None
     if tiling_settings is not None:
         try:
             raw_detections, tiling_stats = run_tiled_inference(
-                img_bgr, req.model_path, req.conf_threshold, req.tiling
+                img_bgr, req.model_path, req.conf_threshold, req.tiling,
+                class_ids=normalized_class_ids,
             )
         except TilingValidationError as exc:
             raise HTTPException(422, str(exc))
         except FileNotFoundError as exc:
             raise HTTPException(400, str(exc))
+        except HTTPException:
+            raise
         except Exception as exc:
             log.exception("Tiled inference failed")
             raise HTTPException(422, f"Tiled inference failed: {exc}") from exc
@@ -441,28 +556,44 @@ def infer(req: InferRequest):
             raise HTTPException(422, "Tiled inference did not return required tiling statistics")
         for det in raw_detections:
             cls_id = det["cls_id"]
-            det["cls_name"] = yaml_class_names.get(cls_id) or det.get("cls_name", f"class_{cls_id}")
+            if cls_id in yaml_class_names:
+                det["cls_name"] = yaml_class_names[cls_id]
+            elif cls_id in model_names:
+                det["cls_name"] = model_names[cls_id]
+            else:
+                det["cls_name"] = det.get("cls_name", f"class_{cls_id}")
     else:
-        det_results = det_model.predict(img_bgr, conf=req.conf_threshold, verbose=False)
+        det_results = predict_detection(
+            req.model_path, det_model, img_bgr,
+            conf=req.conf_threshold, classes=normalized_class_ids, verbose=False
+        )
         raw_detections = []
         for r in det_results:
             for box in r.boxes:
                 x1, y1, x2, y2 = map(float, box.xyxy[0].tolist())
                 conf  = float(box.conf[0])
                 cls_id = int(box.cls[0])
-                name = (
-                    yaml_class_names.get(cls_id)
-                    or det_model.names.get(cls_id, f"class_{cls_id}")
-                )
+                name = yaml_class_names.get(cls_id, model_names.get(cls_id, f"class_{cls_id}"))
                 raw_detections.append({"box": [x1, y1, x2, y2], "conf": conf, "cls_id": cls_id, "cls_name": name})
 
+    # Keep a defensive filter for predictors that ignore Ultralytics' classes
+    # argument.  Do this before any suppression or detection limits.
+    if normalized_class_ids is not None:
+        allowed_ids = set(normalized_class_ids)
+        raw_detections = [det for det in raw_detections if det["cls_id"] in allowed_ids]
+
     if not raw_detections:
-        return InferResponse(results=[], count=0, message="No detections above threshold.", tiling=tiling_stats)
+        return InferResponse(
+            results=[], count=0, message="No detections above threshold.", tiling=tiling_stats,
+            class_ids=normalized_class_ids,
+        )
 
     raw_detection_count = len(raw_detections)
     overlap_removed = 0
     if tiling_stats is None:
-        raw_detections, overlap_removed = suppress_overlapping_detections(raw_detections)
+        raw_detections, overlap_removed = suppress_overlapping_detections(
+            raw_detections, class_aware=normalized_class_ids is not None
+        )
     if overlap_removed:
         log.info(f"Suppressed {overlap_removed} overlapping duplicate detection(s).")
 
@@ -541,7 +672,10 @@ def infer(req: InferRequest):
     )
     if overlap_removed:
         msg += f" Suppressed {overlap_removed} overlapping duplicate(s)."
-    return InferResponse(results=results, count=len(results), message=msg, tiling=tiling_stats)
+    return InferResponse(
+        results=results, count=len(results), message=msg, tiling=tiling_stats,
+        class_ids=normalized_class_ids,
+    )
 
 
 @app.post("/segment", response_model=SegmentResponse)
@@ -620,7 +754,9 @@ def list_cached():
 
 @app.delete("/models/cache")
 def clear_cache():
-    _model_cache.clear()
+    with _model_cache_lock:
+        _model_cache.clear()
+        _model_predict_locks.clear()
     _sam_cache.clear()
     return {"message": "Model cache cleared."}
 

@@ -307,7 +307,8 @@ def _box_row(value: Any) -> Any:
 
 def _extract_results(predictions: Iterable[Any], width: int, height: int,
                      threshold: float, names: Any,
-                     tile_index: int) -> List[Dict[str, Any]]:
+                     tile_index: int,
+                     class_ids: Optional[Sequence[int]] = None) -> List[Dict[str, Any]]:
     output: List[Dict[str, Any]] = []
     for prediction in predictions or []:
         boxes = getattr(prediction, "boxes", None)
@@ -327,6 +328,11 @@ def _extract_results(predictions: Iterable[Any], width: int, height: int,
             if not math.isfinite(cls_float):
                 continue
             cls_id = int(cls_float)
+            # Keep this defensive filter before per-tile NMS.  Ultralytics'
+            # ``classes`` argument is forwarded below, but test doubles and
+            # alternate predictors may ignore it.
+            if class_ids is not None and cls_id not in class_ids:
+                continue
             x1, y1, x2, y2 = coords
             x1, x2 = min(width, max(0.0, x1)), min(width, max(0.0, x2))
             y1, y2 = min(height, max(0.0, y1)), min(height, max(0.0, y2))
@@ -351,6 +357,7 @@ def _predict_worker(
     settings: TilingSettings, model_path: str, conf_threshold: float,
     model_factory: Callable[[str], Any], stop: threading.Event,
     raw_budget: _RawCandidateBudget,
+    class_ids: Optional[Sequence[int]],
 ) -> List[Dict[str, Any]]:
     """Construct and run one private model, returning tile-NMS results."""
     with _MODEL_SEMAPHORE:
@@ -377,11 +384,16 @@ def _predict_worker(
                 max_det=settings.max_detections,
                 iou=settings.tile_nms_iou,
                 agnostic_nms=False,
+                # Explicitly pass None for unfiltered calls.  Ultralytics can
+                # retain predictor arguments between calls, so omitting this
+                # would let a previous class-filtered request leak into all-mode.
+                classes=list(class_ids) if class_ids is not None else None,
                 verbose=False,
                 save=False,
             )
             tile_detections = _extract_results(
-                predictions, crop.shape[1], crop.shape[0], conf_threshold, names, tile_index
+                predictions, crop.shape[1], crop.shape[0], conf_threshold, names, tile_index,
+                class_ids,
             )
             raw_budget.reserve(len(tile_detections), stop)
             results.extend(class_aware_nms(tile_detections, settings.tile_nms_iou)[:settings.max_detections])
@@ -395,6 +407,7 @@ def run_tiled_inference(
     options: Any,
     *,
     model_factory: Optional[Callable[[str], Any]] = None,
+    class_ids: Optional[Sequence[int]] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Run native-resolution tiled inference and return merged detections/stats."""
     settings = validate_tiling_options(options)
@@ -416,7 +429,8 @@ def run_tiled_inference(
     raw_budget = _RawCandidateBudget(MAX_RAW_CANDIDATES)
     executor = ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="tiled-yolo")
     futures = [executor.submit(
-        _predict_worker, part, image, positions, settings, model_path, conf_threshold, factory, stop, raw_budget
+        _predict_worker, part, image, positions, settings, model_path, conf_threshold, factory, stop, raw_budget,
+        class_ids,
     ) for part in partitions]
     try:
         for future in as_completed(futures):
