@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const AdmZip = require('adm-zip');
-const { createVersionExportStream, inspectVersionExport } = require('../lib/version-export');
+const { buildVersionExport, createExportPlan, createVersionExportStream, inspectVersionExport } = require('../lib/version-export');
 
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 function fixture() {
@@ -59,6 +59,53 @@ test('streaming detects corrupted image bytes and cancellation closes the stream
   const cancelled = createVersionExportStream({ manifest: second.manifest, versionDir: second.root, format: 'all' });
   cancelled.cancel();
   await assert.rejects(collect(cancelled.stream));
+});
+
+test('shared source assets produce one raw ZIP entry while retaining each training path', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'libreflow-version-shared-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const bytes = Buffer.from('shared-image-bytes');
+  fs.mkdirSync(path.join(root, 'images'));
+  fs.writeFileSync(path.join(root, 'images', 'shared.png'), bytes);
+  const contentHash = hash(bytes);
+  const manifest = {
+    schema: 'libreflow.dataset-version/v1', id: 'shared-version', classes: [{ name: 'cat' }],
+    images: [
+      { id: 'one', originalName: 'one.png', path: 'images/shared.png', contentHash, size: bytes.length, width: 10, height: 10, split: 'train' },
+      { id: 'two', originalName: 'two.png', path: 'images/shared.png', contentHash, size: bytes.length, width: 10, height: 10, split: 'train' },
+    ],
+    annotations: [
+      { id: 'a', imageId: 'one', label: 'cat', type: 'bbox', data: { x: 1, y: 1, width: 2, height: 2 } },
+      { id: 'b', imageId: 'two', label: 'cat', type: 'bbox', data: { x: 2, y: 2, width: 2, height: 2 } },
+    ],
+  };
+  fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify(manifest, null, 2));
+
+  const plan = createExportPlan({ manifest, versionDir: root, format: 'all' });
+  const plannedNames = plan.entries.map(entry => entry.name);
+  assert.equal(new Set(plannedNames).size, plannedNames.length);
+
+  const streamed = await createVersionExportStream({ manifest, versionDir: root, format: 'all' });
+  const streamZip = new AdmZip(await collect(streamed.stream));
+  const names = streamZip.getEntries().map(entry => entry.entryName);
+  assert.equal(new Set(names).size, names.length);
+  assert.equal(names.filter(name => name === 'images/shared.png').length, 1);
+  assert.equal(names.filter(name => name.startsWith('training/train/images/')).length, 2);
+  const exported = JSON.parse(streamZip.readAsText('export-manifest.json'));
+  assert.deepEqual(exported.images.map(image => image.archivePaths), [
+    ['images/shared.png', 'training/train/images/000001_one.png'],
+    ['images/shared.png', 'training/train/images/000002_two.png'],
+  ]);
+  const checksumNames = streamZip.readAsText('checksums.sha256').trim().split('\n').map(line => line.slice(66));
+  assert.equal(new Set(checksumNames).size, checksumNames.length);
+
+  const mismatched = { ...manifest, images: manifest.images.map((image, index) => index ? { ...image, contentHash: '0'.repeat(64) } : image) };
+  assert.throws(() => createExportPlan({ manifest: mismatched, versionDir: root, format: 'all' }), error => error.code === 'DUPLICATE_ARCHIVE_PATH');
+
+  const bufferedZip = new AdmZip(buildVersionExport({ manifest, versionDir: root, format: 'all' }));
+  const bufferedNames = bufferedZip.getEntries().map(entry => entry.entryName);
+  assert.equal(new Set(bufferedNames).size, bufferedNames.length);
+  assert.equal(bufferedNames.filter(name => name.startsWith('training/train/images/')).length, 2);
 });
 
 test('active image reads can be cancelled without readFileSync buffering', async t => {
