@@ -8,6 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/nav.css" />
   <link rel="stylesheet" href="/css/dataset-lifecycle.css" />
+  <link rel="stylesheet" href="/css/version-source.css" />
   <link rel="stylesheet" href="/css/theme.css" />
   <link rel="stylesheet" href="/css/icons.css" />
 </head>
@@ -63,6 +64,7 @@
           </div>
           <label>Split seed<input id="split-seed" type="text" value="libreflow" maxlength="100" /></label>
           <label class="check"><input id="preserve-splits" type="checkbox" checked /> Preserve imported train/valid/test assignments</label>
+          <div id="version-source-controls"></div>
           <details class="processing-details">
             <summary>Preprocessing and augmentation</summary>
             <p class="help">Transforms are materialized into the snapshot with annotation geometry and lineage updated deterministically.</p>
@@ -195,6 +197,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/icons.js"></script>
   <script src="/js/version-delete-ui.js"></script>
+  <script src="/js/version-source-ui.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/dataset-lifecycle.js"></script>
 </body>

@@ -10,7 +10,7 @@
   const sourceId = params.get('sourceId') || params.get('projectId') || params.get('datasetId');
   if (!sourceId || !['project', 'dataset'].includes(sourceType)) { window.location.href = '/dashboard'; return; }
   const baseUrl = `/api/dataset-lifecycle/${sourceType}/${encodeURIComponent(sourceId)}`;
-  let versions = [];
+  let versions = [], sourceUI = null, sourceReady = sourceType !== 'project';
   let lastImportSignature = null;
 
   function esc(value) {
@@ -44,6 +44,13 @@
   }
   function number(id) { return Number(document.getElementById(id).value); }
   function checked(id) { return document.getElementById(id).checked; }
+  function sourceHistoryLabel(version) {
+    const scope = version.selection?.sourceScope || version.sourceScope;
+    if (!scope || scope.mode !== 'batches') return '';
+    const names = [...(scope.batches || []).map(item => item.name), ...(scope.subBatches || []).map(item => item.name)];
+    if (scope.includeUnbatched) names.push('Images without a batch');
+    return names.length ? `<p class="help">Source: ${names.map(esc).join(', ')}</p>` : '';
+  }
 
   function syncAugmentationControls() {
     const enabled = checked('aug-enabled');
@@ -82,6 +89,19 @@
   }
   document.querySelectorAll('.lifecycle-tab').forEach(tab => tab.addEventListener('click', () => activateTab(tab.dataset.tab)));
   activateTab((window.location.hash || '#versions').slice(1));
+  function updateSourceCreate(valid = sourceReady) {
+    const button = document.getElementById('btn-create-version');
+    if (button) button.disabled = !sourceReady || !valid;
+  }
+  if (sourceType === 'project' && window.VersionSourceUI) {
+    updateSourceCreate(false);
+    sourceUI = VersionSourceUI.mount(document.getElementById('version-source-controls'), {
+      endpoint: `${baseUrl}/versions/source-options`,
+      onReady: () => { sourceReady = true; updateSourceCreate(true); },
+      onChange: detail => { sourceReady = true; updateSourceCreate(detail.valid); },
+      onError: () => { sourceReady = false; updateSourceCreate(false); },
+    });
+  }
 
   function processingPayload() {
     return {
@@ -127,7 +147,7 @@
       const processed = stats.generatedImages > 0 || stats.augmentationVariants > 0;
       return `<article class="version-item">
         <div class="version-top"><div><div class="version-name"><span class="version-number">v${version.sequence}</span>${esc(version.name)}</div><div class="version-date">${new Date(version.createdAt).toLocaleString()}</div></div><span class="status-pill valid">Immutable</span></div>
-        ${version.description ? `<div class="version-description">${esc(version.description)}</div>` : ''}
+        ${version.description ? `<div class="version-description">${esc(version.description)}</div>` : ''}${sourceHistoryLabel(version)}
         <div class="version-stats"><span>${stats.images || 0} images</span><span>${stats.annotations || 0} annotations</span><span>${bytes(stats.bytes)}</span><span>train ${splits.train || 0}</span><span>valid ${splits.valid || 0}</span><span>test ${splits.test || 0}</span>${processed ? `<span>${stats.generatedImages || 0} generated</span>` : ''}</div>
         ${version.processing?.augmentation?.multiplier ? `<p class="help">${esc(version.processing.augmentation.multiplier)}× training multiplier, including originals.${stats.duplicateVariantsKept ? ` ${stats.duplicateVariantsKept} copies repeat an earlier result.` : ''}</p>` : ''}
         <div class="hash-row"><span>Content</span><code title="${esc(version.contentHash)}">${esc(version.contentHash)}</code></div>
@@ -167,6 +187,8 @@
 
   document.getElementById('btn-create-version').addEventListener('click', async () => {
     const button = document.getElementById('btn-create-version');
+    if (sourceType === 'project' && (!sourceReady || !sourceUI?.isReady?.())) return toast('Source options are unavailable. Retry source options before creating a version.', true);
+    if (sourceType === 'project' && !sourceUI.hasSelection()) return toast('Select at least one batch, sub-batch, or images without a batch.', true);
     const total = number('split-train') + number('split-valid') + number('split-test');
     if (!(total > 0)) return toast('At least one split percentage must be greater than zero.', true);
     let reproducibility = {};
@@ -175,6 +197,7 @@
     const rotations = [...document.querySelectorAll('.aug-rotate:checked')];
     if (checked('aug-enabled') && !rotations.length) return toast('Select at least one rotation choice for augmentation.', true);
     button.disabled = true;
+    sourceUI?.setDisabled?.(true);
     button.textContent = 'Materializing version…';
     try {
       const created = await jsonRequest(`${baseUrl}/versions`, {
@@ -185,6 +208,7 @@
           splitRatios: { train: number('split-train'), valid: number('split-valid'), test: number('split-test') },
           seed: document.getElementById('split-seed').value || 'libreflow',
           preserveExistingSplits: checked('preserve-splits'),
+          sourceScope: sourceUI?.getScope?.() || { mode: 'all', batchIds: [], subBatchIds: [], includeUnbatched: false },
           reproducibility,
           processing: processingPayload(),
         }),
@@ -194,7 +218,7 @@
       document.getElementById('version-description').value = '';
       await loadVersions();
     } catch (error) { toast(error.message, true); }
-    finally { button.disabled = false; button.textContent = 'Create immutable version'; }
+    finally { sourceUI?.setDisabled?.(false); button.textContent = 'Create immutable version'; updateSourceCreate(sourceUI ? sourceUI.hasSelection() : true); }
   });
   document.getElementById('btn-refresh-versions').addEventListener('click', loadVersions);
   if (window.VersionDeleteUI) VersionDeleteUI.mount(document.getElementById('versions-list').parentElement, baseUrl, { onDeleted: async target => { await loadVersions(); toast(`Deleted v${target.sequence} · ${target.name}. Source images and annotations are unchanged.`); } });

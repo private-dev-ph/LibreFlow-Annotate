@@ -18,6 +18,7 @@ const root = path.resolve(__dirname, '../..');
       window.LibreFlowIcons = { icon: () => '' };
       window.createRequests = 0;
       window.fetch = async (url, options = {}) => {
+        if (url.endsWith('/versions/source-options')) return { ok: true, json: async () => ({ supportsBatches: true, total: 10, eligible: 10, unbatched: { imageCount: 0, eligibleCount: 0 }, batches: [] }) };
         if (url.includes('/api/projects/')) return { ok: true, json: async () => ({ labelClasses: [{ name: 'A' }] }) };
         if (url.endsWith('/preview')) return { ok: true, json: async () => ({ selection: { selected: 10, annotated: 10, background: 0, excludedUnfinished: 0, excludedByFilters: 0 }, splits: { counts: { train: 7, valid: 2, test: 1 } }, tags: ['fixture'], message: '10 images ready' }) };
         if (options.method === 'POST') {
@@ -28,8 +29,8 @@ const root = path.resolve(__dirname, '../..');
         return { ok: true, json: async () => [] };
       };
     });
-    for (const file of ['theme.css', 'project-versions.css']) await page.addStyleTag({ content: fs.readFileSync(path.join(root, 'public/css', file), 'utf8') });
-    for (const file of ['version-splits.js', 'version-processing-fields.js', 'version-preview-ui.js', 'version-export-ui.js', 'project-versions.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'public/js', file), 'utf8') });
+    for (const file of ['theme.css', 'project-versions.css', 'version-source.css']) await page.addStyleTag({ content: fs.readFileSync(path.join(root, 'public/css', file), 'utf8') });
+    for (const file of ['version-splits.js', 'version-processing-fields.js', 'version-preview-ui.js', 'version-export-ui.js', 'version-delete-ui.js', 'version-source-ui.js', 'project-versions.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'public/js', file), 'utf8') });
     await page.locator('[data-tab=versions]').click();
     await page.waitForFunction(() => document.querySelector('#version-status')?.textContent === '10 images ready');
     assert.deepEqual(await page.locator('.version-split-track input').evaluateAll(inputs => inputs.map(input => getComputedStyle(input).backgroundColor)), ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)']);
