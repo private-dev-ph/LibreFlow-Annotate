@@ -15,6 +15,7 @@ const {
 } = require('../lib/dataset-lifecycle');
 const { normalizeProcessingConfig } = require('../lib/version-processing');
 const { selectVersionInputs } = require('../lib/version-selection');
+const { buildSourceOptions, resolveSourceScope, applySourceScope, sourceScopeSnapshot } = require('../lib/version-source');
 const { createProcessingPreview } = require('../lib/version-preview');
 const { inspectVersionExport, createVersionExportStream } = require('../lib/version-export');
 const { deleteDatasetVersion } = require('../lib/version-deletion');
@@ -467,6 +468,20 @@ function canDeleteVersionSource(req, source, actor) {
   return source.userId === actor.userId && writable;
 }
 
+function resolveVersionScope(req, resolved) {
+  const explicit = req.body && Object.prototype.hasOwnProperty.call(req.body, 'sourceScope');
+  const scope = resolveSourceScope({
+    sourceType: req.params.sourceType,
+    sourceId: req.params.sourceId,
+    sourceScope: req.body?.sourceScope,
+    images: resolved.images,
+    annotations: resolved.annotations,
+    batches: readJson(BATCHES_FILE, []),
+  });
+  const scoped = applySourceScope({ images: resolved.images, annotations: resolved.annotations, scope });
+  return { ...scoped, sourceScope: sourceScopeSnapshot(scope), hasExplicitSourceScope: explicit };
+}
+
 router.get('/:sourceType/:sourceId/versions', requireScopes('versions:read'), (req, res) => {
   const { resolved, actor } = resolveRequestSource(req, { includeData: false });
   if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
@@ -475,17 +490,28 @@ router.get('/:sourceType/:sourceId/versions', requireScopes('versions:read'), (r
     .map(version => ({ ...version, canDelete })));
 });
 
+router.get('/:sourceType/:sourceId/versions/source-options', requireScopes('versions:read'), (req, res) => {
+  const { resolved } = resolveRequestSource(req);
+  if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+  try {
+    res.json(buildSourceOptions({ sourceType: req.params.sourceType, sourceId: req.params.sourceId,
+      images: resolved.images, annotations: resolved.annotations, batches: readJson(BATCHES_FILE, []) }));
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 router.post('/:sourceType/:sourceId/versions/preview', requireScopes('versions:read'), (req, res) => {
   const { resolved } = resolveRequestSource(req);
   if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
   try {
+    const scoped = resolveVersionScope(req, resolved);
     const processing = normalizeProcessingConfig(req.body.processing || {});
-    const selected = selectVersionInputs({ ...resolved, classes: resolved.source.labelClasses || resolved.source.classes || [],
+    const selected = selectVersionInputs({ ...scoped, classes: resolved.source.labelClasses || resolved.source.classes || [],
       preprocessing: processing.preprocessing, selection: req.body.selection || 'annotated', seed: req.body.seed || 'libreflow' });
     const splits = assignSplits(enrichImages(selected.images), { ratios: req.body.splitRatios,
       seed: req.body.seed || 'libreflow', preserveExisting: req.body.preserveExistingSplits === true });
     res.json({ selection: selected.selection, splits: { counts: splits.counts, ratios: splits.ratios, conflicts: splits.conflicts },
-      classes: selected.classes, tags: [...new Set(resolved.images.flatMap(image => image.tags || []))].sort(),
+      classes: selected.classes, tags: [...new Set(scoped.images.flatMap(image => image.tags || []))].sort(),
+      sourceScope: scoped.sourceScope,
       processing, message: 'Counts describe source images. Tiling, object isolation and training augmentation can change final counts.' });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
@@ -494,11 +520,14 @@ let activeSamplePreviews = 0;
 router.post('/:sourceType/:sourceId/versions/sample-preview', requireScopes('versions:read'), async (req, res) => {
   const { resolved } = resolveRequestSource(req);
   if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+  let scoped;
+  try { scoped = resolveVersionScope(req, resolved); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
   res.setHeader('Cache-Control', 'no-store');
   if (activeSamplePreviews >= 2) return res.status(429).json({ error: 'Two previews are already processing. Please try again when one finishes.' });
   activeSamplePreviews += 1;
   try {
-    const preview = await createProcessingPreview({ ...resolved,
+    const preview = await createProcessingPreview({ ...scoped,
       classes: resolved.source.labelClasses || resolved.source.classes || [],
       processing: req.body.processing || {}, operation: req.body.operation, seed: req.body.seed || 'preview' });
     res.json(preview);
@@ -509,16 +538,17 @@ router.post('/:sourceType/:sourceId/versions/sample-preview', requireScopes('ver
 router.post('/:sourceType/:sourceId/versions', requireScopes('versions:write'), async (req, res) => {
   const { actor, resolved } = resolveRequestSource(req);
   if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
-  if (!resolved.images.length) return res.status(400).json({ error: 'Cannot create a version without images.' });
   try {
+    const scoped = resolveVersionScope(req, resolved);
+    if (!scoped.images.length) return res.status(400).json({ error: 'Cannot create a version without images.' });
     const manifest = await createImmutableVersion({
       versionsRoot: VERSIONS_ROOT,
       indexFile: VERSION_INDEX_FILE,
       id: uuidv4(),
       sourceType: req.params.sourceType,
       source: resolved.source,
-      images: enrichImages(resolved.images),
-      annotations: resolved.annotations,
+      images: enrichImages(scoped.images),
+      annotations: scoped.annotations,
       createdBy: actor.userId,
       name: req.body.name,
       description: req.body.description,
@@ -530,6 +560,7 @@ router.post('/:sourceType/:sourceId/versions', requireScopes('versions:write'), 
       reproducibility: req.body.reproducibility || {},
       processing: req.body.processing || {},
       selection: req.body.selection || 'all',
+      ...(scoped.hasExplicitSourceScope ? { sourceScope: scoped.sourceScope } : {}),
       appVersion: PACKAGE.version,
     });
     res.status(201).json(publicManifest(manifest, false));
