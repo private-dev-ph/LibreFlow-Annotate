@@ -42,14 +42,15 @@ const root = path.resolve(__dirname, '../..');
           exportRequests.push(url);
           return response({ downloadUrl: '/api/dataset-lifecycle/project/fixture/versions/fixture-version/download', filename: 'fixture.zip', estimatedBytes: 11 });
         }
+        if (url.endsWith('/versions/source-options')) return response({ supportsBatches: true, total: 10, eligible: 10, unbatched: { imageCount: 0, eligibleCount: 0 }, batches: [] });
         if (url.includes('/api/projects/')) return response({ labelClasses: [{ name: 'Sample' }] });
         if (url.endsWith('/preview')) return response({ selection: { selected: 10, annotated: 9, background: 1, excludedUnfinished: 1, excludedByFilters: 0 }, splits: { counts: { train: 7, valid: 2, test: 1 } }, tags: ['camera'], message: 'Ready' });
         if (options.method === 'POST') { created.push(JSON.parse(options.body)); return response(history[0]); }
         return response(history);
       };
     });
-    for (const file of ['theme.css', 'project-versions.css']) await page.addStyleTag({ content: fs.readFileSync(path.join(root, 'public/css', file), 'utf8') });
-    for (const file of ['version-splits.js', 'version-processing-fields.js', 'version-preview-ui.js', 'version-export-ui.js', 'version-delete-ui.js', 'project-versions.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'public/js', file), 'utf8') });
+    for (const file of ['theme.css', 'project-versions.css', 'version-source.css']) await page.addStyleTag({ content: fs.readFileSync(path.join(root, 'public/css', file), 'utf8') });
+    for (const file of ['version-splits.js', 'version-processing-fields.js', 'version-preview-ui.js', 'version-export-ui.js', 'version-delete-ui.js', 'version-source-ui.js', 'project-versions.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'public/js', file), 'utf8') });
     await page.locator('[data-tab=versions]').click();
     await page.waitForFunction(() => document.querySelector('#version-status')?.textContent === 'Ready');
     assert.equal(await page.locator('[data-delete-version]').count(), 1);

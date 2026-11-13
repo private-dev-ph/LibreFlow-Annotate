@@ -17,6 +17,7 @@ const root = path.resolve(__dirname, '../..');
       window.LibreFlowIcons = { icon: () => '' };
       const response = data => ({ ok: true, json: async () => data });
       window.fetch = async (url, options = {}) => {
+        if (url.endsWith('/versions/source-options')) return response({ supportsBatches: true, total: 100, eligible: 100, unbatched: { imageCount: 0, eligibleCount: 0 }, batches: [] });
         if (url.includes('/api/projects/')) return response({ labelClasses: [{ name: 'A' }] });
         if (url.endsWith('/preview')) return response({ selection: { selected: 100, annotated: 100, background: 0, excludedUnfinished: 0, excludedByFilters: 0 }, splits: { counts: { train: 50, valid: 30, test: 20 } }, tags: [], message: '100 images ready' });
         if (url.endsWith('/versions')) return response([]);
@@ -24,8 +25,8 @@ const root = path.resolve(__dirname, '../..');
         return response([]);
       };
     });
-    for (const file of ['theme.css', 'project-versions.css']) await page.addStyleTag({ content: fs.readFileSync(path.join(root, 'public/css', file), 'utf8') });
-    for (const file of ['version-splits.js', 'version-processing-fields.js', 'version-preview-ui.js', 'version-export-ui.js', 'project-versions.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'public/js', file), 'utf8') });
+    for (const file of ['theme.css', 'project-versions.css', 'version-source.css']) await page.addStyleTag({ content: fs.readFileSync(path.join(root, 'public/css', file), 'utf8') });
+    for (const file of ['version-splits.js', 'version-processing-fields.js', 'version-preview-ui.js', 'version-export-ui.js', 'version-delete-ui.js', 'version-source-ui.js', 'project-versions.js']) await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'public/js', file), 'utf8') });
     await page.locator('[data-tab=versions]').click();
     await page.waitForFunction(() => document.querySelector('#version-status')?.textContent === '100 images ready');
 

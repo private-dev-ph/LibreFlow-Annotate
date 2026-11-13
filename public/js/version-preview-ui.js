@@ -50,7 +50,7 @@ window.VersionPreviewUI = (() => {
       node('p', labels.length ? `Labels: ${labels.join(', ')}` : 'No labels on this sample.', 'version-note'));
     return figure;
   }
-  function mount(container, { endpoint, readProcessing }) {
+  function mount(container, { endpoint, readProcessing, readContext } = {}) {
     let revision = 0;
     const pending = new Map();
     const changed = () => {
@@ -80,10 +80,11 @@ window.VersionPreviewUI = (() => {
       result.replaceChildren(status);
       try {
         const processing = readProcessing();
+        const context = readContext?.() || null;
         const response = await fetch(endpoint, { method: 'POST', credentials: 'include', signal: controller.signal,
-          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ operation, processing, seed: processing.augmentation?.seed || 'preview' }) });
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ operation, processing, seed: processing.augmentation?.seed || 'preview', ...(context || {}) }) });
         const data = await response.json();
-        if (currentRevision !== revision) { status.textContent = 'Settings changed. Preview again to see the updated effect.'; return; }
+        if (currentRevision !== revision || JSON.stringify(context) !== JSON.stringify(readContext?.() || null)) { status.textContent = 'Settings changed. Preview again to see the updated effect.'; return; }
         if (!response.ok) throw new Error(data.error || 'The preview could not be generated.');
         status.textContent = `Sample: ${data.sample.name}. Preview of this effect only.`;
         const grid = node('div', null, 'version-preview-grid');
@@ -102,6 +103,7 @@ window.VersionPreviewUI = (() => {
         }
       }
     });
+    return { invalidate: changed };
   }
   return { mount };
 })();

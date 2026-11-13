@@ -23,6 +23,7 @@ const root = path.resolve(__dirname, '../..');
       window.LibreFlowIcons = { icon: () => '' };
       window.submissions = [];
       window.fetch = async (url, options = {}) => {
+        if (url.endsWith('/versions/source-options')) return { ok: true, json: async () => ({ supportsBatches: true, total: 100, eligible: 100, unbatched: { imageCount: 0, eligibleCount: 0 }, batches: [] }) };
         if (options.method === 'POST') {
           submissions.push(JSON.parse(options.body));
           return { ok: true, json: async () => ({ name: 'Fixture version', stats: { images: 100 } }) };
@@ -30,6 +31,7 @@ const root = path.resolve(__dirname, '../..');
         return { ok: true, json: async () => url.endsWith('/versions') ? [] : ({ name: 'Fixture', labelClasses: [] }) };
       };
     });
+    await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'public/js/version-source-ui.js'), 'utf8') });
     await page.addScriptTag({ content: fs.readFileSync(path.join(root, 'public/js/dataset-lifecycle.js'), 'utf8') });
     await page.waitForFunction(() => document.getElementById('aug-multiplier').getAttribute('aria-valuetext'));
     await page.locator('#aug-multiplier').evaluate(el => { el.closest('details').open = true; });
