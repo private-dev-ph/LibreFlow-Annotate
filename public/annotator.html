@@ -317,7 +317,7 @@
               <div id="inference-classes-error" class="inference-classes-message error" role="alert" hidden></div>
               <div id="inference-classes-controls" hidden>
                 <label id="inference-classes-search-wrap" class="inference-classes-search" hidden>
-                  <span class="sr-only">Search classes</span>
+                  <span>Search classes</span>
                   <input id="inference-classes-search" type="search" placeholder="Search classes" autocomplete="off" />
                 </label>
                 <div class="inference-classes-actions">
@@ -325,7 +325,9 @@
                   <button id="inference-classes-clear" type="button">Clear</button>
                 </div>
                 <div id="inference-classes-list" class="inference-classes-list"></div>
+                <p id="inference-classes-no-match" class="inference-classes-no-match" hidden>No classes match your search.</p>
                 <p id="inference-classes-empty" class="inference-classes-empty" hidden>Select at least one class to run inference.</p>
+                <p class="inference-classes-helper">Existing annotations are kept. Only selected classes are added.</p>
               </div>
               <button id="inference-classes-retry" class="inference-classes-retry" type="button" hidden>Retry loading classes</button>
             </div>
