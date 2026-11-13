@@ -1,9 +1,8 @@
 const express = require('express');
 const multer = require('multer');
 const yaml   = require('js-yaml');
-const fs = require('fs');
-const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const { dataFile, readJson, writeJson } = require('../lib/json-store');
 
 // In-memory multer for YAML (no disk write needed)
 const yamlUpload = multer({
@@ -24,31 +23,33 @@ const PALETTE = [
 
 const { pushNotification } = require('./notifications');
 const { emitWebhookEvent } = require('../lib/webhooks');
+const { readPins, setPinned } = require('../lib/project-pins');
 
 const router = express.Router();
-const DATA_FILE = path.join(__dirname, '..', 'data', 'projects.json');
+const PROJECTS_FILE = dataFile('projects.json');
 
 function readProjects() {
-  if (!fs.existsSync(DATA_FILE)) return [];
-  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+  return readJson(PROJECTS_FILE, []);
 }
 
 function writeProjects(projects) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(projects, null, 2));
+  writeJson(PROJECTS_FILE, projects);
 }
 
 // GET all projects for current user (owner) OR where user is a collaborator
 router.get('/', (req, res) => {
   const uid   = req.session.userId;
+  const pinnedProjects = new Set(readPins().filter(pin => pin.userId === uid).map(pin => pin.projectId));
   // Load users to resolve owner usernames
   let users = [];
-  try { users = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'users.json'), 'utf-8')); } catch {}
+  users = readJson(dataFile('users.json'), []);
 
   const all = readProjects()
     .filter(p => p.userId === uid || (p.collaborators || []).some(c => c.userId === uid))
     .map(p => ({
       ...p,
       ownerUsername: users.find(u => u.id === p.userId)?.username || '',
+      pinned: pinnedProjects.has(p.id),
     }));
   res.json(all);
 });
@@ -82,6 +83,20 @@ router.get('/:id', (req, res) => {
   );
   if (!project) return res.status(404).json({ error: 'Project not found.' });
   res.json(project);
+});
+
+// PATCH personal project pin state (owner or collaborator only).
+router.patch('/:id/pin', (req, res) => {
+  if (typeof req.body?.pinned !== 'boolean') {
+    return res.status(400).json({ error: 'pinned must be a boolean.' });
+  }
+  const project = readProjects().find(p =>
+    p.id === req.params.id &&
+    (p.userId === req.session.userId || (p.collaborators || []).some(c => c.userId === req.session.userId))
+  );
+  if (!project) return res.status(404).json({ error: 'Project not found.' });
+  setPinned(req.session.userId, project.id, req.body.pinned);
+  res.json({ projectId: project.id, pinned: req.body.pinned });
 });
 
 // PATCH update project (e.g. label classes)

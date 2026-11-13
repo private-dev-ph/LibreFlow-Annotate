@@ -77,8 +77,36 @@
 
       <!-- Search / filter bar -->
       <div class="dash-toolbar">
-        <input id="search-projects" type="text" placeholder="Search projects…" aria-label="Search projects" />
+        <label class="project-search">
+          <span class="project-search-icon" data-lf-icon="search" aria-hidden="true"></span>
+          <span class="sr-only">Search projects</span>
+          <input id="search-projects" type="search" placeholder="Search by name, description, or owner…" autocomplete="off" />
+        </label>
+        <div class="project-view-controls" aria-label="Project view controls">
+          <label>Sort <select id="sort-projects">
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="name-asc">Name A–Z</option>
+            <option value="name-desc">Name Z–A</option>
+            <option value="progress">Progress highest</option>
+            <option value="images">Images most</option>
+          </select></label>
+          <label>Group <select id="group-projects">
+            <option value="none">None</option>
+            <option value="progress">Progress</option>
+            <option value="ownership">Ownership</option>
+          </select></label>
+          <label>Per page <select id="page-size-projects">
+            <option value="12">12</option>
+            <option value="24">24</option>
+            <option value="48">48</option>
+          </select></label>
+        </div>
       </div>
+
+      <div id="projects-results" class="projects-results" aria-live="polite"></div>
+      <div id="projects-loading" class="projects-state projects-loading" role="status">Loading projects…</div>
+      <div id="projects-error" class="projects-state projects-error hidden" role="alert"></div>
 
       <!-- Project grid -->
       <div id="projects-grid" class="projects-grid"></div>
@@ -90,6 +118,18 @@
         <p>Create your first project to start annotating images.</p>
         <button class="btn-new-project" id="btn-empty-new"><span data-lf-icon="plus" aria-hidden="true"></span> New Project</button>
       </div>
+      <div id="no-matching-state" class="empty-state hidden">
+        <div class="empty-icon" data-lf-icon="search" aria-hidden="true"></div>
+        <h2>No matching projects</h2>
+        <p>Try a different search or clear your filters.</p>
+        <button class="btn-cancel" id="btn-clear-search" type="button">Clear search</button>
+      </div>
+
+      <nav id="projects-pagination" class="projects-pagination hidden" aria-label="Project pages">
+        <button id="projects-prev" class="pagination-btn" type="button">Previous</button>
+        <span id="projects-page-status"></span>
+        <button id="projects-next" class="pagination-btn" type="button">Next</button>
+      </nav>
 
     </div>
   </div>
@@ -119,6 +159,7 @@
     <div class="modal-box modal-box-sm">
       <h2>Delete Project?</h2>
       <p class="delete-warn">This will permanently delete the project and all its images and annotations. This cannot be undone.</p>
+        <div id="delete-error" class="modal-error hidden" role="alert"></div>
       <div class="modal-actions">
         <button id="btn-confirm-delete" class="btn-danger">Delete</button>
         <button class="btn-cancel" id="btn-cancel-delete">Cancel</button>
@@ -134,6 +175,7 @@
   <script src="/js/jobs.js"></script>
   <script src="/js/nav-inbox.js"></script>
   <script src="/js/theme.js"></script>
+  <script src="/js/project-browser.js"></script>
   <script src="/js/dashboard.js"></script>
 </body>
 </html>
