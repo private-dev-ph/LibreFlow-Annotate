@@ -26,7 +26,23 @@ const API = {
     return r.json();
   },
   async deleteProject(id) {
-    await fetch(`/api/projects/${id}`, { method: 'DELETE', credentials: 'include' });
+    const r = await fetch(`/api/projects/${id}`, { method: 'DELETE', credentials: 'include' });
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to delete project.');
+    }
+    return r.json().catch(() => ({}));
+  },
+  async setProjectPin(id, pinned) {
+    const r = await fetch(`/api/projects/${encodeURIComponent(id)}/pin`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pinned }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || 'Failed to update project pin.');
+    return data;
   },
   async updateProject(id, data) {
     const r = await fetch(`/api/projects/${id}`, {
