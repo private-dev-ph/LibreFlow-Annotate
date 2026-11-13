@@ -55,6 +55,9 @@ function fixtureServer() {
       if (body.pinned) pinRecords.add(pinMatch[1]); else pinRecords.delete(pinMatch[1]);
       return sendJson(response, 200, { projectId: pinMatch[1], pinned: body.pinned });
     }
+    if (request.method === 'DELETE' && /^\/api\/projects\/[^/]+$/.test(url.pathname)) {
+      return sendJson(response, 503, { error: 'fixture delete failure' });
+    }
     const relative = url.pathname === '/dashboard' ? '/dashboard.html' : url.pathname;
     const target = path.resolve(root, 'public', `.${relative}`);
     if (!target.startsWith(path.resolve(root, 'public'))) return sendJson(response, 404, { error: 'Not found.' });
@@ -100,7 +103,7 @@ function fixtureServer() {
     assert.equal(await page.locator('.project-card').count(), 24);
     await page.locator('#projects-next').click();
     assert.equal(await page.locator('.project-card').count(), 6);
-    assert.match(await page.locator('#projects-results').textContent(), /Showing 25–30 of 30 projects/);
+    assert.match(await page.locator('#projects-results').textContent(), /Showing 25\u201330 of 30 projects/);
 
     await page.locator('#search-projects').fill('owner-2');
     assert.equal(await page.locator('.project-card').count(), 10);
@@ -111,23 +114,34 @@ function fixtureServer() {
     await page.locator('#btn-clear-search').click();
     await page.locator('#page-size-projects').selectOption('12');
 
+    await page.selectOption('#sort-projects', 'name-asc');
+    assert.equal(await page.locator('.card-title').first().textContent(), 'Project 01');
+    await page.selectOption('#sort-projects', 'name-desc');
+    assert.equal(await page.locator('.card-title').first().textContent(), 'Project 30');
+    await page.selectOption('#group-projects', 'ownership');
+    assert.equal(await page.locator('.project-group-heading').first().textContent(), 'My projects');
+    await page.selectOption('#group-projects', 'progress');
+    assert.equal(await page.locator('.project-group-heading').first().textContent(), 'Empty');
+    await page.selectOption('#group-projects', 'none');
+    await page.selectOption('#sort-projects', 'newest');
+
     const firstPin = page.locator('.card-pin').first();
     const firstName = await firstPin.getAttribute('aria-label');
     assert.match(firstName, /^Pin Project/);
     pinDelay = 150;
     await firstPin.click();
     assert.equal(await page.locator('.card-pin').first().isDisabled(), true, 'pending pin disables duplicate activation');
-    await page.waitForFunction(() => document.querySelector('.card-pin')?.getAttribute('aria-pressed') === 'true');
+    await page.waitForFunction(() => document.querySelector('.card-pin')?.getAttribute('aria-pressed') === 'true' && !document.querySelector('.card-pin')?.disabled);
     assert.equal(await page.locator('.project-group-heading').first().textContent(), 'Pinned');
     assert.equal(await page.locator('.project-group-heading').nth(1).textContent(), 'Other projects');
     assert.deepEqual(lastPinRequest.body, { pinned: true });
     await page.reload({ waitUntil: 'networkidle' });
-    await page.waitForFunction(() => document.querySelector('.card-pin')?.getAttribute('aria-pressed') === 'true');
+    await page.waitForFunction(() => document.querySelector('.card-pin')?.getAttribute('aria-pressed') === 'true' && !document.querySelector('.card-pin')?.disabled);
     assert.equal(await page.locator('.project-group-heading').first().textContent(), 'Pinned', 'pin survives reload for same user');
     failPin = true;
     const dashboardUrl = page.url();
     await page.locator('.card-pin').first().press('Enter');
-    await page.waitForTimeout(120);
+    await page.waitForFunction(() => document.querySelector('.card-pin')?.getAttribute('aria-pressed') === 'true' && !document.querySelector('.card-pin')?.disabled);
     assert.equal(page.url(), dashboardUrl, 'pin keyboard action does not navigate the card');
     assert.equal(await page.locator('.card-pin').first().getAttribute('aria-pressed'), 'true', 'failed pin request rolls back optimistic state');
     const deleteButton = page.locator('.btn-delete-card').first();
@@ -136,7 +150,8 @@ function fixtureServer() {
     assert.equal(page.url(), dashboardUrl, 'delete keyboard action does not navigate the card');
     assert.equal(await page.locator('#modal-delete').isVisible(), true);
     await page.locator('#btn-confirm-delete').click();
-    assert.equal(await page.locator('#delete-error').isVisible(), true, 'delete failure is visible inside the modal');
+    await page.locator('#delete-error').waitFor({ state: 'visible' });
+    assert.match(await page.locator('#delete-error').textContent(), /fixture delete failure/);
     assert.deepEqual(errors, [], 'dashboard fixture has no runtime errors');
     console.log(`PASS: project dashboard pagination, search/group controls, pin rollback, responsive themes. Screenshots: ${temp}`);
   } finally {
