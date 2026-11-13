@@ -159,28 +159,32 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     await page.waitForFunction(() => !document.getElementById('btn-auto-infer').disabled);
     assert.equal(errors.length, 0, errors.join('\n'));
 
-    // Ensure the picker remains usable at the requested desktop and phone sizes.
-    for (const viewport of [{ width: 320, height: 800 }, { width: 375, height: 800 }, { width: 768, height: 900 }, { width: 1280, height: 900 }, { width: 375, height: 320 }]) {
+    // Exercise the actual details panel, including scrolling short viewports.
+    async function showPicker(viewport) {
       await page.setViewportSize(viewport);
+      if (await page.locator('#mobile-panel').isVisible()) await page.selectOption('#mobile-panel', 'details');
+      await page.evaluate(() => {
+        document.getElementById('inference-tiling-details').open = false;
+        document.getElementById('inference-classes-details').open = true;
+      });
+      await page.locator('#inference-classes-list input').first().scrollIntoViewIfNeeded();
+      const bounds = await page.locator('#inference-classes-list input').first().boundingBox();
+      assert.ok(bounds && bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= viewport.width && bounds.y + bounds.height <= viewport.height, 'class checkbox is reachable in the viewport');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), true, `no horizontal overflow at ${viewport.width}x${viewport.height}`);
     }
+    for (const viewport of [{ width: 320, height: 800 }, { width: 375, height: 800 }, { width: 768, height: 900 }, { width: 1280, height: 900 }, { width: 667, height: 375 }]) await showPicker(viewport);
     const screenshotDir = path.join(os.tmpdir(), 'libreflow-class-picker');
     fs.mkdirSync(screenshotDir, { recursive: true });
-    await page.setViewportSize({ width: 1280, height: 900 });
-    const lightDesktop = path.join(screenshotDir, 'class-picker-light-desktop.png');
-    await page.screenshot({ path: lightDesktop, fullPage: true });
-    await page.setViewportSize({ width: 375, height: 800 });
-    const lightMobile = path.join(screenshotDir, 'class-picker-light-mobile.png');
-    await page.screenshot({ path: lightMobile, fullPage: true });
-    await page.click('#btn-theme-settings');
-    await page.click('#theme-mode-toggle');
-    await page.click('.theme-close');
-    const darkMobile = path.join(screenshotDir, 'class-picker-dark-mobile.png');
-    await page.screenshot({ path: darkMobile, fullPage: true });
-    await page.setViewportSize({ width: 1280, height: 900 });
-    const darkDesktop = path.join(screenshotDir, 'class-picker-dark-desktop.png');
-    await page.screenshot({ path: darkDesktop, fullPage: true });
-    console.log(`SCREENSHOTS: ${lightDesktop} ${lightMobile} ${darkMobile} ${darkDesktop}`);
+    for (const mode of ['light', 'dark']) {
+      await page.evaluate(value => { document.documentElement.dataset.mode = value; }, mode);
+      for (const [name, viewport] of [['desktop', { width: 1280, height: 900 }], ['mobile', { width: 375, height: 800 }]]) {
+        await showPicker(viewport);
+        await page.locator('#inference-classes-details').scrollIntoViewIfNeeded();
+        const file = path.join(screenshotDir, `class-picker-${mode}-${name}.png`);
+        await page.screenshot({ path: file });
+        console.log(`SCREENSHOT: ${file}`);
+      }
+    }
     console.log('PASS: class picker metadata, scoped selection, subset echo, preservation, undo, race, retry, shortcut, and responsive layouts');
   } finally {
     releaseSlow?.();
