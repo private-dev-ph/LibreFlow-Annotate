@@ -13,7 +13,7 @@ try:
     from fastapi import HTTPException
     from py_scripts import infer_server
     from py_scripts import tiled_inference as ti
-except Exception as exc:  # pragma: no cover - exercised in the host-only test image
+except ImportError as exc:  # pragma: no cover - exercised in the host-only test image
     infer_server = None
     ti = None
     _IMPORT_ERROR = exc
