@@ -504,6 +504,7 @@
     await API.saveAnnotations(imageId, shapes);
     if (images[currentIndex]?.id !== imageId) return true;
     if (editGeneration !== startGeneration) {
+      unsaved = true;
       saveIndicator.classList.add('show');
       showToast('New edits were made while saving. Save again before leaving.', 'warn');
       return false;

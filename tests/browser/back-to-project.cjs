@@ -46,7 +46,7 @@ async function addUnsaved(page, id = 'shape') {
   const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH });
   try {
-    for (const width of [320, 375, 768, 1280]) {
+    for (const width of [320, 375, 390, 430, 768, 1280]) {
       const { page } = await makePage(browser, server, width);
       const link = page.locator('#annotator-project-link');
       assert.equal(await link.innerText(), 'Back to project');
@@ -54,6 +54,25 @@ async function addUnsaved(page, id = 'shape') {
       assert.equal(await link.isVisible(), true);
       assert.ok((await link.boundingBox()).height >= 44, `${width}px link should have a touch-sized hit area`);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${width}px layout should not overflow horizontally`);
+      const navIssues = await page.evaluate(() => {
+        const nodes = [...document.querySelectorAll('#top-nav .nav-logo, #top-nav .nav-link, #top-nav .annotator-project-link, #top-nav .nav-notif-btn, #top-nav .nav-user, #top-nav .btn-theme-settings, #top-nav .btn-logout')]
+          .filter(el => getComputedStyle(el).display !== 'none');
+        const rects = nodes.map(el => ({ name: el.id || el.className, rect: el.getBoundingClientRect().toJSON() }));
+        const issues = [];
+        for (const { name, rect } of rects) {
+          if (rect.left < -0.5 || rect.top < -0.5 || rect.right > innerWidth + 0.5 || rect.bottom > innerHeight + 0.5) {
+            issues.push(`${name} outside viewport`);
+          }
+        }
+        for (let i = 0; i < rects.length; i += 1) for (let j = i + 1; j < rects.length; j += 1) {
+          const a = rects[i].rect; const b = rects[j].rect;
+          const overlapX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+          const overlapY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+          if (overlapX > 0.5 && overlapY > 0.5) issues.push(`${rects[i].name} overlaps ${rects[j].name}`);
+        }
+        return issues;
+      });
+      assert.deepEqual(navIssues, [], `${width}px navbar controls must fit without overlap`);
       if (process.env.SCREENSHOT_DIR && (width === 375 || width === 1280)) {
         await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, `annotator-${width}.png`), fullPage: false });
       }
@@ -94,18 +113,34 @@ async function addUnsaved(page, id = 'shape') {
     {
       const fixture = await makePage(browser, server, 375, { autoSave: true });
       let releaseSave;
+      let saveCalls = 0;
       await fixture.page.route('**/api/annotations', route => new Promise(resolve => {
+        saveCalls += 1;
         releaseSave = async () => { await route.fulfill({ json: { ok: true } }); resolve(); };
       }));
       await addUnsaved(fixture.page, 'before-save');
       await fixture.page.locator('#annotator-project-link').click();
       await fixture.page.waitForFunction(() => document.getElementById('annotator-project-link').getAttribute('aria-busy') === 'true');
+      await fixture.page.evaluate(() => document.getElementById('annotator-project-link').click());
       await fixture.page.evaluate(() => Canvas.addShapes([{ id: 'during-save', label: 'Part', type: 'bbox', data: { x: 40, y: 40, width: 20, height: 20 } }]));
       await fixture.page.waitForFunction(() => document.getElementById('ann-count').textContent === '2');
       await releaseSave();
       await fixture.page.waitForFunction(() => !document.getElementById('annotator-project-link').hasAttribute('aria-busy'));
       assert.match(new URL(fixture.page.url()).pathname, /annotator$/);
+      assert.equal(saveCalls, 1, 'duplicate clicks during a pending save must not duplicate the save');
       assert.equal(await fixture.page.locator('#save-indicator').evaluate(el => el.classList.contains('show')), true, 'edits made during save must remain dirty');
+      await fixture.page.close();
+    }
+
+    {
+      const fixture = await makePage(browser, server, 375, { autoSave: true });
+      await fixture.page.route('**/api/annotations', route => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'fixture save failure' }) }));
+      await addUnsaved(fixture.page, 'failed-save');
+      await fixture.page.locator('#annotator-project-link').click();
+      await fixture.page.waitForFunction(() => !document.getElementById('annotator-project-link').hasAttribute('aria-busy'));
+      assert.match(new URL(fixture.page.url()).pathname, /annotator$/);
+      assert.equal(await fixture.page.locator('#save-indicator').evaluate(el => el.classList.contains('show')), true, 'failed auto-save must keep edits dirty');
+      assert.equal(await fixture.page.locator('#annotator-project-link').innerText(), 'Back to project', 'failed auto-save must re-enable the link');
       await fixture.page.close();
     }
 
