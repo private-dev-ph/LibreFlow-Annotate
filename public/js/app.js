@@ -35,6 +35,10 @@
   let autoSaveEnabled = localStorage.getItem('annotator_autosave') === 'true';
   let tilingUI = null;
   let inferenceRunning = false;
+  const classPickerState = {
+    modelId: '', classes: [], selected: new Set(), cache: new Map(), selections: new Map(),
+    loading: false, error: '', available: false, requestSeq: 0,
+  };
   let showLabelsEnabled = true;
   try { showLabelsEnabled = localStorage.getItem('annotator_show_labels') !== 'false'; }
   catch (e) { /* use the visible default when storage is unavailable */ }
@@ -678,7 +682,127 @@
 
   function selectedProjectModel() {
     const id = document.getElementById('auto-model-select')?.value;
-    return projectModels.find(m => m.id === id) || null;
+    return projectModels.find(m => String(m.id) === String(id)) || null;
+  }
+
+  function isDetectionModel(model) {
+    return Boolean(model) && (!model.type || model.type === 'detection');
+  }
+
+  function classPickerElements() {
+    return {
+      details: document.getElementById('inference-classes-details'),
+      summary: document.getElementById('inference-classes-summary'),
+      loading: document.getElementById('inference-classes-loading'),
+      error: document.getElementById('inference-classes-error'),
+      controls: document.getElementById('inference-classes-controls'),
+      retry: document.getElementById('inference-classes-retry'),
+      searchWrap: document.getElementById('inference-classes-search-wrap'),
+      search: document.getElementById('inference-classes-search'),
+      selectAll: document.getElementById('inference-classes-select-all'),
+      clear: document.getElementById('inference-classes-clear'),
+      list: document.getElementById('inference-classes-list'),
+      empty: document.getElementById('inference-classes-empty'),
+    };
+  }
+
+  function setClassPickerControlsDisabled(disabled) {
+    const els = classPickerElements();
+    [els.search, els.selectAll, els.clear].forEach(el => { if (el) el.disabled = disabled; });
+    els.list?.querySelectorAll('input').forEach(input => { input.disabled = disabled; });
+  }
+
+  function renderClassPicker() {
+    const els = classPickerElements();
+    const model = selectedProjectModel();
+    const eligible = isDetectionModel(model);
+    els.details?.classList.toggle('hidden', !eligible);
+    if (!eligible) return;
+    const count = classPickerState.classes.length;
+    const selectedCount = classPickerState.selected.size;
+    if (els.summary) {
+      els.summary.textContent = classPickerState.loading ? 'Loading classes…'
+        : classPickerState.error ? 'Unavailable'
+        : count > 0 && selectedCount === count ? 'All classes'
+        : `${selectedCount} of ${count}`;
+    }
+    if (els.loading) els.loading.hidden = !classPickerState.loading;
+    if (els.error) { els.error.hidden = !classPickerState.error; els.error.textContent = classPickerState.error; }
+    if (els.retry) els.retry.hidden = !classPickerState.error;
+    if (els.controls) els.controls.hidden = classPickerState.loading || Boolean(classPickerState.error) || count === 0;
+    if (els.searchWrap) els.searchWrap.hidden = count < 12;
+    if (els.empty) els.empty.hidden = selectedCount > 0 || classPickerState.loading || Boolean(classPickerState.error);
+    if (!els.list) return;
+    const query = String(els.search?.value || '').trim().toLowerCase();
+    els.list.innerHTML = '';
+    classPickerState.classes.filter(item => !query || item.name.toLowerCase().includes(query)).forEach(item => {
+      const label = document.createElement('label');
+      label.className = 'inference-class-option';
+      const input = document.createElement('input');
+      input.type = 'checkbox'; input.checked = classPickerState.selected.has(item.id);
+      input.value = String(item.id); input.setAttribute('aria-label', `Detect ${item.name}`);
+      input.addEventListener('change', () => {
+        if (input.checked) classPickerState.selected.add(item.id); else classPickerState.selected.delete(item.id);
+        classPickerState.selections.set(String(classPickerState.modelId), new Set(classPickerState.selected));
+        renderClassPicker(); updateInferenceButton();
+      });
+      const text = document.createElement('span'); text.textContent = item.name;
+      label.append(input, text); els.list.appendChild(label);
+    });
+    setClassPickerControlsDisabled(inferenceRunning);
+  }
+
+  function updateInferenceButton() {
+    const model = selectedProjectModel();
+    const btn = document.getElementById('btn-auto-infer');
+    if (!btn) return;
+    const detectionBlocked = isDetectionModel(model)
+      && (!classPickerState.available || classPickerState.classes.length === 0 || classPickerState.selected.size === 0);
+    btn.disabled = inferenceRunning || !model || currentIndex < 0 || model.type === 'segmentation' || detectionBlocked;
+    if (model?.type === 'segmentation') btn.title = 'Use the Smart Mask tool on the canvas.';
+    else if (detectionBlocked && classPickerState.error) btn.title = 'Retry loading model classes before running inference.';
+    else if (detectionBlocked && classPickerState.selected.size === 0) btn.title = 'Select at least one class before running inference.';
+    else btn.title = 'Run inference (X)';
+  }
+
+  async function loadClassMetadata(modelId) {
+    const model = projectModels.find(item => String(item.id) === String(modelId));
+    const seq = ++classPickerState.requestSeq;
+    classPickerState.modelId = String(modelId || '');
+    classPickerState.error = '';
+    classPickerState.available = false;
+    classPickerState.loading = false;
+    classPickerState.classes = [];
+    classPickerState.selected = new Set();
+    renderClassPicker(); updateInferenceButton();
+    if (!isDetectionModel(model) || !modelId) return;
+    const cached = classPickerState.cache.get(String(modelId));
+    if (cached) {
+      classPickerState.classes = cached;
+      classPickerState.selected = new Set(classPickerState.selections.get(String(modelId)) || cached.map(item => item.id));
+      classPickerState.available = true;
+      renderClassPicker(); updateInferenceButton();
+      return;
+    }
+    classPickerState.loading = true; renderClassPicker(); updateInferenceButton();
+    try {
+      const response = await fetch(`/api/models/${encodeURIComponent(modelId)}/classes?projectId=${encodeURIComponent(projectId)}`, { credentials: 'include' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !Array.isArray(data.classes) || data.task !== 'detect') throw new Error(data.error?.message || data.error || 'Unable to load model classes.');
+      if (seq !== classPickerState.requestSeq || String(document.getElementById('auto-model-select')?.value || '') !== String(modelId)) return;
+      const classes = data.classes.map(item => ({ id: Number(item.id), name: String(item.name || '') })).filter(item => Number.isInteger(item.id) && item.name);
+      classPickerState.cache.set(String(modelId), classes);
+      classPickerState.classes = classes;
+      classPickerState.selected = new Set(classPickerState.selections.get(String(modelId)) || classes.map(item => item.id));
+      classPickerState.selections.set(String(modelId), new Set(classPickerState.selected));
+      classPickerState.available = true;
+    } catch (error) {
+      if (seq !== classPickerState.requestSeq) return;
+      classPickerState.error = error?.message || 'Unable to load model classes.';
+    } finally {
+      if (seq !== classPickerState.requestSeq) return;
+      classPickerState.loading = false; renderClassPicker(); updateInferenceButton();
+    }
   }
 
   async function populateAutoModels() {
@@ -700,7 +824,7 @@
       });
 
       // Restore previously selected model
-      if (lastModelId && modelTypeMap[lastModelId]) sel.value = lastModelId;
+      if (lastModelId && Object.prototype.hasOwnProperty.call(modelTypeMap, lastModelId)) sel.value = lastModelId;
 
       function updateSliders() {
         lastModelId = sel.value;   // remember across navigation
@@ -710,9 +834,8 @@
         if (rowDet)  rowDet.style.display  = (type === 'detection')      ? '' : 'none';
         if (rowBias) rowBias.style.display  = (type === 'classification') ? '' : 'none';
         tilingUI?.setModelType(type);
-        document.getElementById('btn-auto-infer').disabled = inferenceRunning || !sel.value || currentIndex < 0 || type === 'segmentation';
-        if (type === 'segmentation') document.getElementById('btn-auto-infer').title = 'Use the Smart Mask tool on the canvas.';
-        else document.getElementById('btn-auto-infer').title = 'Run inference (X)';
+        loadClassMetadata(sel.value);
+        updateInferenceButton();
       }
 
       // Only attach listener once (first call); subsequent calls just restore value + updateSliders
@@ -724,10 +847,29 @@
     } catch(e) { /* non-fatal */ }
   }
 
+  document.getElementById('inference-classes-search')?.addEventListener('input', renderClassPicker);
+  document.getElementById('inference-classes-select-all')?.addEventListener('click', () => {
+    classPickerState.selected = new Set(classPickerState.classes.map(item => item.id));
+    classPickerState.selections.set(String(classPickerState.modelId), new Set(classPickerState.selected));
+    renderClassPicker(); updateInferenceButton();
+  });
+  document.getElementById('inference-classes-clear')?.addEventListener('click', () => {
+    classPickerState.selected = new Set();
+    classPickerState.selections.set(String(classPickerState.modelId), new Set());
+    renderClassPicker(); updateInferenceButton();
+  });
+  document.getElementById('inference-classes-retry')?.addEventListener('click', () => loadClassMetadata(classPickerState.modelId));
+
   document.getElementById('btn-auto-infer')?.addEventListener('click', async () => {
     const modelId = document.getElementById('auto-model-select')?.value;
     if (inferenceRunning || !modelId || currentIndex < 0) return;
     const img = images[currentIndex];
+    const selectedModel = selectedProjectModel();
+    const detectionModel = isDetectionModel(selectedModel);
+    if (detectionModel && (!classPickerState.available || !classPickerState.classes.length || !classPickerState.selected.size)) {
+      updateInferenceButton();
+      return;
+    }
     const tiling = tilingUI?.getRequestTiling() || null;
     const tilingMaster = document.getElementById('tiling-enabled');
     if (tilingMaster?.checked && selectedProjectModel()?.type === 'detection' && !tiling) return;
@@ -738,6 +880,7 @@
     };
     inferenceRunning = true;
     btn.disabled = true; document.getElementById('auto-model-select').disabled = true;
+    setClassPickerControlsDisabled(true);
     tilingUI?.setRunning(true);
     setInferenceButton('loader', 'Running...');
     if (statusEl) { statusEl.textContent = ''; statusEl.className = 'auto-status'; }
@@ -746,6 +889,9 @@
     const goodBias      = parseFloat(document.getElementById('infer-good-bias-slider')?.value || '0.5');
     const runImageId = img.id;
     const requestBody = { imageId: img.id, confThreshold, goodBias };
+    const selectedClassIds = detectionModel ? [...classPickerState.selected].map(Number).sort((a, b) => a - b) : [];
+    const strictClassSubset = detectionModel && selectedClassIds.length < classPickerState.classes.length;
+    if (strictClassSubset) requestBody.classIds = selectedClassIds;
     if (tiling) requestBody.tiling = tiling;
     if (statusEl && tiling) {
       const runSummary = tilingUI?.getRunSummary?.();
@@ -764,12 +910,21 @@
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error?.message || data.error || data.detail || data.message || `Inference request failed (${r.status}).`);
       if (tiling && data.tiling?.enabled !== true) throw new Error('The server did not confirm tiled inference; no results were applied.');
+      if (strictClassSubset) {
+        const returned = Array.isArray(data.class_ids) ? data.class_ids.map(Number).sort((a, b) => a - b) : null;
+        if (!returned || returned.length !== selectedClassIds.length || returned.some((id, index) => id !== selectedClassIds[index])) {
+          throw new Error('Inference response did not confirm the selected classes; no results were applied.');
+        }
+      }
       if (images[currentIndex]?.id !== runImageId) {
         if (statusEl) { statusEl.textContent = 'Inference result discarded because the image changed while it was running.'; statusEl.className = 'auto-status warn'; }
         return;
       }
       if (data.results && data.results.length > 0) {
-        const applyResult = tiling ? Canvas.addShapes(data.results, { classAwareIou: tiling.mergeIou }) : Canvas.addShapes(data.results);
+        const applyResult = Canvas.addShapes(data.results, {
+          preserveExisting: true,
+          classAwareIou: tiling ? tiling.mergeIou : 0.45,
+        });
         const added = applyResult?.added ?? data.results.length;
         const skipped = applyResult?.skipped ?? 0;
         const removedExisting = applyResult?.removedExisting ?? 0;
@@ -802,8 +957,8 @@
       inferenceRunning = false;
       tilingUI?.setRunning(false);
       document.getElementById('auto-model-select').disabled = false;
-      const selected = selectedProjectModel();
-      btn.disabled = !selected || currentIndex < 0 || selected.type === 'segmentation';
+      setClassPickerControlsDisabled(false);
+      updateInferenceButton();
       setInferenceButton('play', 'Run Inference');
     }
   });
