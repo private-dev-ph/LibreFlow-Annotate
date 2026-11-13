@@ -23,6 +23,8 @@ function makeCanvas(log) {
     width: 0,
     height: 0,
     style: {},
+    hasAttribute() { return false; },
+    setAttribute() {},
     getContext() { return ctx; },
     addEventListener() {},
     getBoundingClientRect() { return { left: 0, top: 0 }; },
