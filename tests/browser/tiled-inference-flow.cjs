@@ -19,6 +19,7 @@ const express = require('express');
     else if(p==='/api/projects/test') body={id:'test',name:'Board test',labelClasses:[{name:'part',color:'#b44b40'},{name:'other',color:'#259282'}]};
     else if(p==='/api/images') body=[{id:'one',filename:'one.svg',originalName:'Board one',width:2050,height:1300},{id:'two',filename:'two.svg',originalName:'Board two',width:900,height:500}];
     else if(p==='/api/models') body=[{id:'det',name:'Detector',type:'detection'},{id:'cls',name:'Classifier',type:'classification'}];
+    else if(p==='/api/models/det/classes') body={classes:[{id:0,name:'part'},{id:1,name:'other'}],task:'detect'};
     else if(p==='/api/annotations/one') body=annotations;
     else if(p==='/api/models/det/infer'||p==='/api/models/cls/infer') {payload=req.postDataJSON(); requested?.(); if(delayed)await new Promise(r=>release=r); body={results,count:2,message:'Done',...(payload.tiling?{tiling:{enabled:true,tileCount:6,workers:2,duplicatesRemoved:2}}:{})};}
     else if(p.includes('/review')) body={review:{status:'unannotated'},permissions:{},collaborators:[],comments:[],history:[]};

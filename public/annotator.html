@@ -307,6 +307,30 @@
             <option value="">– select model –</option>
           </select>
 
+          <details id="inference-classes-details" class="inference-classes-details hidden">
+            <summary>
+              <span>Classes to detect</span>
+              <span id="inference-classes-summary" class="inference-classes-summary">Loading classes…</span>
+            </summary>
+            <div class="inference-classes-body">
+              <div id="inference-classes-loading" class="inference-classes-message" role="status" aria-live="polite">Loading classes…</div>
+              <div id="inference-classes-error" class="inference-classes-message error" role="alert" hidden></div>
+              <div id="inference-classes-controls" hidden>
+                <label id="inference-classes-search-wrap" class="inference-classes-search" hidden>
+                  <span class="sr-only">Search classes</span>
+                  <input id="inference-classes-search" type="search" placeholder="Search classes" autocomplete="off" />
+                </label>
+                <div class="inference-classes-actions">
+                  <button id="inference-classes-select-all" type="button">Select all</button>
+                  <button id="inference-classes-clear" type="button">Clear</button>
+                </div>
+                <div id="inference-classes-list" class="inference-classes-list"></div>
+                <p id="inference-classes-empty" class="inference-classes-empty" hidden>Select at least one class to run inference.</p>
+              </div>
+              <button id="inference-classes-retry" class="inference-classes-retry" type="button" hidden>Retry loading classes</button>
+            </div>
+          </details>
+
           <div id="smart-mask-help" class="smart-mask-help hidden">
             <strong>Smart Mask prompts</strong>
             <span>Click foreground · Shift-click background · Ctrl-click to refine the current mask.</span>

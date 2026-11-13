@@ -50,6 +50,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     // Ordinary inference retains the existing behavior.
     await page.evaluate(() => Canvas.loadImage(board, []));
     assert.deepEqual(await page.evaluate(() => Canvas.addShapes([box('a', 0, 0, 100, 100), box('b', 0, 0, 100, 100)])), { added: 1, skipped: 1, removedExisting: 0 });
+    // Preserve mode compares labels, not model-local class IDs: class 0 from
+    // another model must not suppress a differently labelled detection.
+    await page.evaluate(() => Canvas.loadImage(board, [box('model-a-class', 0, 0, 100, 100, { class_id: 0 })]));
+    assert.deepEqual(await page.evaluate(() => Canvas.addShapes([box('model-b-class', 0, 0, 100, 100, { class_id: 0 })], { preserveExisting: true, classAwareIou: .45 })), { added: 1, skipped: 0, removedExisting: 0 });
+    assert.deepEqual(await page.evaluate(() => Canvas.addShapes([box('model-a-class', 0, 0, 100, 100, { class_id: 9 })], { preserveExisting: true, classAwareIou: .45 })), { added: 0, skipped: 1, removedExisting: 0 });
     // A slow previous image must not change the current board or its tile estimate.
     let releaseOldImage;
     await page.route('http://fixture.test/slow.svg', route => { releaseOldImage = () => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>' }); });

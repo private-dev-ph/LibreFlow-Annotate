@@ -610,6 +610,17 @@ const Canvas = (() => {
     });
   }
 
+  function overlapsSameLabel(candidate, existingShapes, iouThreshold) {
+    if (candidate?.type !== 'bbox' || !candidate.data) return false;
+    return existingShapes.some(existing => {
+      if (existing.type !== 'bbox' || !existing.data) return false;
+      const sameClass = candidate.label != null && existing.label != null
+        ? candidate.label === existing.label
+        : candidate.class_id != null && existing.class_id != null && candidate.class_id === existing.class_id;
+      return sameClass && bboxOverlap(candidate.data, existing.data).iou > iouThreshold;
+    });
+  }
+
   // Drag state for moving shapes
   let movingShape = null, moveStart = null, moveOrigData = null, moveDidChange = false;
 
@@ -1213,6 +1224,7 @@ const Canvas = (() => {
     // Add multiple shapes at once (e.g. from inference results)
     addShapes(newShapes, options = {}) {
       const classAwareIou = options?.classAwareIou;
+      const preserveExisting = options?.preserveExisting === true;
       const mergedTiling = Number.isFinite(classAwareIou) && classAwareIou >= 0 && classAwareIou <= 1;
       const dedupedExisting = [];
       const accepted = [];
@@ -1220,7 +1232,7 @@ const Canvas = (() => {
       let skipped = 0;
 
       shapes.forEach(s => {
-        if (!mergedTiling && isDuplicateBbox(s, dedupedExisting)) {
+        if (!preserveExisting && !mergedTiling && isDuplicateBbox(s, dedupedExisting)) {
           removedExisting += 1;
           return;
         }
@@ -1231,9 +1243,11 @@ const Canvas = (() => {
         // Tiled results have already been merged by the inference service.
         // Keep those results intact and never clean up the user's existing
         // annotations; only skip same-class detections already on the canvas.
-        if (mergedTiling
-          ? overlapsSameClass(s, dedupedExisting, classAwareIou)
-          : isDuplicateBbox(s, dedupedExisting.concat(accepted))) {
+        if (preserveExisting
+          ? overlapsSameLabel(s, dedupedExisting.concat(accepted), mergedTiling ? classAwareIou : 0.45)
+          : mergedTiling
+            ? overlapsSameClass(s, dedupedExisting, classAwareIou)
+            : isDuplicateBbox(s, dedupedExisting.concat(accepted))) {
           skipped += 1;
           return;
         }
