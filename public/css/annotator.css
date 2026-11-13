@@ -678,23 +678,28 @@ html, body { height: 100%; overflow: hidden; }
 #auto-model-select:disabled { opacity: .58; }
 .inference-classes-details { border: 1px solid var(--border); border-radius: 6px; background: var(--bg2); }
 .inference-classes-details.hidden { display: none; }
-.inference-classes-details > summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px; cursor: pointer; color: var(--text); font-size: 12px; font-weight: 600; }
-.inference-classes-summary { color: var(--text-muted); font-size: 10px; font-weight: 400; text-align: right; }
+.inference-classes-details > summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px; cursor: pointer; color: var(--text); font-size: 12px; font-weight: 600; list-style: none; }
+.inference-classes-details > summary::-webkit-details-marker { display: none; }
+.inference-classes-details > summary::after { content: '⌄'; color: var(--text-muted); font-size: 16px; line-height: 1; }
+.inference-classes-details[open] > summary::after { content: '⌃'; }
+.inference-classes-summary { color: var(--text-muted); font-size: 12px; font-weight: 400; text-align: right; }
 .inference-classes-body { padding: 0 9px 9px; min-width: 0; }
-.inference-classes-message { color: var(--text-muted); font-size: 10px; line-height: 1.4; padding: 4px 0; }
-.inference-classes-message.error { color: #e05c5c; }
-.inference-classes-search { display: block; margin-bottom: 6px; }
+.inference-classes-message { color: var(--text-muted); font-size: 12px; line-height: 1.4; padding: 4px 0; }
+.inference-classes-message.error { color: var(--danger, var(--text)); }
+.inference-classes-search { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; color: var(--text-muted); font-size: 12px; }
+.inference-classes-search[hidden] { display: none; }
 .inference-classes-search input { box-sizing: border-box; width: 100%; min-height: 44px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg3); color: var(--text); font: inherit; font-size: 11px; }
 .inference-classes-search input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .inference-classes-actions { display: flex; gap: 6px; margin-bottom: 4px; }
-.inference-classes-actions button, .inference-classes-retry { min-height: 44px; flex: 1; border: 1px solid var(--border); border-radius: 5px; background: var(--bg3); color: var(--text); padding: 6px 8px; cursor: pointer; font-size: 11px; }
+.inference-classes-actions button, .inference-classes-retry { min-height: 44px; flex: 1; border: 1px solid var(--border); border-radius: 5px; background: var(--bg3); color: var(--text); padding: 6px 8px; cursor: pointer; font-size: 12px; }
 .inference-classes-actions button:hover, .inference-classes-retry:hover { border-color: var(--accent); color: var(--accent); }
 .inference-classes-actions button:disabled, .inference-classes-retry:disabled { opacity: .45; cursor: not-allowed; }
 .inference-classes-list { display: flex; flex-direction: column; max-height: 220px; overflow-y: auto; }
-.inference-class-option { min-height: 44px; display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 11px; line-height: 1.25; cursor: pointer; }
+.inference-class-option { min-height: 44px; display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 12px; line-height: 1.25; cursor: pointer; }
 .inference-class-option input { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--accent); }
 .inference-class-option span { overflow-wrap: anywhere; }
-.inference-classes-empty { margin: 4px 0 0; color: #f5a623; font-size: 10px; line-height: 1.35; }
+.inference-classes-empty, .inference-classes-helper { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.35; }
+.inference-classes-no-match { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.35; }
 .inference-classes-retry { width: 100%; color: var(--accent); }
 .smart-mask-help {
   display:flex; flex-direction:column; gap:5px; padding:8px;

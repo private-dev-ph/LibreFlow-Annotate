@@ -702,6 +702,7 @@
       selectAll: document.getElementById('inference-classes-select-all'),
       clear: document.getElementById('inference-classes-clear'),
       list: document.getElementById('inference-classes-list'),
+      noMatch: document.getElementById('inference-classes-no-match'),
       empty: document.getElementById('inference-classes-empty'),
     };
   }
@@ -735,7 +736,9 @@
     if (!els.list) return;
     const query = String(els.search?.value || '').trim().toLowerCase();
     els.list.innerHTML = '';
-    classPickerState.classes.filter(item => !query || item.name.toLowerCase().includes(query)).forEach(item => {
+    const visibleClasses = classPickerState.classes.filter(item => !query || item.name.toLowerCase().includes(query));
+    if (els.noMatch) els.noMatch.hidden = !query || visibleClasses.length > 0;
+    visibleClasses.forEach(item => {
       const label = document.createElement('label');
       label.className = 'inference-class-option';
       const input = document.createElement('input');
@@ -744,7 +747,11 @@
       input.addEventListener('change', () => {
         if (input.checked) classPickerState.selected.add(item.id); else classPickerState.selected.delete(item.id);
         classPickerState.selections.set(String(classPickerState.modelId), new Set(classPickerState.selected));
+        const scrollTop = els.list?.scrollTop || 0;
         renderClassPicker(); updateInferenceButton();
+        if (els.list) els.list.scrollTop = scrollTop;
+        const focused = Array.from(classPickerElements().list?.querySelectorAll('input') || []).find(el => el.value === String(item.id));
+        focused?.focus();
       });
       const text = document.createElement('span'); text.textContent = item.name;
       label.append(input, text); els.list.appendChild(label);
@@ -924,6 +931,7 @@
         const applyResult = Canvas.addShapes(data.results, {
           preserveExisting: true,
           classAwareIou: tiling ? tiling.mergeIou : 0.45,
+          dedupeIncoming: !tiling,
         });
         const added = applyResult?.added ?? data.results.length;
         const skipped = applyResult?.skipped ?? 0;

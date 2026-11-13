@@ -1225,6 +1225,7 @@ const Canvas = (() => {
     addShapes(newShapes, options = {}) {
       const classAwareIou = options?.classAwareIou;
       const preserveExisting = options?.preserveExisting === true;
+      const dedupeIncoming = options?.dedupeIncoming !== false;
       const mergedTiling = Number.isFinite(classAwareIou) && classAwareIou >= 0 && classAwareIou <= 1;
       const dedupedExisting = [];
       const accepted = [];
@@ -1244,7 +1245,7 @@ const Canvas = (() => {
         // Keep those results intact and never clean up the user's existing
         // annotations; only skip same-class detections already on the canvas.
         if (preserveExisting
-          ? overlapsSameLabel(s, dedupedExisting.concat(accepted), mergedTiling ? classAwareIou : 0.45)
+          ? overlapsSameLabel(s, dedupedExisting.concat(dedupeIncoming ? accepted : []), mergedTiling ? classAwareIou : 0.45)
           : mergedTiling
             ? overlapsSameClass(s, dedupedExisting, classAwareIou)
             : isDuplicateBbox(s, dedupedExisting.concat(accepted))) {
