@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="/js/theme-init.js"></script>
+  <title>AI connections – LibreFlow Annotate</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="/css/nav.css" />
+  <link rel="stylesheet" href="/css/ai-connections.css" />
+  <link rel="stylesheet" href="/css/theme.css" />
+  <link rel="stylesheet" href="/css/icons.css" />
+</head>
+<body>
+  <nav id="top-nav">
+    <div class="nav-left">
+      <a class="nav-logo" href="/dashboard">
+        <img class="nav-logo-icon" src="/assets/libreflow-logo.svg" alt="" />
+        <span class="nav-logo-name">LibreFlow Annotate</span>
+      </a>
+      <div class="nav-links">
+        <a class="nav-link" href="/dashboard"><span data-lf-icon="grid" aria-hidden="true"></span>Dashboard</a>
+        <a class="nav-link active" href="/jobs"><span data-lf-icon="briefcase" aria-hidden="true"></span>Jobs</a>
+        <a class="nav-link" href="/models"><span data-lf-icon="brain" aria-hidden="true"></span>Models</a>
+        <a class="nav-link" href="/datasets"><span data-lf-icon="package" aria-hidden="true"></span>Datasets</a>
+      </div>
+    </div>
+    <div class="nav-right">
+      <div class="nav-notif-wrap" id="nav-notif-wrap">
+        <button class="nav-notif-btn" id="nav-notif-btn" title="Notifications" aria-label="Open notifications" type="button">
+          <span data-lf-icon="bell" aria-hidden="true"></span>
+          <span class="nav-notif-badge hidden" id="nav-notif-badge">0</span>
+        </button>
+        <div class="nav-inbox-dropdown hidden" id="nav-inbox-dropdown"></div>
+      </div>
+      <div class="nav-user">
+        <div class="nav-avatar" id="nav-avatar">?</div>
+        <span class="nav-username" id="nav-username">Loading…</span>
+      </div>
+      <button class="btn-theme-settings" id="btn-theme-settings" type="button" aria-label="Theme settings" aria-expanded="false" title="Theme settings">
+        <span data-lf-icon="settings" aria-hidden="true"></span><span class="btn-theme-label">Theme</span>
+      </button>
+      <button class="btn-logout" id="btn-logout" type="button">Sign Out</button>
+    </div>
+  </nav>
+
+  <main class="connections-body">
+    <div class="connections-container">
+      <a class="back-link" href="/jobs">← Back to Automation</a>
+      <header class="connections-header">
+        <div>
+          <p class="eyebrow">Local read-only MCP</p>
+          <h1>AI connections</h1>
+          <p class="lede">Give a trusted local AI tool limited, read-only access to the projects you choose.</p>
+        </div>
+        <a class="docs-link" href="/docs/mcp-local-setup.md">Local MCP setup</a>
+      </header>
+
+      <div id="page-status" class="page-status" role="status" aria-live="polite"></div>
+      <section id="disabled-notice" class="notice-card is-disabled" hidden aria-labelledby="disabled-title">
+        <div class="notice-icon" data-lf-icon="info" aria-hidden="true"></div>
+        <div><h2 id="disabled-title">Local MCP is disabled on this server</h2><p>Existing connections remain visible and can be revoked. Ask an administrator to enable MCP, then follow the <a href="/docs/mcp-local-setup.md">local setup guide</a>.</p></div>
+      </section>
+
+      <div class="connections-grid">
+        <section class="connection-card create-card" aria-labelledby="create-title">
+          <div class="card-heading"><div><h2 id="create-title">Create a connection</h2><p>Access is scoped to selected projects and expires automatically.</p></div><span class="feature-chip">Read only</span></div>
+          <form id="connection-form" novalidate>
+            <label for="connection-name">Connection name</label>
+            <input id="connection-name" name="name" type="text" maxlength="120" autocomplete="off" required placeholder="e.g. Research assistant" />
+            <p class="field-help">Use a name you will recognize in your AI tool settings.</p>
+
+            <fieldset class="project-fieldset">
+              <legend>Projects <span class="required-label">Required</span></legend>
+              <p class="field-help">Choose at least one project. Nothing is selected by default.</p>
+              <label class="search-label" for="project-search"><span data-lf-icon="search" aria-hidden="true"></span><span class="sr-only">Search projects</span></label>
+              <input id="project-search" class="project-search" type="search" placeholder="Search projects" autocomplete="off" />
+              <div id="project-list" class="project-list" role="group" aria-describedby="project-help"></div>
+              <p id="project-help" class="field-help project-help"></p>
+            </fieldset>
+
+            <fieldset>
+              <legend>Permissions</legend>
+              <label class="scope-row required-scope"><input type="checkbox" checked disabled /><span><strong>Project and image metadata</strong><small>Required · names, labels, dimensions, and other metadata — never original image files.</small></span></label>
+              <label class="scope-row"><input id="scope-annotations" type="checkbox" /><span><strong>Annotation content</strong><small>Optional · annotation geometry and labels for the selected projects.</small></span></label>
+            </fieldset>
+
+            <fieldset>
+              <legend>Expires after</legend>
+              <div id="expiry-options" class="expiry-options"></div>
+            </fieldset>
+
+            <div class="grant-summary" aria-labelledby="summary-title">
+              <h3 id="summary-title">Before you grant access</h3>
+              <p id="grant-summary-text">Select a project to review exactly what this connection can read.</p>
+            </div>
+            <p id="form-error" class="form-error" role="alert"></p>
+            <button id="create-connection" class="primary-action" type="submit">Create connection</button>
+          </form>
+          <div id="token-panel" class="token-panel" hidden aria-labelledby="token-title">
+            <div class="token-heading"><div><h3 id="token-title">Save this token now</h3><p>This token is shown once and will not be stored in this browser.</p></div><span data-lf-icon="key" aria-hidden="true"></span></div>
+            <label for="connection-token">MCP token</label>
+            <div class="token-row"><input id="connection-token" type="text" readonly aria-describedby="token-help" /><button id="copy-token" class="secondary-action" type="button">Copy</button></div>
+            <p id="token-help" class="field-help">Paste it into your local AI tool configuration. It is cleared when you dismiss it or leave this page.</p>
+            <button id="dismiss-token" class="secondary-action" type="button">I saved it</button>
+          </div>
+        </section>
+
+        <section class="connection-card setup-card" aria-labelledby="setup-title">
+          <div class="card-heading"><div><h2 id="setup-title">Connect a local AI tool</h2><p>Run the LibreFlow MCP server on the same machine as your AI tool.</p></div></div>
+          <ol class="setup-steps">
+            <li><span>1</span><div><strong>Start the local bridge</strong><code>node /absolute/path/bin/libreflow-mcp.js</code></div></li>
+            <li><span>2</span><div><strong>Set the endpoint</strong><code>LIBREFLOW_MCP_URL=http://127.0.0.1:6769</code></div></li>
+            <li><span>3</span><div><strong>Add your one-time token</strong><code>LIBREFLOW_MCP_TOKEN=your-token-here</code></div></li>
+          </ol>
+          <p class="setup-note">Only the selected project names, labels, image metadata, and—if enabled—annotation geometry can be sent to your chosen AI service. Original image files and write access are never available in this first version.</p>
+          <a class="text-link" href="/docs/mcp-local-setup.md">Read the complete local setup guide →</a>
+        </section>
+      </div>
+
+      <section class="connection-card list-card" aria-labelledby="connections-title">
+        <div class="card-heading"><div><h2 id="connections-title">Your connections</h2><p>Review access, recent use, and revoke anything you no longer need.</p></div><button id="refresh-connections" class="secondary-action" type="button">Refresh</button></div>
+        <div id="connections-list" class="connections-list"><p class="muted">Loading connections…</p></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/icons.js"></script>
+  <script src="/js/notifications.js"></script>
+  <script src="/js/nav-inbox.js"></script>
+  <script src="/js/theme.js"></script>
+  <script src="/js/ai-connections.js"></script>
+</body>
+</html>
