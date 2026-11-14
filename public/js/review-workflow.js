@@ -18,8 +18,12 @@
   const feedback = document.getElementById('review-feedback');
   let currentImageId = null;
   let review = null;
+  let history = [];
+  let historyImageId = null;
+  let historyLoading = null;
   let imageRequestGeneration = 0;
   let refreshGeneration = 0;
+  let historyGeneration = 0;
 
   const statusLabels = {
     unannotated: 'Unannotated',
@@ -89,7 +93,8 @@
     });
   }
 
-  function renderReview(revisions) {
+  function renderReview(revisions = []) {
+    revisions = Array.isArray(revisions) ? revisions : [];
     const statuses = review.allowedStatuses || review.statuses || Object.keys(statusLabels);
     statusSelect.innerHTML = statuses.map(status =>
       `<option value="${escapeHtml(status)}" ${status === review.status ? 'selected' : ''}>${escapeHtml(statusLabels[status] || status)}</option>`
@@ -112,19 +117,78 @@
     renderThread();
   }
 
+  function clearHistoryControls() {
+    revisionSelect.innerHTML = '<option value="">No saved revisions</option>';
+    restoreButton.disabled = true;
+  }
+
+  function clearImageState() {
+    review = null;
+    history = [];
+    historyImageId = null;
+    historyLoading = null;
+    refreshGeneration += 1;
+    historyGeneration += 1;
+    badge.textContent = statusLabels.unannotated;
+    badge.dataset.status = 'unannotated';
+    statusSelect.innerHTML = '';
+    reviewerSelect.innerHTML = '';
+    rejection.textContent = '';
+    rejection.classList.add('hidden');
+    clearHistoryControls();
+    thread.innerHTML = '<div class="review-entry-meta">No review discussion yet.</div>';
+    setFeedback('');
+  }
+
+  function invalidateHistory(imageId) {
+    if (currentImageId !== imageId) return;
+    history = [];
+    historyImageId = null;
+    historyLoading = null;
+    historyGeneration += 1;
+    clearHistoryControls();
+  }
+
+  function loadHistory(imageId) {
+    if (!panel.open || !imageId || currentImageId !== imageId) return Promise.resolve();
+    if (historyImageId === imageId) return Promise.resolve(history);
+    if (historyLoading?.imageId === imageId) return historyLoading.promise;
+
+    const requestId = ++historyGeneration;
+    const pending = { imageId, requestId, promise: null };
+    historyLoading = pending;
+    setFeedback('Loading history…');
+    pending.promise = Promise.resolve()
+      .then(() => API.getAnnotationRevisions(imageId))
+      .then(revisions => {
+        if (historyLoading === pending) historyLoading = null;
+        if (currentImageId !== imageId || requestId !== historyGeneration || !panel.open) return;
+        history = Array.isArray(revisions) ? revisions : [];
+        historyImageId = imageId;
+        if (review) renderReview(history);
+        setFeedback('');
+        return history;
+      })
+      .catch(error => {
+        if (historyLoading === pending) historyLoading = null;
+        if (currentImageId !== imageId || requestId !== historyGeneration || !panel.open) return;
+        clearHistoryControls();
+        setFeedback(error.message || 'Could not load annotation history.', true);
+      });
+    return pending.promise;
+  }
+
   async function refresh(imageId) {
     if (!imageId) return;
     const refreshId = ++refreshGeneration;
     setFeedback('Loading…');
     try {
-      const [nextReview, revisions] = await Promise.all([
-        API.getImageReview(imageId),
-        API.getAnnotationRevisions(imageId),
-      ]);
+      const nextReview = await API.getImageReview(imageId);
       if (currentImageId !== imageId || refreshId !== refreshGeneration) return;
       review = nextReview;
-      renderReview(revisions);
+      renderReview(historyImageId === imageId ? history : []);
       setFeedback('');
+      if (panel.open) loadHistory(imageId);
     } catch (error) {
       if (currentImageId !== imageId || refreshId !== refreshGeneration) return;
       setFeedback(error.message || 'Could not load review.', true);
@@ -135,6 +199,7 @@
   API.getAnnotations = async imageId => {
     currentImageId = imageId;
     const requestId = ++imageRequestGeneration;
+    clearImageState();
     const annotations = await originalGetAnnotations(imageId);
     if (currentImageId === imageId && requestId === imageRequestGeneration) refresh(imageId);
     return annotations;
@@ -143,18 +208,26 @@
   const originalSaveAnnotations = API.saveAnnotations.bind(API);
   API.saveAnnotations = async (imageId, shapes, metadata, options) => {
     const result = await originalSaveAnnotations(imageId, shapes, metadata);
-    if (options?.refreshReview !== false && currentImageId === imageId) refresh(imageId);
+    if (currentImageId === imageId) {
+      invalidateHistory(imageId);
+      if (options?.refreshReview !== false) refresh(imageId);
+    }
     return result;
   };
 
   const originalUpdateImage = API.updateImage.bind(API);
   API.updateImage = async (imageId, data) => {
     const result = await originalUpdateImage(imageId, data);
-    if (Object.prototype.hasOwnProperty.call(data || {}, 'isNull') && currentImageId === imageId) {
-      refresh(imageId);
+    if (currentImageId === imageId) {
+      invalidateHistory(imageId);
+      if (Object.prototype.hasOwnProperty.call(data || {}, 'isNull')) refresh(imageId);
     }
     return result;
   };
+
+  panel.addEventListener('toggle', () => {
+    if (panel.open && currentImageId) loadHistory(currentImageId);
+  });
 
   statusSelect.addEventListener('change', async () => {
     if (!currentImageId || !review) return;
