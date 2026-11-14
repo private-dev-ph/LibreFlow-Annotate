@@ -164,15 +164,25 @@ test('maps an inference timeout/abort to a bounded safe error', async () => {
 
 test('returns busy while another metadata lookup is active and rejects revoked sharing', async () => {
   let release;
-  global.fetch = async () => new Promise(resolve => { release = () => resolve(response({ task: 'detect', classes: [{ id: 0, name: 'one' }] })); });
+  let fetchStarted;
+  const fetchStartedPromise = new Promise(resolve => { fetchStarted = resolve; });
+  global.fetch = async () => {
+    fetchStarted();
+    return new Promise(resolve => { release = () => resolve(response({ task: 'detect', classes: [{ id: 0, name: 'one' }] })); });
+  };
   const first = handlers.libreflow_get_model_classes(collaborator, { projectId: 'project-1', modelId: 'model-a' });
-  await new Promise(resolve => setImmediate(resolve));
-  await assert.rejects(handlers.libreflow_get_model_classes(collaborator, { projectId: 'project-1', modelId: 'model-a' }), error => error.status === 429);
-  models[0].sharedWithCollaborators = false;
-  persistModels();
-  release();
-  await assert.rejects(first, error => error.status === 404);
-  models[0].sharedWithCollaborators = true;
-  persistModels();
+  const firstOutcome = assert.rejects(first, error => error.status === 404);
+  try {
+    await fetchStartedPromise;
+    await assert.rejects(handlers.libreflow_get_model_classes(collaborator, { projectId: 'project-1', modelId: 'model-a' }), error => error.status === 429);
+    models[0].sharedWithCollaborators = false;
+    persistModels();
+    release();
+    await firstOutcome;
+  } finally {
+    models[0].sharedWithCollaborators = true;
+    persistModels();
+    if (release) release();
+  }
 });
 
