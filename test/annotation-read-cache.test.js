@@ -11,6 +11,7 @@ fs.mkdirSync(process.env.LIBREFLOW_DATA_DIR, { recursive: true });
 const { dataPath, writeJson } = require('../lib/data-store');
 const { writeJson: writeAtomicJson } = require('../lib/json-store');
 const { readJsonByKey, warmJsonIndex } = require('../lib/read-index');
+const { recoverDataCommands } = require('../lib/data-command');
 const {
   createRevision,
   getRevision,
@@ -188,5 +189,6 @@ test('failed history append invalidates the cached snapshot and leaves source un
     fs.writeFileSync = originalWriteFileSync;
   }
 
-  assert.deepEqual(readJsonByKey(filePath, 'imageId', 'image-1').map(item => item.id), ['existing']);
+  recoverDataCommands();
+  assert.deepEqual(readJsonByKey(filePath, 'imageId', 'image-1').map(item => item.id), ['existing', 'new']);
 });
