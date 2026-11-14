@@ -93,6 +93,24 @@ test('indexed caches cannot escape a command rollback or nested rollback', () =>
   assert.deepEqual(readJsonByKey(filePath, 'id', 'appended'), []);
 });
 
+test('nested rollback keeps staged cache identities monotonic', () => {
+  const filePath = dataFile('nested-version-rollback.json');
+  writeJson(filePath, [{ id: 'old' }]);
+
+  runDataCommand(() => {
+    writeJson(filePath, [{ id: 'A' }]);
+    assert.deepEqual(readJsonByKey(filePath, 'id', 'A'), [{ id: 'A' }]);
+    assert.throws(() => runDataCommand(() => {
+      writeJson(filePath, [{ id: 'B' }]);
+      assert.deepEqual(readJsonByKey(filePath, 'id', 'B'), [{ id: 'B' }]);
+      throw new Error('abort B');
+    }), /abort B/);
+    writeJson(filePath, [{ id: 'C' }]);
+    assert.deepEqual(readJsonByKey(filePath, 'id', 'C'), [{ id: 'C' }]);
+  });
+  assert.deepEqual(readJsonByKey(filePath, 'id', 'C'), [{ id: 'C' }]);
+});
+
 test('a target failure leaves a bounded journal that recovery replays', () => {
   const firstPath = dataFile('recovery-first.json');
   const secondPath = dataFile('recovery-second.json');
