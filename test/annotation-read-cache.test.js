@@ -9,6 +9,7 @@ process.env.LIBREFLOW_DATA_DIR = path.join(testRoot, 'data');
 fs.mkdirSync(process.env.LIBREFLOW_DATA_DIR, { recursive: true });
 
 const { dataPath, writeJson } = require('../lib/data-store');
+const { writeJson: writeAtomicJson } = require('../lib/json-store');
 const { readJsonByKey, warmJsonIndex } = require('../lib/read-index');
 const {
   createRevision,
@@ -82,6 +83,40 @@ test('startup warming builds an index without exposing data and respects the siz
   } finally {
     fs.readFileSync = originalReadFileSync;
   }
+});
+
+test('successful writes through both JSON stores invalidate same-metadata cached entries', () => {
+  const dataStorePath = dataPath('data-store-annotations.json');
+  const atomicStorePath = dataPath('atomic-store-annotations.json');
+  writeJson(dataStorePath, [{ id: 'old', imageId: 'image-1' }]);
+  writeAtomicJson(atomicStorePath, [{ id: 'old', imageId: 'image-1' }]);
+  assert.equal(readJsonByKey(dataStorePath, 'imageId', 'image-1')[0].id, 'old');
+  assert.equal(readJsonByKey(atomicStorePath, 'imageId', 'image-1')[0].id, 'old');
+
+  writeJson(dataStorePath, [{ id: 'new', imageId: 'image-1' }]);
+  writeAtomicJson(atomicStorePath, [{ id: 'new', imageId: 'image-1' }]);
+  assert.equal(readJsonByKey(dataStorePath, 'imageId', 'image-1')[0].id, 'new');
+  assert.equal(readJsonByKey(atomicStorePath, 'imageId', 'image-1')[0].id, 'new');
+});
+
+test('external atomic replacement still invalidates through file identity metadata', () => {
+  const filePath = dataPath('external-annotations.json');
+  const temporaryPath = `${filePath}.replacement`;
+  fs.writeFileSync(filePath, JSON.stringify([{ id: 'old', imageId: 'image-1' }]));
+  assert.equal(readJsonByKey(filePath, 'imageId', 'image-1')[0].id, 'old');
+
+  fs.writeFileSync(temporaryPath, JSON.stringify([{ id: 'new', imageId: 'image-1' }]));
+  try {
+    fs.renameSync(temporaryPath, filePath);
+  } catch (error) {
+    if (fs.existsSync(filePath)) {
+      fs.copyFileSync(temporaryPath, filePath);
+      fs.unlinkSync(temporaryPath);
+    } else {
+      throw error;
+    }
+  }
+  assert.equal(readJsonByKey(filePath, 'imageId', 'image-1')[0].id, 'new');
 });
 
 test('history appends reuse one parsed snapshot, preserve clones, and follow external versions', () => {
