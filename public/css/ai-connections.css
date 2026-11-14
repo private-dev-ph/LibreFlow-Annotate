@@ -237,6 +237,153 @@
   font-size: 11px;
   line-height: 1.5;
 }
+.requests-card {
+  margin-bottom: 16px;
+  padding: 20px 22px;
+}
+.requests-note {
+  margin: -4px 0 14px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.requests-list {
+  display: grid;
+  gap: 10px;
+}
+.request-row {
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.request-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.request-title,
+.request-detail-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.request-meta,
+.request-expiry,
+.request-detail-context {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.request-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.status-badge.pending {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+.status-badge.approved {
+  border-color: var(--success);
+  color: var(--success);
+}
+.status-badge.rejected {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.request-preview {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.request-description {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.request-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.request-count {
+  display: inline-flex;
+  min-width: 72px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.request-count strong {
+  color: var(--text);
+  font-size: 13px;
+}
+.request-count small {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+.request-settings {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.35fr) minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 11px;
+}
+.request-settings dt {
+  color: var(--text-dim);
+}
+.request-settings dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.request-warnings {
+  margin: 0;
+  padding: 9px 12px 9px 25px;
+  border-left: 3px solid var(--accent2);
+  background: color-mix(in srgb, var(--accent2) 12%, var(--surface));
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.request-expiry {
+  margin: 0;
+}
+.request-detail {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.request-detail-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+.request-detail-heading .request-detail-context {
+  margin: 0;
+}
+.request-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
 .list-card {
   padding: 20px 22px;
 }
@@ -999,6 +1146,7 @@ summary:focus-visible,
   }
   .status-card,
   .access-card,
+  .requests-card,
   .list-card {
     padding: 16px;
   }
@@ -1012,6 +1160,19 @@ summary:focus-visible,
   .connection-card-head {
     flex-direction: column;
     gap: 10px;
+  }
+  .request-card-head {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .request-actions {
+    justify-content: flex-start;
+  }
+  .request-dialog-actions {
+    flex-direction: column-reverse;
+  }
+  .request-dialog-actions button {
+    width: 100%;
   }
   .connection-actions {
     justify-content: flex-start;

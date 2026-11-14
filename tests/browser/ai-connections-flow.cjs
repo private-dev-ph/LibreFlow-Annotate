@@ -48,7 +48,47 @@ function sendJson(response, status, body) {
 }
 
 function startFixture() {
-  const state = { connections: [], postBodies: [] };
+  const requestSummary = {
+    title: "Generate an inference draft",
+    description:
+      "Run the selected model against the approved image set and return a draft result.",
+    warnings: ["The model can use the selected image previews."],
+    counts: { images: 12, classes: 3 },
+    details: [
+      { label: "Model", value: "Fixture detector" },
+      { label: "Confidence", value: "0.65" },
+    ],
+  };
+  const state = {
+    connections: [],
+    postBodies: [],
+    requestBodies: [],
+    failNextReject: true,
+    requests: [
+      {
+        id: "request-1",
+        kind: "inference",
+        status: "pending",
+        projectId: "project-1",
+        connectionId: "connection-1",
+        digest: "digest-one",
+        summary: requestSummary,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      },
+      {
+        id: "request-2",
+        kind: "inference",
+        status: "pending",
+        projectId: "project-1",
+        connectionId: "connection-1",
+        digest: "digest-two",
+        summary: { ...requestSummary, title: "Generate a second draft" },
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      },
+    ],
+  };
   const server = http.createServer((request, response) => {
     const url = new URL(request.url, "http://127.0.0.1");
     if (url.pathname === "/api/auth/me")
@@ -93,6 +133,59 @@ function startFixture() {
         };
         state.connections = [connection];
         sendJson(response, 201, { connection, token: "fixture-secret-token" });
+      });
+      return;
+    }
+
+    if (
+      url.pathname === "/api/mcp/connections/requests" &&
+      request.method === "GET"
+    ) {
+      return sendJson(response, 200, { requests: state.requests });
+    }
+
+    if (
+      url.pathname.startsWith("/api/mcp/connections/requests/") &&
+      request.method === "GET"
+    ) {
+      const id = url.pathname.split("/").pop();
+      const found = state.requests.find((item) => item.id === id);
+      return found
+        ? sendJson(response, 200, { request: found })
+        : sendJson(response, 404, { error: "Request not found." });
+    }
+
+    if (
+      url.pathname.startsWith("/api/mcp/connections/requests/") &&
+      request.method === "POST"
+    ) {
+      const parts = url.pathname.split("/");
+      const id = parts[parts.length - 2];
+      const action = parts[parts.length - 1];
+      let raw = "";
+      request.on("data", (chunk) => {
+        raw += chunk;
+      });
+      request.on("end", () => {
+        const body = JSON.parse(raw);
+        state.requestBodies.push({ id, action, body });
+        if (action === "reject" && state.failNextReject) {
+          state.failNextReject = false;
+          return sendJson(response, 409, { error: "Request is stale." });
+        }
+        const current = state.requests.find((item) => item.id === id);
+        if (!current || body.digest !== current.digest)
+          return sendJson(response, 409, { error: "Request is stale." });
+        const updated = {
+          ...current,
+          status: action === "approve" ? "approved" : "rejected",
+          [action === "approve" ? "approvedAt" : "rejectedAt"]:
+            new Date().toISOString(),
+        };
+        state.requests = state.requests.map((item) =>
+          item.id === id ? updated : item,
+        );
+        sendJson(response, 200, { request: updated });
       });
       return;
     }
@@ -273,6 +366,52 @@ async function run() {
     await page.locator("#dismiss-token").click();
     await page.locator("#client-search").fill("Fixture");
     assert.equal(await page.locator(".connection-row").count(), 1);
+    assert.equal(await page.locator(".request-row").count(), 2);
+    const firstReview = page.locator(
+      '.request-row[data-request-id="request-1"] button',
+    );
+    await firstReview.click();
+    await page.waitForSelector("#request-dialog[open]");
+    assert.doesNotMatch(
+      await page.locator("#request-detail").textContent(),
+      /digest-one/,
+    );
+    await page.keyboard.press("Escape");
+    assert.equal(
+      await page.evaluate(() => document.activeElement.textContent),
+      "Review action",
+    );
+    await page.goto(`${page.url().split("#")[0]}#request=request-1`);
+    await page.waitForSelector("#request-dialog[open]");
+    await page.locator("#approve-request").click();
+    await page.waitForSelector(
+      '.request-row[data-request-id="request-1"] .status-badge.approved',
+    );
+    assert.equal(
+      await page.locator("#request-dialog").evaluate((dialog) => dialog.open),
+      false,
+    );
+    const secondReview = page.locator(
+      '.request-row[data-request-id="request-2"] button',
+    );
+    await secondReview.click();
+    await page.locator("#reject-request").click();
+    assert.equal(
+      await page.locator("#request-dialog").evaluate((dialog) => dialog.open),
+      true,
+    );
+    assert.match(
+      await page.locator("#request-dialog-error").textContent(),
+      /stale/,
+    );
+    await page.locator("#reject-request").click();
+    await page.waitForSelector(
+      '.request-row[data-request-id="request-2"] .status-badge.rejected',
+    );
+    assert.deepEqual(
+      fixture.state.requestBodies.map((item) => item.action),
+      ["approve", "reject", "reject"],
+    );
     await page.locator(".connection-row button", { hasText: "Revoke" }).click();
     await page.locator(".revoke-confirm button", { hasText: "Revoke" }).click();
     await page.waitForSelector(".status-badge.revoked");
@@ -282,7 +421,7 @@ async function run() {
     );
     await context.close();
     console.log(
-      "ai-connections browser fixture passed: wizard, dependencies, token hygiene, Docker snippet, search/revoke, 320/375/768/1440 light/dark, keyboard Escape, reduced motion",
+      "ai-connections browser fixture passed: wizard, dependencies, token hygiene, Docker snippet, request approve/reject/deep-link/error, search/revoke, 320/375/768/1440 light/dark, keyboard Escape/focus, reduced motion",
     );
   } finally {
     await browser.close();

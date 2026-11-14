@@ -194,6 +194,41 @@
           </p>
         </section>
         <section
+          class="connection-card requests-card"
+          aria-labelledby="requests-title"
+        >
+          <div class="card-heading list-heading">
+            <div>
+              <h2 id="requests-title">Pending AI actions</h2>
+              <p>
+                Review exactly what an AI client wants to start before anything
+                is applied.
+              </p>
+            </div>
+            <button
+              id="refresh-requests"
+              class="secondary-action"
+              type="button"
+            >
+              Refresh
+            </button>
+          </div>
+          <p class="requests-note">
+            Approval permits the AI client to start that exact action. Inference
+            produces drafts; saving drafts needs separate approval.
+          </p>
+          <div class="list-toolbar">
+            <span
+              id="request-count"
+              class="list-count"
+              aria-live="polite"
+            ></span>
+          </div>
+          <div id="requests-list" class="requests-list">
+            <p class="muted">Loading pending requests…</p>
+          </div>
+        </section>
+        <section
           class="connection-card list-card"
           aria-labelledby="connections-title"
         >
@@ -432,6 +467,51 @@
           <div id="setup-instructions" class="setup-instructions"></div>
           <button id="dismiss-token" class="secondary-action" type="button">
             I saved it — close setup
+          </button>
+        </div>
+      </div>
+    </dialog>
+    <dialog
+      id="request-dialog"
+      class="client-dialog request-dialog"
+      aria-labelledby="request-dialog-title"
+    >
+      <div class="dialog-shell">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">AI action review</p>
+            <h2 id="request-dialog-title">Review this requested action</h2>
+            <p>
+              Approve or reject this exact request. The payload cannot be edited
+              here.
+            </p>
+          </div>
+          <button
+            id="close-request-dialog"
+            class="icon-action"
+            type="button"
+            aria-label="Close action review"
+          >
+            <span data-lf-icon="close" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div
+          id="request-dialog-error"
+          class="form-error dialog-error"
+          role="alert"
+          tabindex="-1"
+        ></div>
+        <div id="request-detail" class="request-detail"></div>
+        <div class="request-dialog-actions">
+          <button
+            id="reject-request"
+            class="secondary-action danger-action"
+            type="button"
+          >
+            Reject request
+          </button>
+          <button id="approve-request" class="primary-action" type="button">
+            Approve exact action
           </button>
         </div>
       </div>

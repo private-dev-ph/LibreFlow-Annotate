@@ -46,6 +46,15 @@
     listSearch: document.getElementById("client-search"),
     count: document.getElementById("connection-count"),
     refresh: document.getElementById("refresh-connections"),
+    requests: document.getElementById("requests-list"),
+    requestCount: document.getElementById("request-count"),
+    refreshRequests: document.getElementById("refresh-requests"),
+    requestDialog: document.getElementById("request-dialog"),
+    closeRequestDialog: document.getElementById("close-request-dialog"),
+    requestDialogError: document.getElementById("request-dialog-error"),
+    requestDetail: document.getElementById("request-detail"),
+    approveRequest: document.getElementById("approve-request"),
+    rejectRequest: document.getElementById("reject-request"),
   };
   const state = {
     config: {},
@@ -63,6 +72,10 @@
     tokenVisible: false,
     tokenConnectionId: null,
     lastTrigger: null,
+    requests: [],
+    activeRequest: null,
+    requestTrigger: null,
+    requestSubmitting: false,
   };
 
   els.avatar.textContent = String(me.username || "?")
@@ -102,13 +115,20 @@
     else setStatus(message || title, type === "error");
   }
   async function request(url, options = {}) {
-    const response = await fetch(url, {
+    const fetcher =
+      typeof window.apiFetch === "function"
+        ? window.apiFetch
+        : window.fetch.bind(window);
+    const response = await fetcher(url, {
       credentials: "include",
       ...options,
       headers: options.body
         ? { "Content-Type": "application/json", ...(options.headers || {}) }
         : options.headers,
     });
+    if (!response || typeof response.text !== "function") {
+      return response;
+    }
     const raw = await response.text();
     let data = null;
     try {
@@ -792,6 +812,351 @@
     }
   }
 
+  function getRequestHashId() {
+    const hash = window.location.hash.replace(/^#/, "");
+    return new URLSearchParams(hash).get("request");
+  }
+
+  function requestStatus(request) {
+    const status = String(request?.status || "pending").toLowerCase();
+    if (status === "pending" && request?.expiresAt) {
+      const expiresAt = new Date(request.expiresAt).getTime();
+      if (!Number.isNaN(expiresAt) && expiresAt <= Date.now()) {
+        return { label: "Expired", className: "expired", canDecide: false };
+      }
+    }
+    if (status === "approved") {
+      return { label: "Approved", className: "approved", canDecide: false };
+    }
+    if (status === "rejected") {
+      return { label: "Rejected", className: "rejected", canDecide: false };
+    }
+    if (status !== "pending") {
+      return {
+        label: status || "Unavailable",
+        className: "expired",
+        canDecide: false,
+      };
+    }
+    return {
+      label: "Pending review",
+      className: "pending",
+      canDecide: Boolean(request?.digest),
+    };
+  }
+
+  function appendRequestSummary(parent, request) {
+    const summary = request?.summary || {};
+    if (summary.description)
+      parent.append(node("p", "request-description", summary.description));
+
+    const counts =
+      summary.counts && typeof summary.counts === "object"
+        ? summary.counts
+        : {};
+    const countEntries = Object.entries(counts).filter(
+      ([, value]) => value !== null && value !== undefined,
+    );
+    if (countEntries.length) {
+      const countList = node("div", "request-counts");
+      countEntries.forEach(([label, value]) => {
+        const item = node("span", "request-count");
+        item.append(
+          node("strong", "", String(value)),
+          node("small", "", label),
+        );
+        countList.append(item);
+      });
+      parent.append(countList);
+    }
+
+    if (Array.isArray(summary.details) && summary.details.length) {
+      const details = node("dl", "request-settings");
+      summary.details.forEach((detail) => {
+        if (!detail || detail.label === undefined || detail.value === undefined)
+          return;
+        details.append(
+          node("dt", "", detail.label),
+          node("dd", "", detail.value),
+        );
+      });
+      parent.append(details);
+    }
+
+    if (Array.isArray(summary.warnings) && summary.warnings.length) {
+      const warnings = node("ul", "request-warnings");
+      summary.warnings.forEach((warning) =>
+        warnings.append(node("li", "", warning)),
+      );
+      parent.append(warnings);
+    }
+  }
+
+  function requestContext(request) {
+    const connection = state.connections.find(
+      (item) => String(item.id) === String(request?.connectionId),
+    );
+    const project = request?.projectId
+      ? projectName(request.projectId)
+      : "Selected project";
+    return {
+      connection:
+        connection?.name || request?.connectionId || "Connected client",
+      project,
+    };
+  }
+
+  function renderRequests(focusId = null) {
+    clear(els.requests);
+    els.requestCount.textContent = `${state.requests.length} request${state.requests.length === 1 ? "" : "s"}`;
+    if (!state.requests.length) {
+      els.requests.append(node("p", "muted", "No pending AI actions."));
+      return;
+    }
+
+    state.requests.forEach((request) => {
+      const status = requestStatus(request);
+      const context = requestContext(request);
+      const card = node("article", "request-row");
+      card.dataset.requestId = request.id;
+      const header = node("div", "request-card-head");
+      const copy = node("div", "request-main");
+      copy.append(
+        node(
+          "h3",
+          "request-title",
+          request.summary?.title || "Requested AI action",
+        ),
+        node("p", "request-meta", `${context.connection} · ${context.project}`),
+      );
+      const actions = node("div", "request-actions");
+      actions.append(
+        node(
+          "span",
+          `status-badge request-status ${status.className}`,
+          status.label,
+        ),
+      );
+      const review = node("button", "secondary-action", "Review action");
+      review.type = "button";
+      review.dataset.requestId = request.id;
+      review.disabled = status.label === "Expired";
+      review.addEventListener("click", () => openRequest(request.id, review));
+      actions.append(review);
+      header.append(copy, actions);
+      card.append(header);
+
+      const preview = node("div", "request-preview");
+      appendRequestSummary(preview, request);
+      const expiry = request.expiresAt
+        ? `Expires ${formatDate(request.expiresAt)}`
+        : "Expiration not provided";
+      preview.append(node("p", "request-expiry", expiry));
+      card.append(preview);
+      els.requests.append(card);
+    });
+
+    if (focusId) {
+      const card = els.requests.querySelector(
+        `[data-request-id="${CSS.escape(String(focusId))}"]`,
+      );
+      card?.querySelector("button")?.focus();
+    }
+  }
+
+  function renderRequestDetail(request, { preserveError = false } = {}) {
+    clear(els.requestDetail);
+    if (!preserveError) els.requestDialogError.textContent = "";
+    const status = requestStatus(request);
+    const context = requestContext(request);
+    const heading = node("div", "request-detail-heading");
+    heading.append(
+      node(
+        "span",
+        `status-badge request-status ${status.className}`,
+        status.label,
+      ),
+      node(
+        "p",
+        "request-detail-context",
+        `${context.connection} · ${context.project}`,
+      ),
+    );
+    els.requestDetail.append(
+      heading,
+      node(
+        "h3",
+        "request-detail-title",
+        request.summary?.title || "Requested AI action",
+      ),
+    );
+    appendRequestSummary(els.requestDetail, request);
+    if (request.expiresAt) {
+      els.requestDetail.append(
+        node("p", "request-expiry", `Expires ${formatDate(request.expiresAt)}`),
+      );
+    }
+    els.approveRequest.disabled = !status.canDecide;
+    els.rejectRequest.disabled = !status.canDecide;
+    if (!status.canDecide) {
+      els.requestDialogError.textContent =
+        status.label === "Expired"
+          ? "This request expired and cannot be approved. Refresh to see the latest state."
+          : "This request is no longer awaiting review.";
+    }
+  }
+
+  function setRequestError(message) {
+    els.requestDialogError.textContent = message;
+    els.requestDialogError.focus();
+  }
+
+  async function openRequest(id, trigger = null) {
+    state.requestTrigger = trigger || document.activeElement;
+    els.requestDialogError.textContent = "Loading request…";
+    try {
+      const data = await request(
+        `/api/mcp/connections/requests/${encodeURIComponent(id)}`,
+      );
+      if (!data?.request)
+        throw new Error("This request is no longer available.");
+      state.activeRequest = data.request;
+      renderRequestDetail(state.activeRequest);
+      if (typeof els.requestDialog.showModal === "function")
+        els.requestDialog.showModal();
+      else els.requestDialog.setAttribute("open", "");
+      els.closeRequestDialog.focus();
+    } catch (error) {
+      setStatus(error.message || "This request could not be loaded.");
+      els.requestDialogError.textContent = "";
+    }
+  }
+
+  function closeRequestDialog() {
+    if (els.requestDialog.open) els.requestDialog.close();
+    else els.requestDialog.removeAttribute("open");
+    state.activeRequest = null;
+    els.requestDialogError.textContent = "";
+    state.requestTrigger?.focus?.();
+    state.requestTrigger = null;
+  }
+
+  function trapRequestFocus(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeRequestDialog();
+      return;
+    }
+    if (event.key !== "Tab" || !els.requestDialog.open) return;
+    const focusable = [
+      ...els.requestDialog.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
+      ),
+    ].filter((item) => {
+      if (item.closest("[hidden], [inert]")) return false;
+      const style = window.getComputedStyle(item);
+      return (
+        style.display !== "none" &&
+        style.visibility !== "hidden" &&
+        item.getClientRects().length > 0
+      );
+    });
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  async function decideRequest(action) {
+    const current = state.activeRequest;
+    if (!current || state.requestSubmitting) return;
+    const status = requestStatus(current);
+    if (!status.canDecide) {
+      setRequestError(
+        "This request is stale or expired. Refresh to see the latest state.",
+      );
+      return;
+    }
+    state.requestSubmitting = true;
+    els.approveRequest.disabled = true;
+    els.rejectRequest.disabled = true;
+    const button =
+      action === "approve" ? els.approveRequest : els.rejectRequest;
+    const originalText = button.textContent;
+    button.textContent = action === "approve" ? "Approving…" : "Rejecting…";
+    try {
+      const result = await request(
+        `/api/mcp/connections/requests/${encodeURIComponent(current.id)}/${action}`,
+        {
+          method: "POST",
+          body: JSON.stringify({ digest: current.digest }),
+        },
+      );
+      const updated = result?.request;
+      if (!updated)
+        throw new Error("The server did not return the updated request.");
+      state.requests = state.requests.map((item) =>
+        String(item.id) === String(updated.id) ? updated : item,
+      );
+      closeRequestDialog();
+      if (getRequestHashId() === String(current.id))
+        history.replaceState(
+          null,
+          "",
+          `${location.pathname}${location.search}`,
+        );
+      await loadRequests();
+      renderRequests();
+      notify(
+        "success",
+        action === "approve" ? "Action approved" : "Request rejected",
+        action === "approve"
+          ? "The AI client may now start this exact action."
+          : "The AI client cannot start this request.",
+      );
+    } catch (error) {
+      setRequestError(
+        error.status === 409
+          ? "This request is stale or expired. Refresh to see the latest state."
+          : error.message || "The request could not be updated.",
+      );
+    } finally {
+      state.requestSubmitting = false;
+      button.textContent = originalText;
+      if (state.activeRequest)
+        renderRequestDetail(state.activeRequest, { preserveError: true });
+    }
+  }
+
+  async function loadRequests() {
+    els.refreshRequests.disabled = true;
+    if (!state.requests.length)
+      els.requests.replaceChildren(
+        node("p", "muted", "Loading pending requests…"),
+      );
+    try {
+      const data = await request("/api/mcp/connections/requests");
+      state.requests = Array.isArray(data?.requests) ? data.requests : [];
+      renderRequests();
+      const hashId = getRequestHashId();
+      if (hashId) await openRequest(hashId);
+    } catch (error) {
+      if (!state.requests.length)
+        els.requests.replaceChildren(
+          node("p", "muted", "Pending requests could not be loaded."),
+        );
+      setStatus(error.message || "Pending requests could not be loaded.");
+    } finally {
+      els.refreshRequests.disabled = false;
+    }
+  }
+
   function resetDialog() {
     state.step = 1;
     state.method = localEnabled() ? "local" : "remote";
@@ -953,6 +1318,19 @@
     copyText(els.token.value, "Token copied"),
   );
   els.dismissToken.addEventListener("click", dismissToken);
+  els.refreshRequests.addEventListener("click", loadRequests);
+  els.closeRequestDialog.addEventListener("click", closeRequestDialog);
+  els.approveRequest.addEventListener("click", () => decideRequest("approve"));
+  els.rejectRequest.addEventListener("click", () => decideRequest("reject"));
+  els.requestDialog.addEventListener("keydown", trapRequestFocus);
+  els.requestDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeRequestDialog();
+  });
+  window.addEventListener("hashchange", () => {
+    const requestId = getRequestHashId();
+    if (requestId) openRequest(requestId);
+  });
   window.addEventListener("pagehide", () => {
     els.token.value = "";
   });
@@ -1018,4 +1396,5 @@
   });
   resetDialog();
   await loadConnections();
+  await loadRequests();
 })();
