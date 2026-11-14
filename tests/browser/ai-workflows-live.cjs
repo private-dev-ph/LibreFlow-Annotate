@@ -18,14 +18,14 @@ const origin='http://127.0.0.1:6774', gateway='http://127.0.0.1:6775';
  assert.ok(uploaded.ok(),'upload');const images=await (await request.get(origin+'/api/images?projectId='+project.id)).json();assert.equal(images.length,1);const imageId=images[0].id;
  await page.goto(origin+'/ai-connections');await page.locator('#connect-client').click();await page.locator('#dialog-next').click();
  await page.locator('#connection-name').fill('Runtime acceptance '+suffix);
- await page.locator('#project-list input[value="'+project.id+'"]').check();
+ await page.getByLabel('AI workflow acceptance '+suffix,{exact:true}).check();
  for(const id of ['mcp-annotations-read','mcp-annotations-append','mcp-versions-read','mcp-jobs-read','mcp-versions-create','mcp-exports-create','mcp-images-read'])await page.locator('#scope-'+id).check();
  await page.locator('#dialog-next').click();await page.locator('#create-connection').click();await page.locator('#token-panel').waitFor({state:'visible'});
  const token=await page.locator('#connection-token').inputValue();assert.ok(token.length>20);
  await page.locator('#dismiss-token').click();
  async function call(name,args){
   const r=await fetch(gateway+'/v1/query',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({name:'libreflow_'+name,arguments:args})});
-  const body=await r.json();assert.ok(r.ok(),name+' HTTP '+r.status()+' '+(body.error?.code||''));return body.result;
+  const body=await r.json();assert.ok(r.ok,name+' HTTP '+r.status+' '+(body.error?.code||''));return body.result;
  }
  async function approve(proposal){
   await page.goto(origin+'/ai-connections#request='+proposal.id);
