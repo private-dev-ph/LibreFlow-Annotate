@@ -39,13 +39,13 @@ const origin='http://127.0.0.1:6774', gateway='http://127.0.0.1:6775';
   }
  }
  async function job(started){for(let n=0;n<80;n++){const state=await call('get_job',{projectId:project.id,jobId:started.jobId});if(state.status==='completed')return state;if(['failed','canceled'].includes(state.status))assert.fail('job '+state.status);await new Promise(r=>setTimeout(r,500));}assert.fail('job timeout');}
- const before=await call('get_annotations',{projectId:project.id,imageId});
+ const before=await call('get_annotations',{projectId:project.id,imageId});assert.equal(before.width,400);assert.equal(before.height,240);
  const addition=await call('propose_annotations',{projectId:project.id,requestKey:'add-'+suffix,imageId,expectedStateRevision:before.stateRevision,shapes:[{type:'bbox',label:'B',data:{x:100,y:60,width:70,height:50}}]});
  await approve(addition);
  const added=await call('apply_annotation_proposal',{projectId:project.id,operationId:addition.id});assert.equal(added.added,1);
  assert.deepEqual(await call('apply_annotation_proposal',{projectId:project.id,operationId:addition.id}),added);
  const version=await call('preview_version',{projectId:project.id,requestKey:'version-'+suffix,name:'',splitRatios:{train:1,valid:0,test:0},processing:{augmentation:{multiplier:2,horizontalFlip:.5}}});
- await approve(version);const versionJob=await job(await call('create_version',{projectId:project.id,operationId:version.id}));assert.ok(versionJob.result.versionId);
+ await approve(version);const versionJob=await job(await call('create_version',{projectId:project.id,operationId:version.id}));assert.ok(versionJob.result.versionId);assert.equal(versionJob.result.stats.sourceImages,1);assert.equal(versionJob.result.stats.generatedImages,1);assert.equal(versionJob.result.stats.images,2);
  const exp=await call('preview_export',{projectId:project.id,versionId:versionJob.result.versionId,requestKey:'export-'+suffix,format:'coco',includeImages:true,includeNull:true});
  await approve(exp);const exportJob=await job(await call('export_version',{projectId:project.id,operationId:exp.id}));
  const downloaded=await request.get(origin+exportJob.result.downloadPath);assert.equal(downloaded.status(),200);assert.match(downloaded.headers()['content-type'],/application\/zip/);assert.ok((await downloaded.body()).length>200);
