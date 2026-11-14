@@ -125,3 +125,12 @@ Verified on 2026-11-14: `docker run --rm -e NODE_ENV=test libreflow-annotate-app
 The official SDK exercised all eleven tools through both legacy and modern stdio clients, including permission denial, native image previews, model class IDs, verified version settings, cross-project isolation, revocation, and unchanged fixture assets and annotations. Concurrent model inspection uses explicit test synchronization instead of relying on filesystem timing.
 
 The consent workflow also passed browser checks at 320x568, 390x844, 768x1024, 1024x768, and 1440x900 in light and dark modes, including visible mobile navigation icons, no horizontal overflow, one-time credential handling, and keyboard focus after revocation. All acceptance credentials and datasets were disposable fixtures.
+
+
+## Approved workflows release verification
+
+Verified on 2026-11-14: the integrated Node 24 Linux suite passed all 353 tests with zero failures or skips, followed by the web security checks. Tests cover transactional recovery, scoped actions, draft inference, annotation approval and replay, version creation, streamed exports, OAuth consent/discovery/PKCE and revocation including refresh tokens.
+
+An isolated running Docker app passed real browser connection setup and approvals, freshly uploaded image dimensions, idempotent annotation additions, an automatically named version with exactly one original plus one augmented image at 2x, and authenticated COCO ZIP download. Connection, consent and visual annotation-review screens passed keyboard and responsive checks at phone, tablet and desktop widths in light and dark themes.
+
+Remote public access remains disabled. OAuth/provider and official SDK integration tests verify the implemented protocol; they do not claim compatibility with every hosted AI client. Production data was not used by the acceptance tests.
