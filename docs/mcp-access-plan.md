@@ -1,11 +1,11 @@
-> Implementation status: the first local read-only slice is described in [Local AI connections](mcp-local-setup.md). It covers selected-project metadata and optional annotation reads, permission management, and a stdio bridge. Previews, models/versions tools, write actions, and remote OAuth below remain planned.
+> Implementation status: the local read-only release is described in [Local AI connections](mcp-local-setup.md). It covers scoped project/annotation reads, previews, models/classes, version/health summaries, permission management, and a stdio bridge. Write actions, dataset jobs, and remote OAuth below remain planned.
 
 # Secure MCP access for LibreFlow
 
-Status: proposed plan, with no application or deployment changes.
+Status: phased roadmap; the local read-only release is implemented. Later phases remain proposed.
 Reviewed: 2026-11-14.
 Code baseline: c6cb37846f54a0518430a9298c4930a5aeeaa0ea.
-Branch: `codex/plan-secure-mcp-access`.
+Branch: `plan-secure-mcp-access`.
 Evidence: [protocol and security research](mcp-protocol-research.md).
 
 ## Recommended outcome
@@ -253,7 +253,7 @@ Parent owns contracts, integration and final acceptance. Once contracts are fixe
 | 4: Remote access | OAuth router/provider config, proxy/compose profile and security tests | Discovery/PKCE/audience/issuer/registration and actual remote-client acceptance |
 | 5: Optional expansion | Standalone datasets, destructive controls, Tasks/resources/prompts | Separate product/permission contract and tests for each |
 
-Phase 1A/1B can run independently after the principal contract is fixed. Shared server, job-runner, annotation and lifecycle files need one writing owner at a time. Suggested natural branch names: `codex/connect-ai-assistants`, `codex/review-ai-annotation-drafts`, `codex/secure-remote-ai-access`.
+Phase 1A/1B can run independently after the principal contract is fixed. Shared server, job-runner, annotation and lifecycle files need one writing owner at a time. Suggested natural branch names: `connect-ai-assistants`, `review-ai-annotation-drafts`, `secure-remote-ai-access`.
 
 The first milestone is the complete local read-only connection, including grants/revoke UI, previews, annotation/model/version inspection, audit and real-client tests. Remote availability is a separate milestone, with the same least-privilege defaults.
 
@@ -290,4 +290,4 @@ Rollout:
 6. Test rollback with journal/new metadata; drain work and recover before switching images. Preserve newer user edits rather than blindly restoring an old snapshot.
 7. Enable write and remote capabilities separately after their gates pass.
 
-No running container, source data or application behavior was changed to prepare this plan.
+The original planning work changed no deployment or data. Release deployment and verification are tracked in the local setup guide.

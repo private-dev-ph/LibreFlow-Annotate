@@ -1,18 +1,24 @@
 # Local AI connections (MCP)
 
-This first milestone lets a local MCP client read selected LibreFlow projects. It is disabled by default and does not change existing annotation, export, or inference workflows.
+This local read-only release lets an MCP client inspect selected LibreFlow projects, with separate optional permissions for annotations, previews, models, and dataset versions. It is disabled by default and does not change existing annotation, export, or inference workflows.
 
 ## Available tools
 
 | Tool | Access |
 | --- | --- |
-| `libreflow_list_projects` | Only the projects selected for this connection and still accessible to its owner |
+| `libreflow_list_projects` | Search and page through projects selected for this connection and still accessible to its owner |
 | `libreflow_get_project` | Project details, labels, image counts |
-| `libreflow_list_images` | Image metadata, optionally limited to a batch |
+| `libreflow_list_images` | Image metadata filtered by batch, filename search, annotation state, or review state |
 | `libreflow_list_batches` | Batch metadata and image counts |
 | `libreflow_get_annotations` | Annotation labels and geometry; requires the separate annotation permission |
+| `libreflow_get_image_preview` | Reduced-size JPEG image or native-coordinate crop; requires image preview permission |
+| `libreflow_list_models` | Accessible model metadata in a selected project; requires model permission |
+| `libreflow_get_model_classes` | Stable numeric detection class IDs from the inference service; requires model permission |
+| `libreflow_list_versions` | Paginated project-backed dataset versions; requires version permission |
+| `libreflow_get_version` | Verified version summary, splits, and processing settings; requires version permission |
+| `libreflow_get_dataset_health` | Bounded live-project or version health statistics; requires version permission |
 
-Original image bytes, previews, model weights, downloads, inference, annotation writes, dataset generation, and deletion are not exposed in this milestone. Remote/cloud-only clients need the later HTTPS/OAuth phase; this connection is for a client running on the same machine as LibreFlow.
+Original image downloads, model weights, inference runs, annotation writes, dataset generation, and deletion are not exposed in this release. Image previews disclose visible image contents only when explicitly granted. Remote/cloud-only clients need the later HTTPS/OAuth phase; this connection is for a client running on the same machine as LibreFlow.
 
 ## Enable the local bridge service
 
@@ -38,10 +44,10 @@ Do not publish port 6769 on a LAN/public interface or forward it through a proxy
 
 ## Grant access in LibreFlow
 
-1. Open LibreFlow locally, sign in, then open **Jobs → AI connections**.
+1. Open LibreFlow locally, sign in, then open **Jobs â†’ AI connections**.
 2. Name the connection after the client you will use.
 3. Select one or more projects. No selection grants no access.
-4. Leave annotation contents off unless the client needs labels and geometry.
+4. Choose only the optional reads the client needs: annotation geometry, image previews, model classes, or version/health statistics. All are unchecked by default. Previews reveal image contents to the chosen AI provider.
 5. Choose an expiry and review the disclosure before creating the connection.
 6. Copy the credential once and store it in your MCP client's protected secret/environment settings. LibreFlow retains only its SHA-256 hash.
 
@@ -65,7 +71,7 @@ The official TypeScript SDK is pinned to 2.4.0. Its stdio entry supports the cur
 
 Lists default to 50 items and accept up to 100. Cursors describe a page of a live collection, not a permanent snapshot: restart pagination if the project changes. Requests and responses are bounded; a response that cannot fit is rejected with a useful error rather than silently dropping annotation geometry.
 
-The credential is separate from existing automation API keys: `lfm_` credentials never authorize legacy automation endpoints, and `lfk_` keys never authorize this service. Every query checks the current credential, expiry, user, project selection, and project membership. The annotation permission is checked separately.
+The credential is separate from existing automation API keys: `lfm_` credentials never authorize legacy automation endpoints, and `lfk_` keys never authorize this service. Every query checks the current credential, expiry, user, project selection, and project membership. Each optional permission is checked separately. Upgrading LibreFlow does not add permissions to existing connections; create a new connection to grant additional access.
 
 LibreFlow records only recent operation metadata (tool, outcome, time, and authorized project ID). Credentials, tool arguments, annotation contents, and original image bytes are not logged. Only the newest 20 activity entries per connection are retained; this is an activity aid, not a durable compliance audit. Up to 100 connection records per user are supported in this milestone.
 
@@ -81,17 +87,25 @@ The private listener rejects browser origins/cookies and unexpected Host headers
 - **Too many requests:** wait for the retry interval. A different credential does not bypass the per-user limit.
 - **Response too large:** request a smaller page. A single unusually large geometry may exceed the response budget; use the normal LibreFlow export workflow for that data.
 
+## Preview and inspection limits
+
+Image previews are JPEGs up to 1024 pixels on the longest side (768 by default), without enlargement, and at most 64 KiB of encoded image data. The server may lower quality or dimensions to fit the budget and removes embedded metadata. Crops use original, orientation-corrected pixel coordinates. The result includes original/preview dimensions, the crop rectangle, and a transform: `original = preview / scale + offset`. The MCP response includes native image content for vision-capable clients. Source images above 64 MiB or 100 million decoded pixels are rejected; at most two previews decode concurrently.
+
+Model inspection respects the same project and collaborator sharing rules as the app. Class inspection uses the existing inference service and the current model/YAML mapping, with a short timeout and one active class lookup at a time. Unsupported models, production-blocked PyTorch pickle files, or an unavailable inference service fail safely. No detection is run and model files are not returned.
+
+Version tools cover versions sourced directly from selected projects. Standalone datasets require a later permission model. Details verify the saved manifest and expose only selected settings and statistics, not full image or annotation manifests. Health reports are summaries; they do not verify every asset on disk or create image hashes. Their hash-coverage information identifies incomplete duplicate checks. Oversized manifests are refused rather than reading without a bound.
+
 ## Implementation and protocol references
 
-See [the implementation plan](mcp-access-plan.md) for later write/proposal, dataset job, preview, and remote OAuth phases. The plan is a roadmap; only the tools listed above are implemented here.
+See [the implementation plan](mcp-access-plan.md) for later write/proposal, dataset job, and remote OAuth phases. The plan is a roadmap; only the tools listed above are implemented here.
 
 - [Official TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
 - [Official stdio serving guidance](https://ts.sdk.modelcontextprotocol.io/v2/serving/stdio)
 - [MCP 2026-07-28 specification](https://modelcontextprotocol.io/specification/2026-07-28)
 - [MCP authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization)
 
-## Verification of this milestone
+## Earlier milestone verification
 
 Verified on 2026-11-14: the Linux Docker regression suite passed 274 tests; the existing web security check passed; `npm audit --omit=dev` reported no known vulnerabilities. Official SDK clients exercised both legacy and pinned 2026-07-28 stdio sessions, scoped reads, membership removal, revocation, and unchanged annotation/history files. Real-process checks covered EOF shutdown and blocked credential forwarding through HTTP redirects.
 
-The consent screen passed creation, project-search selection persistence, refresh, one-time token handling, revocation, and keyboard focus checks. Layouts were checked at 320×568, 390×844, 768×1024, 1024×768, and 1440×900 in both light and dark mode, with no horizontal overflow and visible navigation icons. Test data and credentials were isolated from the working installation.
+The consent screen passed creation, project-search selection persistence, refresh, one-time token handling, revocation, and keyboard focus checks. Layouts were checked at 320Ã—568, 390Ã—844, 768Ã—1024, 1024Ã—768, and 1440Ã—900 in both light and dark mode, with no horizontal overflow and visible navigation icons. Test data and credentials were isolated from the working installation.

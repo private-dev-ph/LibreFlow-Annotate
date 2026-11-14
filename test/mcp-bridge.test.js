@@ -78,7 +78,7 @@ test('fetchJson separates malformed JSON, bounded reads, and caller cancellation
 test('fetchJson status guidance is fixed and bounded', async () => {
   const originalFetch = global.fetch;
   try {
-    for (const [status, code, phrase] of [[403, 'permission_denied', 'permission'], [404, 'resource_not_available', 'not available'], [413, 'response_too_large', 'lower page size'], [429, 'rate_limited', 'retry after 60 seconds']]) {
+    for (const [status, code, phrase] of [[408, 'timeout', 'timed out'], [409, 'resource_changed', 'integrity'], [415, 'unsupported_content', 'not supported'], [422, 'invalid_arguments', 'could not be processed'], [403, 'permission_denied', 'permission'], [404, 'resource_not_available', 'not available'], [413, 'response_too_large', 'lower page size'], [429, 'rate_limited', 'retry after 60 seconds']]) {
       global.fetch = async () => response({ error: { code: 'secret-canary' } }, status, { 'retry-after': '999999' });
       await assert.rejects(fetchJson(config, '/v1/tools'), (error) => {
         assert.equal(error.code, code);
@@ -98,9 +98,11 @@ test('validateCatalog fails closed for unknown, duplicate, oversized, and remote
   assert.throws(() => validateCatalog({ tools: [{ ...validTool(), name: 'unknown_tool' }] }), /unknown tool/);
   assert.throws(() => validateCatalog({ tools: [validTool(), validTool()] }), /duplicate/);
   assert.throws(() => validateCatalog({ tools: Array.from({ length: require('../lib/mcp-tool-names').TOOL_NAMES.length + 1 }, (_, i) => validTool(`libreflow_${i}`)) }), /too large/);
-  const remote = validTool();
-  remote.inputSchema.properties.x = { $ref: 'https://example.test/schema.json' };
-  assert.throws(() => validateCatalog({ tools: [remote] }), /Remote schema references/);
+  for (const key of ['$ref', '$dynamicRef', '$recursiveRef']) {
+    const remote = validTool();
+    remote.inputSchema.properties.x = { [key]: 'https://example.test/schema.json' };
+    assert.throws(() => validateCatalog({ tools: [remote] }), /Remote schema references/);
+  }
 });
 
 test('query handlers require an object result and return structured content', async () => {
