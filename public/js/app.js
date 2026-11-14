@@ -1,4 +1,4 @@
-﻿// app.js -- Annotator page logic
+// app.js -- Annotator page logic
 
 (async () => {
   // -- Auth -------------------------------------------------------------------
@@ -229,6 +229,13 @@
     else { canvasEmpty.classList.remove('hidden'); imageNavLabel.textContent = '-- / --'; }
   }
 
+  function updateImageListSelection() {
+    for (const el of imagesList.children) {
+      const imageIndex = Number(el.dataset?.imageIndex);
+      el.classList.toggle('active', imageIndex === currentIndex);
+    }
+  }
+
   function renderImageList() {
     imagesList.innerHTML = '';
     imageCountEl.textContent = images.filter(i => i.annotated).length + '/' + images.length;
@@ -263,6 +270,7 @@
           ${showName ? `<span class="img-thumb-name">${esc(img.originalName)}</span>` : ''}`;
       }
 
+      el.dataset.imageIndex = String(idx);
       if (idx === currentIndex) el.classList.add('active');
       if (img.annotated && viewMode === 'list') el.classList.add('annotated');
       el.title = img.originalName;
@@ -348,7 +356,7 @@
     document.getElementById('btn-next-img').disabled = idx === images.length - 1;
     updateNullButton(img);
     if (imageTagInput) imageTagInput.value = (img.tags && img.tags[0]) ? img.tags[0] : '';
-    renderImageList();
+    updateImageListSelection();
     // Populate semi-auto after image loads
     populateAutoModels();
   }
@@ -499,6 +507,7 @@
       showToast('Finish the null-image update before saving.', 'warn');
       return false;
     }
+    if (!unsaved) return true;
     const imageId = img.id;
     const startGeneration = editGeneration;
     const shapes = Canvas.getShapes().map(({ color, ...shape }) => ({
