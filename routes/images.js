@@ -9,6 +9,7 @@ const { touchAfterAnnotation } = require('../lib/review-state');
 const { appendAuditEvent } = require('../lib/audit-log');
 const { dataPath, uploadsDir, readJson: readDataJson } = require('../lib/data-store');
 const { validateArchiveEntries } = require('../lib/archive-safety');
+const { transactionalJson } = require('../lib/transactional-json');
 
 const router = express.Router();
 const DATA_FILE    = dataPath('images.json');
@@ -309,7 +310,7 @@ router.delete('/:id', (req, res) => {
 
 // ── PATCH /api/images/:id ─────────────────────────────────────────────────────
 // Accepts: { isNull?: boolean, tags?: string[]|string }
-router.patch('/:id', (req, res) => {
+router.patch('/:id', transactionalJson((req, res) => {
   const images = readImages();
   const uid    = req.session.userId;
   const img    = images.find(i => i.id === req.params.id);
@@ -368,7 +369,7 @@ router.patch('/:id', (req, res) => {
     }
   }
   res.json(img);
-});
+}));
 
 module.exports = router;
 module.exports.validateRasterImage = validateRasterImage;

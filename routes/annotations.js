@@ -22,6 +22,14 @@ const { appendAuditEvent } = require('../lib/audit-log');
 const { touchAfterAnnotation } = require('../lib/review-state');
 const { emitWebhookEvent } = require('../lib/webhooks');
 const { readJsonSnapshot, readJsonByKey, primeJsonSnapshot } = require('../lib/read-index');
+const {
+  SUPPORTED_ANNOTATION_TYPES,
+  annotationSetFingerprint,
+  normalizeShapes,
+  validAnnotationId,
+  validateShapes,
+} = require('../lib/annotation-shapes');
+const { transactionalJson } = require('../lib/transactional-json');
 
 const UPLOADS_DIR = uploadsDir();
 
@@ -67,152 +75,9 @@ function accessibleImage(req, res, imageId) {
   return context;
 }
 
-function shapeFingerprint(shape) {
-  return JSON.stringify([shape.label, shape.type, shape.data]);
-}
-
-function annotationSetFingerprint(annotations) {
-  return JSON.stringify((annotations || []).map(annotation => ({
-    id: annotation.id,
-    label: annotation.label,
-    type: annotation.type,
-    data: annotation.data,
-    source: annotation.source || 'manual',
-    modelId: annotation.modelId || null,
-    confidence: annotation.confidence ?? null,
-  })).sort((a, b) => String(a.id).localeCompare(String(b.id))));
-}
-
-function validAnnotationId(id) {
-  return typeof id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(id);
-}
-
-function normalizeShapes(shapes, existing, req, { restoring = false, defaultSource = 'manual', defaultModelId = null } = {}) {
-  const existingById = new Map(existing.map(annotation => [annotation.id, annotation]));
-  const existingByFingerprint = new Map();
-  existing.forEach(annotation => {
-    const key = shapeFingerprint(annotation);
-    if (!existingByFingerprint.has(key)) existingByFingerprint.set(key, []);
-    existingByFingerprint.get(key).push(annotation);
-  });
-  const usedIds = new Set();
-  const now = new Date().toISOString();
-
-  return shapes.map(shape => {
-    const requestedId = validAnnotationId(shape.id) ? shape.id : null;
-    let previous = requestedId ? existingById.get(requestedId) : null;
-    if (!previous && !requestedId) {
-      previous = (existingByFingerprint.get(shapeFingerprint(shape)) || [])
-        .find(candidate => !usedIds.has(candidate.id));
-    }
-    let id = previous?.id || requestedId || uuidv4();
-    if (usedIds.has(id)) id = uuidv4();
-    usedIds.add(id);
-
-    const requestedSource = ['manual', 'model', 'import'].includes(shape.source)
-      ? shape.source
-      : defaultSource;
-    const source = restoring
-      ? (shape.source || previous?.source || 'manual')
-      : (previous?.source || requestedSource);
-    const modelId = restoring
-      ? (shape.modelId || previous?.modelId || null)
-      : (previous?.modelId || shape.modelId || defaultModelId || null);
-    const rawConfidence = shape.confidence ?? shape.conf ?? previous?.confidence;
-    const confidence = Number.isFinite(Number(rawConfidence))
-      ? Math.max(0, Math.min(1, Number(rawConfidence)))
-      : null;
-    const unchanged = previous && shapeFingerprint(previous) === shapeFingerprint(shape) &&
-      (previous.source || 'manual') === source && (previous.modelId || null) === modelId &&
-      (previous.confidence ?? null) === confidence;
-
-    return {
-      id,
-      imageId: shape.imageId || previous?.imageId,
-      label: String(shape.label || '').trim(),
-      type: shape.type,
-      data: deepClone(shape.data),
-      authorId: restoring ? (shape.authorId || previous?.authorId || req.session.userId) : (previous?.authorId || req.session.userId),
-      authorUsername: restoring ? (shape.authorUsername || previous?.authorUsername || req.session.username || '') : (previous?.authorUsername || req.session.username || ''),
-      source,
-      modelId,
-      confidence,
-      createdAt: restoring
-        ? (shape.createdAt || previous?.createdAt || now)
-        : (previous?.createdAt || now),
-      updatedAt: unchanged ? (previous.updatedAt || previous.createdAt || now) : now,
-      updatedBy: unchanged ? (previous.updatedBy || previous.authorId || req.session.userId) : req.session.userId,
-      updatedByUsername: unchanged ? (previous.updatedByUsername || previous.authorUsername || req.session.username || '') : (req.session.username || ''),
-    };
-  });
-}
-
-const SUPPORTED_ANNOTATION_TYPES = new Set([
-  'bbox', 'rbox', 'polygon', 'point', 'mask', 'line', 'skeleton', 'classification',
-]);
-
-function finiteNumber(value) {
-  return Number.isFinite(Number(value));
-}
-
-function validPoint(point) {
-  return point && finiteNumber(point.x) && finiteNumber(point.y);
-}
-
-function validPointList(points, minimum) {
-  return Array.isArray(points) && points.length >= minimum && points.length <= 100000 && points.every(validPoint);
-}
-
-function validGeometry(shape) {
-  const data = shape.data;
-  switch (shape.type) {
-    case 'bbox':
-      return data && ['x', 'y', 'width', 'height'].every(key => finiteNumber(data[key])) &&
-        Number(data.width) >= 0 && Number(data.height) >= 0;
-    case 'rbox':
-      return data && ['cx', 'cy', 'width', 'height', 'angle'].every(key => finiteNumber(data[key])) &&
-        Number(data.width) > 0 && Number(data.height) > 0;
-    case 'polygon':
-      return validPointList(data, 3);
-    case 'point':
-      return validPoint(data);
-    case 'mask': {  // Legacy masks may be stored as one polygon array.
-      const contours = Array.isArray(data) ? [{ operation: 'add', points: data }] : data?.contours;
-      return Array.isArray(contours) && contours.length > 0 && contours.length <= 10000 &&
-        contours.every(contour => ['add', 'subtract'].includes(contour?.operation || 'add') &&
-          validPointList(contour?.points, 3));
-    }
-    case 'line':
-      return validPointList(data?.points, 2);
-    case 'skeleton': {
-      if (!validPointList(data?.points, 2) || !Array.isArray(data.edges)) return false;
-      return data.edges.length <= 100000 && data.edges.every(edge =>
-        Array.isArray(edge) && edge.length === 2 && edge.every(index =>
-          Number.isInteger(index) && index >= 0 && index < data.points.length));
-    }
-    case 'classification':
-      return data && typeof data === 'object' && !Array.isArray(data);
-    default:
-      return false;
-  }
-}
-
-function validateShapes(shapes) {
-  if (!Array.isArray(shapes)) return 'shapes must be an array.';
-  if (shapes.length > 100000) return 'Too many annotations in one request.';
-  for (const shape of shapes) {
-    if (!shape || !String(shape.label || '').trim()) return 'Every annotation requires a label.';
-    if (String(shape.label).length > 200) return 'Annotation labels must be 200 characters or fewer.';
-    if (!SUPPORTED_ANNOTATION_TYPES.has(shape.type)) return 'Unsupported annotation type.';
-    if (shape.data === undefined || shape.data === null) return 'Every annotation requires geometry data.';
-    if (!validGeometry(shape)) return `Invalid ${shape.type} annotation geometry.`;
-  }
-  return null;
-}
-
 // POST bulk-rename a label across all annotations in a project
 // Body: { projectId, oldName, newName }
-router.post('/rename-label', (req, res) => {
+router.post('/rename-label', transactionalJson((req, res) => {
   const { projectId, oldName, newName } = req.body;
   if (!projectId || !oldName || !newName)
     return res.status(400).json({ error: 'projectId, oldName and newName are required.' });
@@ -269,7 +134,7 @@ router.post('/rename-label', (req, res) => {
   });
   appendAuditEvent({ projectId, ...actor(req), type: 'annotations.label_renamed', details: { oldName, newName, count } });
   res.json({ updated: count });
-});
+}));
 
 router.get('/:imageId/revisions', (req, res) => {
   const context = accessibleImage(req, res, req.params.imageId);
@@ -291,7 +156,7 @@ router.get('/:imageId/revisions', (req, res) => {
   res.json(revisions.map(revision => revisionSummary(revision, includeAnnotations)));
 });
 
-router.post('/:imageId/revisions/:revisionId/restore', (req, res) => {
+router.post('/:imageId/revisions/:revisionId/restore', transactionalJson((req, res) => {
   const context = accessibleImage(req, res, req.params.imageId);
   if (!context) return;
   const revision = getRevision(context.image.id, req.params.revisionId);
@@ -335,7 +200,7 @@ router.post('/:imageId/revisions/:revisionId/restore', (req, res) => {
     });
   }
   res.json({ annotations: restored, revision: revisionSummary(newRevision, false) });
-});
+}));
 
 // GET annotations for an image
 router.get('/:imageId', (req, res) => {
@@ -347,7 +212,7 @@ router.get('/:imageId', (req, res) => {
 
 // POST save/replace annotations for an image
 // Body: { imageId, shapes: [ { label, type, points/bbox, ... } ] }
-router.post('/', (req, res) => {
+router.post('/', transactionalJson((req, res) => {
   const { imageId, shapes, source = 'manual', modelId = null } = req.body;
   if (!imageId) return res.status(400).json({ error: 'imageId is required.' });
   const validationError = validateShapes(shapes || []);
@@ -417,9 +282,7 @@ router.post('/', (req, res) => {
   }
 
   try {
-    const image = fs.existsSync(IMAGES_FILE)
-      ? JSON.parse(fs.readFileSync(IMAGES_FILE, 'utf-8')).find(item => item.id === imageId)
-      : null;
+    const image = readJson(IMAGES_FILE).find(item => item.id === imageId);
     if (image) emitWebhookEvent('annotation.saved', {
       imageId,
       projectId: image.projectId,
@@ -431,7 +294,7 @@ router.post('/', (req, res) => {
   }
 
   res.status(201).json(newAnnotations);
-});
+}));
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
