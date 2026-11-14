@@ -1,5 +1,5 @@
 'use strict';
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os');
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),sharp=require('sharp');
 const root=fs.mkdtempSync(path.join(os.tmpdir(),'libreflow-draft-actions-'));
 process.env.LIBREFLOW_DATA_DIR=path.join(root,'data');
 process.env.LIBREFLOW_UPLOADS_DIR=path.join(root,'uploads');
@@ -26,13 +26,13 @@ test.beforeEach(()=>{
 test.after(()=>fs.rmSync(root,{recursive:true,force:true}));
 test('class B tiled inference produces drafts and appends only after separate approval',async()=>{
  let seen;actions.registerInferenceJobs({infer:async input=>{seen=input;return {results:[B]};}});
- const principal=connect(),preview=actions.previewInference(principal,{projectId:'p',requestKey:'run',modelId:'model',imageIds:['image'],classIds:[1],confThreshold:.6,tiling:{enabled:true}});
+ const principal=connect(),preview=await actions.previewInference(principal,{projectId:'p',requestKey:'run',modelId:'model',imageIds:['image'],classIds:[1],confThreshold:.6,tiling:{enabled:true}});
  assert.throws(()=>actions.startInference(principal,{projectId:'p',operationId:preview.id}),e=>e.code==='APPROVAL_REQUIRED');
  const started=actions.startInference(principal,approve(preview)),completed=await finished(started.jobId);
  assert.equal(completed.status,'completed',completed.error);assert.deepEqual(seen.classIds,[1]);assert.equal(seen.confThreshold,.6);assert.equal(seen.tiling.enabled,true);
  assert.deepEqual(readJson(dataFile('annotations.json')),[A]);assert.equal(imageState('p','image').image.reviewStatus,'approved');
  const draft=actions.getDraft(principal,{projectId:'p',draftId:completed.result.draftIds[0]});assert.deepEqual(draft.items,[B]);
- const append=actions.proposeAnnotations(principal,{projectId:'p',requestKey:'append',draftId:draft.draftId});
+ const append=await actions.proposeAnnotations(principal,{projectId:'p',requestKey:'append',draftId:draft.draftId});
  assert.throws(()=>actions.applyAnnotations(principal,{projectId:'p',operationId:append.id}),e=>e.code==='APPROVAL_REQUIRED');
  const result=actions.applyAnnotations(principal,approve(append));assert.equal(result.added,1);
  assert.deepEqual(readJson(dataFile('annotations.json'))[0],A);
@@ -44,15 +44,15 @@ test('class B tiled inference produces drafts and appends only after separate ap
 test('empty drafts preserve null and review states when approved',async()=>{
  put('images',[{id:'image',projectId:'p',filename:'image.png',width:100,height:100,isNull:true,reviewStatus:'approved'}]);
  const principal=connect();const revision=imageState('p','image').revision;
- const request=actions.proposeAnnotations(principal,{projectId:'p',imageId:'image',expectedStateRevision:revision,shapes:[],requestKey:'empty'});
+ const request=await actions.proposeAnnotations(principal,{projectId:'p',imageId:'image',expectedStateRevision:revision,shapes:[],requestKey:'empty'});
  assert.equal(actions.applyAnnotations(principal,approve(request)).added,0);assert.equal(imageState('p','image').revision,revision);
  assert.equal(readJson(dataFile('annotation-revisions.json')).length,0);
 });
-test('stale approved additions and invalid native geometry cannot mutate metadata',()=>{
+test('stale approved additions and invalid native geometry cannot mutate metadata',async()=>{
  const principal=connect(),current=imageState('p','image');
  for(const bad of [{...B,id:'chosen'},{...B,label:'Unknown'},{...B,data:{x:99,y:5,width:10,height:10}},{...B,data:{x:'1',y:1,width:2,height:2}}])
    assert.throws(()=>validateAdditions({shapes:[bad],image:current.image,project:current.project}));
- const r=actions.proposeAnnotations(principal,{projectId:'p',imageId:'image',expectedStateRevision:current.revision,shapes:[B],requestKey:'stale'});approve(r);
+ const r=await actions.proposeAnnotations(principal,{projectId:'p',imageId:'image',expectedStateRevision:current.revision,shapes:[B],requestKey:'stale'});approve(r);
  put('annotations',[A,{...B,id:'human',imageId:'image'}]);
  assert.throws(()=>actions.applyAnnotations(principal,{projectId:'p',operationId:r.id}),e=>e.code==='SOURCE_CHANGED');
  assert.equal(readJson(dataFile('annotations.json')).length,2);
@@ -67,9 +67,31 @@ test('outer transaction failure rolls back annotations, image, review, audit and
 });
 test('source edits during inference prevent saving a stale draft',async()=>{
  actions.registerInferenceJobs({infer:async()=>{put('annotations',[A,{...B,id:'human',imageId:'image'}]);return{results:[B]};}});
- const principal=connect(),preview=actions.previewInference(principal,{projectId:'p',requestKey:'changed',modelId:'model',imageIds:['image']});
+ const principal=connect(),preview=await actions.previewInference(principal,{projectId:'p',requestKey:'changed',modelId:'model',imageIds:['image']});
  const job=actions.startInference(principal,approve(preview));assert.equal((await finished(job.jobId)).status,'failed');
  assert.equal(readJson(dataFile('mcp-inference-drafts.json')).length,0);
+});
+test('missing image dimensions resolve from bounded metadata without mutating images and persist in proposals',async()=>{
+ const png=await sharp({create:{width:40,height:20,channels:3,background:'#284358'}}).withMetadata({orientation:6}).png().toBuffer();
+ fs.writeFileSync(path.join(root,'uploads','image.png'),png);
+ put('images',[{id:'image',projectId:'p',filename:'image.png',isNull:false,reviewStatus:'approved'}]);
+ const before=fs.readFileSync(dataFile('images.json'),'utf8'),principal=connect();
+ const query=require('../lib/mcp-queries').createQueryService(policy);
+ const annotations=await query.callTool(principal,'libreflow_get_annotations',{projectId:'p',imageId:'image'});
+ assert.equal(annotations.width,20);assert.equal(annotations.height,40);
+ assert.equal(fs.readFileSync(dataFile('images.json'),'utf8'),before);
+ const inference=await actions.previewInference(principal,{projectId:'p',requestKey:'nodims-run',modelId:'model',imageIds:['image']});
+ const inferencePayload=ops.getInternalProposal(principal,'p',inference.id).payload;
+ assert.deepEqual(inferencePayload.images[0].dimensions,{width:20,height:40});
+ const proposal=await actions.proposeAnnotations(principal,{projectId:'p',requestKey:'nodims-append',imageId:'image',expectedStateRevision:imageState('p','image').revision,shapes:[{label:'B',type:'bbox',data:{x:1,y:1,width:5,height:5}}]});
+ assert.deepEqual(ops.getInternalProposal(principal,'p',proposal.id).payload.dimensions,{width:20,height:40});
+ approve(proposal);require('../lib/mcp-image-metadata').clearMetadataCache();
+ assert.equal(actions.applyAnnotations(principal,{projectId:'p',operationId:proposal.id}).added,1);
+ assert.equal(fs.readFileSync(dataFile('images.json'),'utf8').includes('"width"'),false);
+});
+test('corrupt image metadata fails with bounded invalid-argument error',async()=>{
+ const principal=connect();put('images',[{id:'image',projectId:'p',filename:'image.png',isNull:false}]);fs.writeFileSync(path.join(root,'uploads','image.png'),Buffer.from('not an image'));
+ await assert.rejects(actions.previewInference(principal,{projectId:'p',requestKey:'corrupt',modelId:'model',imageIds:['image']}),error=>error.code==='INVALID_ARGUMENT');
 });
 test('inference response reader enforces byte limits before parsing',async()=>{
  const {readResponseText}=require('../lib/inference-client');

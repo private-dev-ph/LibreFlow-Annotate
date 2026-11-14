@@ -62,7 +62,8 @@ router.get('/requests/:id/annotations', requireSessionOnly, (req,res) => {
     const source=require('../lib/mcp-source-state');
     source.assertFrozenImages(record.projectId,[record.payload.frozen]);
     const current=source.imageState(record.projectId,record.payload.imageId);
-    res.json({image:{id:current.image.id,width:current.image.width,height:current.image.height,
+    const dimensions=record.payload.dimensions || record.payload.frozen?.dimensions || {width:current.image.width,height:current.image.height};
+    res.json({image:{id:current.image.id,width:dimensions.width,height:dimensions.height,
       name:current.image.originalName||'',url:'/uploads/'+encodeURIComponent(require('path').basename(source.sourceFile(current.image)))},
       shapes:record.payload.shapes,existingCount:current.annotations.length,
       annotatorUrl:'/annotator?projectId='+encodeURIComponent(record.projectId)+'&imageId='+encodeURIComponent(current.image.id)});
