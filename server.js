@@ -4,6 +4,8 @@ const session = require('express-session');
 const path = require('path');
 const fs = require('fs');
 const { loadSecurityConfig } = require('./lib/security-config');
+const { dataPath } = require('./lib/data-store');
+const { warmJsonIndex } = require('./lib/read-index');
 
 // Reject unsafe production configuration before loading routes or starting services.
 const securityConfig = loadSecurityConfig();
@@ -146,6 +148,11 @@ try { startJobRuntime(); }
 catch (error) { console.error('Automation job recovery failed:', error.message); }
 try { resumeWebhookDeliveries(); }
 catch (error) { console.error('Webhook delivery recovery failed:', error.message); }
+
+// Warm the two image-keyed annotation collections before accepting requests.
+// The helper keeps missing and oversized files on their normal lazy-read path.
+warmJsonIndex(dataPath('annotations.json'), 'imageId');
+warmJsonIndex(dataPath('annotation-revisions.json'), 'imageId');
 
 // ── 404 fallback ──────────────────────────────────────────────────────────────
 app.use((req, res) => res.redirect('/'));

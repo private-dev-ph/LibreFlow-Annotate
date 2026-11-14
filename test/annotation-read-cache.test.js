@@ -9,7 +9,7 @@ process.env.LIBREFLOW_DATA_DIR = path.join(testRoot, 'data');
 fs.mkdirSync(process.env.LIBREFLOW_DATA_DIR, { recursive: true });
 
 const { dataPath, writeJson } = require('../lib/data-store');
-const { readJsonByKey } = require('../lib/read-index');
+const { readJsonByKey, warmJsonIndex } = require('../lib/read-index');
 const {
   createRevision,
   getRevision,
@@ -46,6 +46,42 @@ test('per-image index clones results and invalidates after external replacement'
   assert.deepEqual(readJsonByKey(filePath, 'imageId', 'image-1'), [
     { id: 'd', imageId: 'image-1', data: { x: 5 } },
   ]);
+});
+
+test('startup warming builds an index without exposing data and respects the size limit', () => {
+  const filePath = dataPath('warmed-annotations.json');
+  const missingPath = dataPath('missing-annotations.json');
+  writeJson(filePath, [
+    { id: 'a', imageId: 'image-1', data: { x: 1 } },
+    { id: 'b', imageId: 'image-2', data: { x: 2 } },
+  ]);
+
+  const originalReadFileSync = fs.readFileSync;
+  let reads = 0;
+  fs.readFileSync = function countedRead(file, ...args) {
+    if (path.resolve(file.toString()) === path.resolve(filePath)) reads += 1;
+    return originalReadFileSync.call(this, file, ...args);
+  };
+  try {
+    assert.equal(warmJsonIndex(filePath, 'imageId'), true);
+    assert.equal(reads, 1);
+    reads = 0;
+    const warmed = readJsonByKey(filePath, 'imageId', 'image-1');
+    warmed[0].data.x = 99;
+    assert.equal(reads, 0);
+    assert.equal(readJsonByKey(filePath, 'imageId', 'image-1')[0].data.x, 1);
+
+    writeJson(filePath, [{ id: 'c', imageId: 'image-1', data: { x: 3 } }]);
+    assert.equal(readJsonByKey(filePath, 'imageId', 'image-1')[0].data.x, 3);
+    assert.equal(reads, 1);
+
+    reads = 0;
+    assert.equal(warmJsonIndex(filePath, 'imageId', 1), false);
+    assert.equal(reads, 0);
+    assert.equal(warmJsonIndex(missingPath, 'imageId'), false);
+  } finally {
+    fs.readFileSync = originalReadFileSync;
+  }
 });
 
 test('history appends reuse one parsed snapshot, preserve clones, and follow external versions', () => {
