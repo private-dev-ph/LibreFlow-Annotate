@@ -142,11 +142,11 @@ test('fresh processes leave a journal for each target failure and before cleanup
     try { runDataCommand(() => {
       writeJson(dataFile('child-first.json'), [{ id: 'new-first' }]);
       writeJson(dataFile('child-second.json'), [{ id: 'new-second' }]);
-    }); } catch {}
+    }); } catch { process.exit(70); }
   `;
   for (const failTarget of ['child-first.json', 'child-second.json']) {
     const result = runChild(childScript, { FAIL_TARGET: failTarget });
-    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.status, 70, result.stderr);
     assert.equal(fs.existsSync(path.join(process.env.LIBREFLOW_DATA_DIR, JOURNAL_NAME)), true);
     assert.equal(recoverDataCommands(), true);
     assert.deepEqual(readJson(firstPath), [{ id: 'new-first' }]);
@@ -164,10 +164,10 @@ test('fresh processes leave a journal for each target failure and before cleanup
       if (path.resolve(String(file)) === path.resolve(journal)) throw new Error('before cleanup');
       return original.call(fs, file);
     };
-    try { runDataCommand(() => writeJson(dataFile('child-first.json'), [{ id: 'cleanup' }])); } catch {}
+    try { runDataCommand(() => writeJson(dataFile('child-first.json'), [{ id: 'cleanup' }])); } catch { process.exit(71); }
   `;
   const cleanupResult = runChild(cleanupScript);
-  assert.equal(cleanupResult.status, 0, cleanupResult.stderr);
+  assert.equal(cleanupResult.status, 71, cleanupResult.stderr);
   assert.equal(fs.existsSync(path.join(process.env.LIBREFLOW_DATA_DIR, JOURNAL_NAME)), true);
   assert.equal(recoverDataCommands(), true);
   assert.deepEqual(readJson(firstPath), [{ id: 'cleanup' }]);
