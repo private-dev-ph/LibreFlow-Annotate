@@ -4,7 +4,8 @@
   "description": "Open-source image annotation tool for computer vision datasets",
   "main": "server.js",
   "bin": {
-    "libreflow": "bin/libreflow.js"
+    "libreflow": "bin/libreflow.js",
+    "libreflow-mcp": "bin/libreflow-mcp.js"
   },
   "scripts": {
     "start": "node server.js",
@@ -24,6 +25,7 @@
   ],
   "license": "Apache-2.0",
   "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
     "adm-zip": "^0.6.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
@@ -33,11 +35,14 @@
     "multer": "^2.1.0",
     "pg": "^8.16.3",
     "sharp": "^0.35.4",
-    "undici": "6.29.0",
+    "undici": "6.29.1",
     "uuid": "^11.1.1",
     "yazl": "^3.3.1"
   },
   "optionalDependencies": {
     "@aws-sdk/client-s3": "^3.1123.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0"
   }
 }
