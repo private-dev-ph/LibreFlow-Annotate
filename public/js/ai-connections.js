@@ -76,6 +76,7 @@
     activeRequest: null,
     requestTrigger: null,
     requestSubmitting: false,
+    requestPreview: { status: "idle", requestId: null, token: 0, data: null },
   };
 
   els.avatar.textContent = String(me.username || "?")
@@ -863,7 +864,7 @@
         const item = node("span", "request-count");
         item.append(
           node("strong", "", String(value)),
-          node("small", "", label),
+          node("small", "", humanizeCountLabel(label)),
         );
         countList.append(item);
       });
@@ -890,6 +891,133 @@
       );
       parent.append(warnings);
     }
+  }
+
+  function isAnnotationRequest(request) {
+    return String(request?.kind || "") === "annotations.append";
+  }
+
+  function humanizeCountLabel(value) {
+    return String(value || "")
+      .replace(/([a-z\d])([A-Z])/g, "$1 $2")
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/^./, (character) => character.toUpperCase());
+  }
+
+  function safeAnnotatorUrl(value) {
+    if (typeof value !== "string" || !value.trim()) return null;
+    try {
+      const url = new URL(value, location.origin);
+      if (url.origin !== location.origin || !/^\/annotator(?:\/|$)/.test(url.pathname)) return null;
+      return url.href;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function shapePoints(shape) {
+    const data = shape?.data;
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.points)) return data.points;
+    return [];
+  }
+
+  function rboxPoints(data) {
+    const angle = Number(data?.angle || 0) * Math.PI / 180;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const halfWidth = Number(data?.width || 0) / 2, halfHeight = Number(data?.height || 0) / 2;
+    return [[-halfWidth, -halfHeight], [halfWidth, -halfHeight], [halfWidth, halfHeight], [-halfWidth, halfHeight]]
+      .map(([x, y]) => ({ x: Number(data?.cx || 0) + x * cos - y * sin, y: Number(data?.cy || 0) + x * sin + y * cos }));
+  }
+
+  function drawReviewShape(context, shape) {
+    const type = String(shape?.type || "").toLowerCase();
+    const data = shape?.data || {};
+    let points = [];
+    if (type === "bbox") {
+      const x = Number(data.x), y = Number(data.y), width = Number(data.width), height = Number(data.height);
+      if (![x, y, width, height].every(Number.isFinite)) return;
+      points = [{ x, y }, { x: x + width, y }, { x: x + width, y: y + height }, { x, y: y + height }];
+    } else if (type === "rbox") points = rboxPoints(data);
+    else if (["polygon", "line", "point", "keypoint"].includes(type)) points = shapePoints(shape).map(point => ({ x: Number(point?.x), y: Number(point?.y) })).filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+    else if (type === "skeleton") {
+      const skeletonPoints = shapePoints(shape).map(point => ({ x: Number(point?.x), y: Number(point?.y) }));
+      (Array.isArray(data.edges) ? data.edges : []).forEach(edge => {
+        const a = skeletonPoints[edge?.[0]], b = skeletonPoints[edge?.[1]];
+        if (!a || !b) return;
+        context.beginPath(); context.moveTo(a.x, a.y); context.lineTo(b.x, b.y); context.stroke();
+      });
+      skeletonPoints.forEach(point => { context.beginPath(); context.arc(point.x, point.y, 4, 0, Math.PI * 2); context.fill(); });
+      return;
+    } else if (type === "mask") {
+      const contours = Array.isArray(data) ? [{ points: data }] : (Array.isArray(data.contours) ? data.contours : []);
+      contours.forEach(contour => {
+        const contourPoints = Array.isArray(contour.points) ? contour.points : [];
+        if (contourPoints.length < 2) return;
+        context.beginPath(); contourPoints.forEach((point, index) => index ? context.lineTo(Number(point.x), Number(point.y)) : context.moveTo(Number(point.x), Number(point.y)));
+        context.closePath(); context.fill(); context.stroke();
+      });
+      return;
+    } else if (type === "classification") return;
+    if (points.length === 0) return;
+    context.beginPath(); context.moveTo(points[0].x, points[0].y); points.slice(1).forEach(point => context.lineTo(point.x, point.y));
+    if (["bbox", "rbox", "polygon"].includes(type)) context.closePath();
+    context.stroke();
+    if (["bbox", "rbox", "polygon"].includes(type)) context.fill();
+    if (["point", "keypoint"].includes(type)) { context.beginPath(); context.arc(points[0].x, points[0].y, 5, 0, Math.PI * 2); context.fill(); }
+  }
+
+  function reviewImagePanel(data) {
+    const panel = node("section", "annotation-review-panel");
+    panel.setAttribute("aria-labelledby", "annotation-review-title");
+    const heading = node("div", "annotation-review-heading");
+    heading.append(node("div", "annotation-review-heading-copy", undefined));
+    heading.firstChild.append(node("h3", "annotation-review-title", "Visual annotation preview"), node("p", "annotation-review-help", `${Number(data.existingCount) || 0} existing annotation${Number(data.existingCount) === 1 ? "" : "s"} · ${data.shapes.length} proposed`));
+    const controls = node("div", "annotation-review-controls");
+    const toggle = node("button", "secondary-action annotation-review-toggle", "Hide overlay"); toggle.type = "button"; toggle.setAttribute("aria-pressed", "true");
+    const zoomOut = node("button", "secondary-action annotation-review-zoom", "−"); zoomOut.type = "button"; zoomOut.setAttribute("aria-label", "Zoom out");
+    const zoomReset = node("button", "secondary-action annotation-review-zoom", "100%"); zoomReset.type = "button"; zoomReset.setAttribute("aria-label", "Reset zoom");
+    const zoomIn = node("button", "secondary-action annotation-review-zoom", "+"); zoomIn.type = "button"; zoomIn.setAttribute("aria-label", "Zoom in");
+    controls.append(toggle, zoomOut, zoomReset, zoomIn); heading.append(controls); panel.append(heading);
+    const viewport = node("div", "annotation-review-viewport");
+    const stage = node("div", "annotation-review-stage");
+    const image = document.createElement("img"); image.className = "annotation-review-image"; image.alt = data.image?.name || "Source image for annotation review"; image.decoding = "async";
+    const canvas = document.createElement("canvas"); canvas.className = "annotation-review-canvas"; canvas.setAttribute("aria-hidden", "true"); stage.append(image, canvas); viewport.append(stage); panel.append(viewport);
+    const labels = node("ul", "annotation-review-labels"); labels.setAttribute("aria-label", "Proposed annotation labels");
+    data.shapes.forEach((shape, index) => { const item = node("li", "annotation-review-label", `${shape.label || "Unlabeled"}${shape.confidence === undefined ? "" : ` · ${Math.round(Number(shape.confidence) * 100)}% confidence`} · ${shape.type || "shape"}`); item.dataset.shapeIndex = String(index); labels.append(item); });
+    if (labels.childElementCount) panel.append(labels);
+    const link = safeAnnotatorUrl(data.annotatorUrl);
+    if (link) { const open = node("a", "secondary-action annotation-review-link", "Open this image in annotator"); open.href = link; open.target = "_blank"; open.rel = "noopener"; panel.append(open); }
+    let zoom = 1, overlayVisible = true;
+    const draw = () => {
+      if (!image.naturalWidth || !image.naturalHeight) return;
+      const ratio = window.devicePixelRatio || 1; canvas.width = Math.min(4096, image.naturalWidth * ratio); canvas.height = Math.min(4096, image.naturalHeight * ratio); canvas.style.width = `${image.naturalWidth}px`; canvas.style.height = `${image.naturalHeight}px`;
+      const context = canvas.getContext("2d"); context.setTransform(canvas.width / image.naturalWidth, 0, 0, canvas.height / image.naturalHeight, 0, 0); context.clearRect(0, 0, image.naturalWidth, image.naturalHeight); if (!overlayVisible) return;
+      context.lineWidth = Math.max(1.5, image.naturalWidth / 500); context.strokeStyle = "#ffcc33"; context.fillStyle = "rgba(255, 204, 51, 0.18)"; data.shapes.forEach(shape => drawReviewShape(context, shape));
+    };
+    const applyZoom = () => { zoomReset.textContent = `${Math.round(zoom * 100)}%`; stage.style.transform = `scale(${zoom})`; stage.style.transformOrigin = "top left"; };
+    toggle.addEventListener("click", () => { overlayVisible = !overlayVisible; toggle.textContent = overlayVisible ? "Hide overlay" : "Show overlay"; toggle.setAttribute("aria-pressed", String(overlayVisible)); draw(); });
+    zoomOut.addEventListener("click", () => { zoom = Math.max(0.75, zoom - 0.25); applyZoom(); });
+    zoomIn.addEventListener("click", () => { zoom = Math.min(2.5, zoom + 0.25); applyZoom(); });
+    zoomReset.addEventListener("click", () => { zoom = 1; applyZoom(); });
+    image.addEventListener("load", draw, { once: true }); image.addEventListener("error", () => { panel.dataset.loadError = "true"; panel.append(node("p", "form-error", "The source image could not be loaded. Approval is disabled until the preview is available.")); state.requestPreview.status = "error"; renderReviewButtons(state.activeRequest); });
+    image.src = String(data.image?.url || ""); applyZoom(); return panel;
+  }
+
+  function renderReviewButtons(request) {
+    const status = requestStatus(request);
+    const blocked = isAnnotationRequest(request) && state.requestPreview.requestId === request?.id && state.requestPreview.status !== "ready";
+    els.approveRequest.disabled = !status.canDecide || blocked;
+    els.rejectRequest.disabled = !status.canDecide;
+  }
+
+  function renderAnnotationReview(request) {
+    if (!isAnnotationRequest(request)) return;
+    const existing = els.requestDetail.querySelector(".annotation-review-panel");
+    if (existing && state.requestPreview.requestId === request.id && state.requestPreview.status !== "idle") return;
+    const panel = node("section", "annotation-review-panel annotation-review-loading"); panel.append(node("h3", "annotation-review-title", "Visual annotation preview"), node("p", "annotation-review-help", "Loading source image and proposed shapes…")); els.requestDetail.append(panel);
   }
 
   function requestContext(request) {
@@ -996,8 +1124,8 @@
         node("p", "request-expiry", `Expires ${formatDate(request.expiresAt)}`),
       );
     }
-    els.approveRequest.disabled = !status.canDecide;
-    els.rejectRequest.disabled = !status.canDecide;
+    renderAnnotationReview(request);
+    renderReviewButtons(request);
     if (!status.canDecide) {
       els.requestDialogError.textContent =
         status.label === "Expired"
@@ -1013,6 +1141,8 @@
 
   async function openRequest(id, trigger = null) {
     state.requestTrigger = trigger || document.activeElement;
+    const token = state.requestPreview.token + 1;
+    state.requestPreview = { status: "loading", requestId: String(id), token, data: null };
     els.requestDialogError.textContent = "Loading request…";
     try {
       const data = await request(
@@ -1021,11 +1151,30 @@
       if (!data?.request)
         throw new Error("This request is no longer available.");
       state.activeRequest = data.request;
+      state.requestPreview = { status: isAnnotationRequest(data.request) ? "loading" : "not-needed", requestId: String(data.request.id), token, data: null };
       renderRequestDetail(state.activeRequest);
       if (typeof els.requestDialog.showModal === "function")
         els.requestDialog.showModal();
       else els.requestDialog.setAttribute("open", "");
       els.closeRequestDialog.focus();
+      if (isAnnotationRequest(state.activeRequest)) {
+        try {
+          const preview = await request(`/api/mcp/connections/requests/${encodeURIComponent(id)}/annotations`);
+          if (state.requestPreview.token !== token || String(state.activeRequest?.id) !== String(id)) return;
+          if (!preview?.image?.url || !Array.isArray(preview.shapes)) throw new Error("The annotation preview response was incomplete.");
+          state.requestPreview = { status: "ready", requestId: String(id), token, data: preview };
+          const currentPanel = els.requestDetail.querySelector(".annotation-review-panel");
+          currentPanel?.replaceWith(reviewImagePanel(preview));
+          renderReviewButtons(state.activeRequest);
+        } catch (error) {
+          if (state.requestPreview.token !== token || String(state.activeRequest?.id) !== String(id)) return;
+          state.requestPreview = { status: "error", requestId: String(id), token, data: null };
+          const currentPanel = els.requestDetail.querySelector(".annotation-review-panel");
+          currentPanel?.classList.remove("annotation-review-loading");
+          currentPanel?.replaceChildren(node("h3", "annotation-review-title", "Visual annotation preview"), node("p", "form-error", error.message || "The annotation preview could not be loaded. Approval is disabled."));
+          renderReviewButtons(state.activeRequest);
+        }
+      }
     } catch (error) {
       setStatus(error.message || "This request could not be loaded.");
       els.requestDialogError.textContent = "";
@@ -1036,6 +1185,7 @@
     if (els.requestDialog.open) els.requestDialog.close();
     else els.requestDialog.removeAttribute("open");
     state.activeRequest = null;
+    state.requestPreview = { status: "idle", requestId: null, token: state.requestPreview.token + 1, data: null };
     els.requestDialogError.textContent = "";
     state.requestTrigger?.focus?.();
     state.requestTrigger = null;

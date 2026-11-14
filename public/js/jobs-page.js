@@ -135,6 +135,18 @@
     return Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : 0));
   }
 
+  function jobResultLinks(job) {
+    const links = [];
+    const operationId = job.input?.operationId || job.parameters?.operationId || job.operationId;
+    if (operationId) links.push(`<a class="mini-action secondary" href="/ai-connections#request=${encodeURIComponent(String(operationId))}">Review request</a>`);
+    const versionId = job.result?.versionId;
+    if (versionId && job.projectId) links.push(`<a class="mini-action secondary" href="/project?projectId=${encodeURIComponent(String(job.projectId))}#versions">Open project versions</a>`);
+    const exportId = job.result?.exportId;
+    if (exportId && job.projectId) links.push(`<a class="mini-action secondary" href="/api/mcp/connections/downloads/${encodeURIComponent(String(job.projectId))}/${encodeURIComponent(String(exportId))}">Download export</a>`);
+    if (!links.length && job.type !== 'mcp_inference') return '';
+    return `<div class="job-result-links">${links.join('')}${job.type === 'mcp_inference' ? '<p class="job-draft-note">Inference results are drafts; nothing has been saved yet.</p>' : ''}</div>`;
+  }
+
   let jobDetailsReturnFocus = null;
   function closeJobDetails() {
     const modal = document.getElementById('job-details-modal');
@@ -167,6 +179,7 @@
         <div class="job-details-progress-label"><span>${esc(progress.processed ?? 0)} of ${esc(progress.total ?? 0)} processed</span><span>${percent}%</span></div>
         <div class="job-progress-wrap"><div class="job-progress-bar" style="width:${percent}%"></div></div>
       </div>
+      ${jobResultLinks(job)}
       ${job.error ? `<p class="job-error-msg">${LibreFlowIcons.icon('warning')} ${esc(job.error)}</p>` : ''}
       <h3 class="subheading">Items${job.items?.length > details.length ? ` (showing first ${details.length})` : ''}</h3>
       ${details.length ? `<ul class="job-details-list">${details.map(item => `<li class="job-details-item"><span class="job-details-item-status">${esc(item.status || 'pending')}</span>${esc(item.originalName || item.imageId || item.id || 'Untitled item')}${item.error ? `<span class="job-details-item-error">${esc(item.error)}</span>` : ''}</li>`).join('')}</ul>` : '<p class="job-details-empty">No item details are available for this job.</p>'}`;

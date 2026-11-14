@@ -384,6 +384,35 @@
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
+.annotation-review-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.annotation-review-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.annotation-review-heading-copy { min-width: 0; }
+.annotation-review-title { margin: 0; font-size: 13px; }
+.annotation-review-help { margin: 4px 0 0; color: var(--text-dim); font-size: 11px; line-height: 1.45; }
+.annotation-review-controls { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.annotation-review-controls button,
+.annotation-review-link { min-height: 44px; }
+.annotation-review-zoom { min-width: 44px; padding: 8px 10px; }
+.annotation-review-viewport { overflow: auto; max-height: min(52vh, 460px); border: 1px solid var(--border); border-radius: 8px; background: var(--surface); overscroll-behavior: contain; }
+.annotation-review-stage { position: relative; width: max-content; min-width: 100%; transition: transform 160ms ease; }
+.annotation-review-image { display: block; max-width: none; width: auto; height: auto; }
+.annotation-review-canvas { position: absolute; inset: 0 auto auto 0; pointer-events: none; }
+.annotation-review-labels { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.annotation-review-label { padding: 7px 9px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: 999px; color: var(--text); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); font-size: 11px; overflow-wrap: anywhere; }
+.annotation-review-link { width: fit-content; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.annotation-review-loading { min-height: 92px; align-content: center; }
 .list-card {
   padding: 20px 22px;
 }
@@ -1174,6 +1203,9 @@ summary:focus-visible,
   .request-dialog-actions button {
     width: 100%;
   }
+  .annotation-review-heading { flex-direction: column; }
+  .annotation-review-controls { width: 100%; justify-content: flex-start; }
+  .annotation-review-controls button { flex: 1; }
   .connection-actions {
     justify-content: flex-start;
   }
