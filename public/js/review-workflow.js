@@ -219,8 +219,10 @@
   API.updateImage = async (imageId, data) => {
     const result = await originalUpdateImage(imageId, data);
     if (currentImageId === imageId) {
-      invalidateHistory(imageId);
-      if (Object.prototype.hasOwnProperty.call(data || {}, 'isNull')) refresh(imageId);
+      if (Object.prototype.hasOwnProperty.call(data || {}, 'isNull')) {
+        invalidateHistory(imageId);
+        refresh(imageId);
+      }
     }
     return result;
   };

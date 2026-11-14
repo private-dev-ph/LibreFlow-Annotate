@@ -118,6 +118,13 @@ test('review workflow loads history only when open and ignores stale image respo
   await flush();
   assert.deepEqual(historyRequests.map(request => request.imageId), ['a']);
 
+  panel.open = false;
+  panel.dispatchEvent({ type: 'toggle' });
+  panel.open = true;
+  panel.dispatchEvent({ type: 'toggle' });
+  await flush();
+  assert.equal(historyRequests.length, 1, 'reopen reuses the pending current-image history request');
+
   const switchImage = API.getAnnotations('b');
   await switchImage;
   await flush();
@@ -159,6 +166,26 @@ test('closed saves invalidate cached history without fetching it', async () => {
   assert.equal(historyRequests[1].imageId, 'b');
   historyRequests[1].deferred.resolve([]);
   await flush();
+});
+
+test('tag-only image updates preserve loaded history', async () => {
+  const fixture = makeFixture();
+  const { API, elements, historyRequests } = fixture;
+  const panel = elements['review-details'];
+  const revisions = elements['review-revision-select'];
+
+  await API.getAnnotations('b');
+  await flush();
+  panel.open = true;
+  panel.dispatchEvent({ type: 'toggle' });
+  await flush();
+  historyRequests[0].deferred.resolve([{ id: 'current-b', version: 2, annotationCount: 3 }]);
+  await flush();
+  assert.match(revisions.innerHTML, /current-b/);
+
+  await API.updateImage('b', { tags: ['kept'] });
+  assert.equal(historyRequests.length, 1, 'tag update does not re-fetch history');
+  assert.match(revisions.innerHTML, /current-b/, 'tag update leaves loaded history visible');
 });
 
 test('history failures stay scoped to the open image and retry on reopen', async () => {
