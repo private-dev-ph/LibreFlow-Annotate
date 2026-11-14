@@ -16,6 +16,12 @@
     dismissToken: document.getElementById('dismiss-token'), list: document.getElementById('connections-list'),
     refresh: document.getElementById('refresh-connections'),
   };
+  const optionalScopes = [
+    ['mcp:annotations:read', els.annotations],
+    ['mcp:images:preview', document.getElementById('scope-previews')],
+    ['mcp:models:read', document.getElementById('scope-models')],
+    ['mcp:versions:read', document.getElementById('scope-versions')],
+  ];
   const state = {
     config: null, projects: [], connections: [], expiryDays: null, creating: false,
     configLoaded: false, serverEnabled: false, tokenVisible: false, tokenConnectionId: null,
@@ -73,9 +79,9 @@
   }
   function scopeLabel(id) {
     const found = state.config?.scopes?.find(scope => scope.id === id);
-    return found?.label || (id === 'mcp:annotations:read' ? 'Annotation content' : 'Project and image metadata');
+    return found?.label || id;
   }
-  function selectedScopeIds() { return ['mcp:projects:read', ...(els.annotations.checked ? ['mcp:annotations:read'] : [])]; }
+  function selectedScopeIds() { return ['mcp:projects:read', ...optionalScopes.filter(([, input]) => input.checked).map(([id]) => id)]; }
 
   function renderProjects() {
     clearNode(els.projects);
@@ -129,9 +135,10 @@
       els.summary.textContent = 'Select at least one project to review exactly what this connection can read.';
       return;
     }
-    const annotation = els.annotations.checked;
-    const permission = annotation ? `${scopeLabel('mcp:projects:read')} and ${scopeLabel('mcp:annotations:read')}` : scopeLabel('mcp:projects:read');
-    els.summary.textContent = `${permission} for ${names.join(', ')}. The selected project names, labels, and image metadata${annotation ? ', plus annotation geometry and labels,' : ''} can be sent to your chosen AI service. Original image files and write access are never included. This connection expires after ${state.expiryDays} days.`;
+    const scopes = selectedScopeIds();
+    const permission = scopes.map(scopeLabel).join(', ');
+    const images = scopes.includes('mcp:images:preview') ? ' Image previews and crops disclose image contents.' : ' Image contents are not included.';
+    els.summary.textContent = `${permission} for ${names.join(', ')} can be sent to your chosen AI service.${images} Original files, model weights, and write access are never included. This connection expires after ${state.expiryDays} days.`;
   }
 
   function setCreationDisabled(disabled) {
@@ -257,7 +264,7 @@
   }
 
   els.search.addEventListener('input', renderProjects);
-  els.annotations.addEventListener('change', updateSummary);
+  optionalScopes.forEach(([, input]) => input.addEventListener('change', updateSummary));
   els.refresh.addEventListener('click', loadConnections);
   els.copyToken.addEventListener('click', copyToken);
   els.dismissToken.addEventListener('click', clearToken);
@@ -288,7 +295,7 @@
       state.connections = [result.connection, ...state.connections];
       clearToken(); els.token.value = String(result.token); els.tokenPanel.hidden = false; renderConnections();
       state.tokenVisible = true; state.tokenConnectionId = result.connection.id;
-      els.name.value = ''; els.annotations.checked = false; state.selectedProjects.clear(); renderProjects(); updateSummary();
+      els.name.value = ''; optionalScopes.forEach(([, input]) => { input.checked = false; }); state.selectedProjects.clear(); renderProjects(); updateSummary();
       notify('success', 'Connection created', 'Save the token before dismissing this message.');
       els.token.focus();
       setCreationDisabled(true);

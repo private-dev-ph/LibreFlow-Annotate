@@ -64,6 +64,17 @@ test('connection tokens are one-time returned, hashed at rest, and authorize liv
   assert.throws(() => requireProject(principal, 'shared'), error => error.status === 404 && error.code === 'NOT_FOUND');
 });
 
+test('new optional read permissions never expand an existing connection grant', () => {
+  const old = createConnection('owner', { name: 'Existing metadata client', projectIds: ['owned'], scopes: ['mcp:projects:read', 'mcp:annotations:read'] });
+  const before = authenticateConnection(old.token);
+  assert.deepEqual(before.grantedScopes, ['mcp:projects:read', 'mcp:annotations:read']);
+  for (const scope of ['mcp:images:preview', 'mcp:models:read', 'mcp:versions:read']) {
+    const fresh = createConnection('owner', { name: scope, projectIds: ['owned'], scopes: ['mcp:projects:read', scope] });
+    assert.deepEqual(authenticateConnection(fresh.token).grantedScopes, ['mcp:projects:read', scope]);
+  }
+  assert.deepEqual(authenticateConnection(old.token), before);
+});
+
 test('missing or malformed expiry fails closed during authentication', () => {
   const created = createConnection('owner', { name: 'Expiry', projectIds: ['owned'], scopes: [SCOPES[0]] });
   const file = path.join(dataDir, 'mcp-connections.json');

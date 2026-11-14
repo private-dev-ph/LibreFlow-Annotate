@@ -67,7 +67,7 @@
           <div class="card-heading"><div><h2 id="create-title">Create a connection</h2><p>Access is scoped to selected projects and expires automatically.</p></div><span class="feature-chip">Read only</span></div>
           <form id="connection-form" novalidate>
             <label for="connection-name">Connection name</label>
-            <input id="connection-name" name="name" type="text" maxlength="120" autocomplete="off" required placeholder="e.g. Research assistant" />
+            <input id="connection-name" name="name" type="text" maxlength="80" autocomplete="off" required placeholder="e.g. Research assistant" />
             <p class="field-help">Use a name you will recognize in your AI tool settings.</p>
 
             <fieldset class="project-fieldset">
@@ -83,6 +83,9 @@
               <legend>Permissions</legend>
               <label class="scope-row required-scope"><input type="checkbox" checked disabled /><span><strong>Project and image metadata</strong><small>Required · names, labels, dimensions, and other metadata — never original image files.</small></span></label>
               <label class="scope-row"><input id="scope-annotations" type="checkbox" /><span><strong>Annotation content</strong><small>Optional · annotation geometry and labels for the selected projects.</small></span></label>
+              <label class="scope-row"><input id="scope-previews" type="checkbox" /><span><strong>Image previews</strong><small>Optional · reduced-size images and crops. These reveal image contents to your AI provider.</small></span></label>
+              <label class="scope-row"><input id="scope-models" type="checkbox" /><span><strong>Models and classes</strong><small>Optional · accessible model names, formats, and detection class IDs. No model files.</small></span></label>
+              <label class="scope-row"><input id="scope-versions" type="checkbox" /><span><strong>Versions and health</strong><small>Optional · version settings, splits, and health statistics. No annotation geometry or downloads.</small></span></label>
             </fieldset>
 
             <fieldset>
@@ -92,7 +95,7 @@
 
             <div class="grant-summary" aria-labelledby="summary-title">
               <h3 id="summary-title">Before you grant access</h3>
-              <p id="grant-summary-text">Select a project to review exactly what this connection can read.</p>
+              <p id="grant-summary-text" aria-live="polite" aria-atomic="true">Select a project to review exactly what this connection can read.</p>
             </div>
             <p id="form-error" class="form-error" role="alert"></p>
             <button id="create-connection" class="primary-action" type="submit">Create connection</button>
@@ -113,7 +116,7 @@
             <li><span>2</span><div><strong>Set the endpoint</strong><code>LIBREFLOW_MCP_URL=http://127.0.0.1:6769</code></div></li>
             <li><span>3</span><div><strong>Add your one-time token</strong><code>LIBREFLOW_MCP_TOKEN=your-token-here</code></div></li>
           </ol>
-          <p class="setup-note">Only the selected project names, labels, image metadata, and—if enabled—annotation geometry can be sent to your chosen AI service. Original image files and write access are never available in this first version.</p>
+          <p class="setup-note">Only the selected projects and checked permissions are shared with your chosen AI service. Image previews disclose image contents. Original files, model weights, and write access are not included. Revoking access stops future reads; it cannot retract data already received.</p>
           <a class="text-link" href="/docs/mcp-local-setup.md">Read the complete local setup guide →</a>
         </section>
       </div>

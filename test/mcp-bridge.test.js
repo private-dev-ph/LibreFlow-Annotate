@@ -97,7 +97,7 @@ function validTool(name = 'libreflow_list_projects') {
 test('validateCatalog fails closed for unknown, duplicate, oversized, and remote-ref schemas', () => {
   assert.throws(() => validateCatalog({ tools: [{ ...validTool(), name: 'unknown_tool' }] }), /unknown tool/);
   assert.throws(() => validateCatalog({ tools: [validTool(), validTool()] }), /duplicate/);
-  assert.throws(() => validateCatalog({ tools: Array.from({ length: 6 }, (_, i) => validTool(`libreflow_${i}`)) }), /too large/);
+  assert.throws(() => validateCatalog({ tools: Array.from({ length: require('../lib/mcp-tool-names').TOOL_NAMES.length + 1 }, (_, i) => validTool(`libreflow_${i}`)) }), /too large/);
   const remote = validTool();
   remote.inputSchema.properties.x = { $ref: 'https://example.test/schema.json' };
   assert.throws(() => validateCatalog({ tools: [remote] }), /Remote schema references/);
@@ -119,5 +119,34 @@ test('query handlers require an object result and return structured content', as
     const failure = await registered.get('libreflow_list_projects')({});
     assert.equal(failure.isError, true);
     assert.doesNotMatch(failure.content[0].text, /secret-canary|malformed/);
+  } finally { global.fetch = originalFetch; }
+});
+
+
+test('image previews use native image content and keep the complete wire result bounded', async () => {
+  const registered = new Map();
+  const sdk = {
+    McpServer: class { registerTool(name, _opts, handler) { registered.set(name, handler); } },
+    fromJsonSchema: schema => schema,
+  };
+  const originalFetch = global.fetch;
+  const image = { mimeType: 'image/jpeg', data: Buffer.alloc(64 * 1024, 1).toString('base64') };
+  const result = { projectId: 'project', imageId: 'image', width: 800, height: 400, image };
+  try {
+    global.fetch = async () => response({ result });
+    await createBridgeServer(config, [validTool('libreflow_get_image_preview')], sdk);
+    const handler = registered.get('libreflow_get_image_preview');
+    const success = await handler({ projectId: 'project', imageId: 'image' });
+    assert.equal(success.isError, undefined);
+    assert.deepEqual(success.content.find(item => item.type === 'image'), { type: 'image', ...image });
+    assert.deepEqual(success.structuredContent, result);
+    assert.ok(Buffer.byteLength(JSON.stringify(success)) < 256 * 1024 - 4096);
+    for (const badImage of [{ mimeType: 'image/svg+xml', data: 'secret' }, { mimeType: 'image/jpeg', data: '!secret' }, { mimeType: 'image/jpeg', data: 'A'.repeat(90000) }]) {
+      global.fetch = async () => response({ result: { ...result, image: badImage } });
+      const failure = await handler({});
+      assert.equal(failure.isError, true);
+      assert.equal(failure.content.some(item => item.type === 'image'), false);
+      assert.doesNotMatch(JSON.stringify(failure), /secret/);
+    }
   } finally { global.fetch = originalFetch; }
 });

@@ -11,13 +11,28 @@ const {
 const router = express.Router();
 const SCOPE_METADATA = {
   'mcp:projects:read': {
-    label: 'Projects',
-    description: 'Read projects available to this connection.',
+    label: 'Project and image metadata',
+    description: 'Names, labels, dimensions, batches, and counts in the selected projects.',
     required: true,
   },
   'mcp:annotations:read': {
-    label: 'Annotations',
+    label: 'Annotation content',
     description: 'Read annotations in the selected projects.',
+    required: false,
+  },
+  'mcp:images:preview': {
+    label: 'Image previews',
+    description: 'Reduced-size images and crops, which may be sent to your AI provider. Original files are not included.',
+    required: false,
+  },
+  'mcp:models:read': {
+    label: 'Models and classes',
+    description: 'Accessible model names, formats, and detection class IDs. Model weights are not included.',
+    required: false,
+  },
+  'mcp:versions:read': {
+    label: 'Versions and health',
+    description: 'Version settings, split counts, and dataset health statistics. No annotation geometry or downloads.',
     required: false,
   },
 };

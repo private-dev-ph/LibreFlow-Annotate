@@ -154,3 +154,24 @@ test('a single oversized geometry returns a clear 413 instead of truncating it',
   );
   write('annotations.json', allGeometry);
 });
+
+
+test('search and annotation/review filters stay inside the allowed project and bind paging cursors', async () => {
+  assert.deepEqual((await service.callTool(principal, 'libreflow_list_projects', { search: 'THREE' })).items.map(item => item.id), ['project-3']);
+  assert.deepEqual((await service.callTool(principal, 'libreflow_list_projects', { search: 'two' })).items, []);
+  const fixtures = [image,
+    { id: 'null-image', projectId: 'project-1', originalName: 'empty-board.jpg', isNull: true, annotated: false },
+    { id: 'new-image', projectId: 'project-1', originalName: 'new-board.jpg', annotated: false },
+    { id: 'other-image', projectId: 'project-2', originalName: 'board.jpg', annotated: false },
+  ];
+  write('images.json', fixtures);
+  try {
+    const call = args => service.callTool(principal, 'libreflow_list_images', { projectId: 'project-1', ...args });
+    assert.deepEqual((await call({ annotationStatus: 'null', reviewStatus: 'in_progress' })).items.map(item => item.id), ['null-image']);
+    assert.deepEqual((await call({ annotationStatus: 'unannotated', search: 'BOARD' })).items.map(item => item.id), ['new-image']);
+    assert.deepEqual((await call({ annotationStatus: 'annotated', reviewStatus: 'submitted' })).items.map(item => item.id), ['image-1']);
+    const first = await call({ search: 'board', limit: 1 });
+    assert.ok(first.nextCursor);
+    await assert.rejects(call({ search: 'sample', cursor: first.nextCursor }), error => error.status === 400);
+  } finally { write('images.json', [image]); }
+});
