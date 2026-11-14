@@ -266,6 +266,20 @@ async function exchangeCode(origin, code, verifier) {
   });
 }
 
+async function refreshToken(origin, refreshTokenValue) {
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: refreshTokenValue,
+    client_id: CLIENT_ID,
+    resource: `${origin}/mcp`,
+  });
+  return fetch(`${origin}/oauth/token`, {
+    method: 'POST',
+    headers: { origin, 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+}
+
 async function finishCode(origin, flow, input) {
   const approved = await approve(origin, flow, input);
   assert.equal(approved.response.status, 200);
@@ -452,8 +466,15 @@ test('discovery advertises exact issuer and resource metadata', { concurrency: f
 });
 
 test('revocation removes an app grant', { concurrency: false, timeout: 60000 }, async (t) => {
+  const originalAuthenticateOAuthConnection = mcpPolicy.authenticateOAuthConnection;
+  const authenticationCalls = [];
+  mcpPolicy.authenticateOAuthConnection = (input) => {
+    authenticationCalls.push({ ...input, scopes: [...(input.scopes || [])] });
+    return originalAuthenticateOAuthConnection(input);
+  };
   const app = await startApp();
   t.after(() => new Promise((resolve) => {
+    mcpPolicy.authenticateOAuthConnection = originalAuthenticateOAuthConnection;
     app.server.close(resolve);
     app.server.closeAllConnections();
     fs.rmSync(root, { recursive: true, force: true });
@@ -462,12 +483,33 @@ test('revocation removes an app grant', { concurrency: false, timeout: 60000 }, 
   await continueLogin(app.origin, flow);
   const completed = await finishCode(app.origin, flow, { projectIds: ['selected'], scopes: [SCOPE], expiresInDays: 30 });
   const tokenResponse = await exchangeCode(app.origin, completed.code, flow.verifier);
+  assert.equal(tokenResponse.status, 200);
   const tokens = await tokenResponse.json();
+  const refreshResponse = await refreshToken(app.origin, tokens.refresh_token);
+  assert.equal(refreshResponse.status, 200);
+  const refreshedTokens = await refreshResponse.json();
   const connection = mcpPolicy.listConnections('owner').find((item) => item.clientId === CLIENT_ID);
   assert.ok(connection);
-  const before = await fetch(`${app.origin}/mcp`, { method: 'POST', headers: { authorization: `Bearer ${tokens.access_token}` } });
+  const hookCall = authenticationCalls.find((input) => input.userId === 'owner'
+    && input.clientId === CLIENT_ID
+    && input.issuer === `${app.origin}/oauth`
+    && input.scopes.length === 1
+    && input.scopes[0] === SCOPE);
+  assert.ok(hookCall);
+  assert.equal(typeof hookCall.grantId, 'string');
+  const before = await fetch(`${app.origin}/mcp`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${refreshedTokens.access_token}` },
+  });
   assert.notEqual(before.status, 401);
   assert.ok(mcpPolicy.revokeConnection('owner', connection.id));
-  const after = await fetch(`${app.origin}/mcp`, { method: 'POST', headers: { authorization: `Bearer ${tokens.access_token}` } });
+  const callsBeforeRevokedRefresh = authenticationCalls.length;
+  const revokedRefresh = await refreshToken(app.origin, refreshedTokens.refresh_token);
+  assert.equal(revokedRefresh.status, 400);
+  assert.ok(authenticationCalls.length > callsBeforeRevokedRefresh);
+  const after = await fetch(`${app.origin}/mcp`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${refreshedTokens.access_token}` },
+  });
   assert.equal(after.status, 401);
 });
