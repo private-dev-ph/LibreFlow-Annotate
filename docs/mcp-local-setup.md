@@ -63,6 +63,14 @@ Configure a **stdio** server in your client:
 
 After package installation, the `libreflow-mcp` executable is an equivalent command. Never put the credential in command-line arguments, a URL, a committed configuration file, or a chat message. The server reads it only from its environment; it does not search the filesystem for credentials.
 
+If LibreFlow is already running in Docker, you can use the bridge bundled in the container instead of installing Node and dependencies on the host. Configure the client with:
+
+- Command: `docker`
+- Arguments: `exec`, `-i`, `-e`, `LIBREFLOW_MCP_TOKEN`, `-e`, `LIBREFLOW_MCP_URL=http://127.0.0.1:6769`, your app container name, `node`, `/app/bin/libreflow-mcp.js`
+- Protected environment: `LIBREFLOW_MCP_TOKEN` set to the one-time credential
+
+Docker forwards the named token environment variable without putting its value in the command arguments. The client must have permission to access the local Docker engine.
+
 The client-side bridge accepts only an HTTP loopback base URL. It follows no redirects and sends credentials only to that configured service. Standard output is reserved for MCP messages; startup/errors use standard error without credentials or response payloads.
 
 The official TypeScript SDK is pinned to 2.4.0. Its stdio entry supports the current 2026-07-28 protocol and legacy clients from the same tool implementation. Client approval settings still govern when tools are invoked; descriptive read-only tool hints do not replace server authorization.
@@ -75,7 +83,7 @@ The credential is separate from existing automation API keys: `lfm_` credentials
 
 LibreFlow records only recent operation metadata (tool, outcome, time, and authorized project ID). Credentials, tool arguments, annotation contents, and original image bytes are not logged. Only the newest 20 activity entries per connection are retained; this is an activity aid, not a durable compliance audit. Up to 100 connection records per user are supported in this milestone.
 
-The private listener rejects browser origins/cookies and unexpected Host headers, limits requests per connection/user, and accepts only curated read operations. The stdio bridge has no access to LibreFlow's storage files and cannot run shell commands, upload files, or fetch caller-selected URLs.
+The private listener rejects browser origins/cookies and unexpected Host headers, limits requests per connection/user, and accepts only curated read operations. The stdio bridge does not read LibreFlow's storage files. Its tools cannot run shell commands, upload files, or fetch caller-selected URLs.
 
 ## Troubleshooting
 
@@ -109,3 +117,11 @@ See [the implementation plan](mcp-access-plan.md) for later write/proposal, data
 Verified on 2026-11-14: the Linux Docker regression suite passed 274 tests; the existing web security check passed; `npm audit --omit=dev` reported no known vulnerabilities. Official SDK clients exercised both legacy and pinned 2026-07-28 stdio sessions, scoped reads, membership removal, revocation, and unchanged annotation/history files. Real-process checks covered EOF shutdown and blocked credential forwarding through HTTP redirects.
 
 The consent screen passed creation, project-search selection persistence, refresh, one-time token handling, revocation, and keyboard focus checks. Layouts were checked at 320Ã—568, 390Ã—844, 768Ã—1024, 1024Ã—768, and 1440Ã—900 in both light and dark mode, with no horizontal overflow and visible navigation icons. Test data and credentials were isolated from the working installation.
+
+## Complete local read release verification
+
+Verified on 2026-11-14: `docker run --rm -e NODE_ENV=test libreflow-annotate-app:mcp-release-tested sh -c 'npm test && npm run check:web'` passed all 297 tests with zero failures or skips, followed by the web security checks. `npm audit --omit=dev --audit-level=high` reported no known vulnerabilities.
+
+The official SDK exercised all eleven tools through both legacy and modern stdio clients, including permission denial, native image previews, model class IDs, verified version settings, cross-project isolation, revocation, and unchanged fixture assets and annotations. Concurrent model inspection uses explicit test synchronization instead of relying on filesystem timing.
+
+The consent workflow also passed browser checks at 320x568, 390x844, 768x1024, 1024x768, and 1440x900 in light and dark modes, including visible mobile navigation icons, no horizontal overflow, one-time credential handling, and keyboard focus after revocation. All acceptance credentials and datasets were disposable fixtures.
