@@ -969,16 +969,18 @@
     if (["point", "keypoint"].includes(type)) { context.beginPath(); context.arc(points[0].x, points[0].y, 5, 0, Math.PI * 2); context.fill(); }
   }
 
-  function reviewImagePanel(data) {
-    const panel = node("section", "annotation-review-panel");
+  function reviewImagePanel(data, identity) {
+    const panel = node("section", "annotation-review-panel annotation-review-loading");
     panel.setAttribute("aria-labelledby", "annotation-review-title");
     const heading = node("div", "annotation-review-heading");
     heading.append(node("div", "annotation-review-heading-copy", undefined));
-    heading.firstChild.append(node("h3", "annotation-review-title", "Visual annotation preview"), node("p", "annotation-review-help", `${Number(data.existingCount) || 0} existing annotation${Number(data.existingCount) === 1 ? "" : "s"} · ${data.shapes.length} proposed`));
+    const title = node("h3", "annotation-review-title", "Visual annotation preview");
+    title.id = "annotation-review-title";
+    heading.firstChild.append(title, node("p", "annotation-review-help", `${Number(data.existingCount) || 0} existing annotation${Number(data.existingCount) === 1 ? "" : "s"} · ${data.shapes.length} proposed`));
     const controls = node("div", "annotation-review-controls");
     const toggle = node("button", "secondary-action annotation-review-toggle", "Hide overlay"); toggle.type = "button"; toggle.setAttribute("aria-pressed", "true");
     const zoomOut = node("button", "secondary-action annotation-review-zoom", "−"); zoomOut.type = "button"; zoomOut.setAttribute("aria-label", "Zoom out");
-    const zoomReset = node("button", "secondary-action annotation-review-zoom", "100%"); zoomReset.type = "button"; zoomReset.setAttribute("aria-label", "Reset zoom");
+    const zoomReset = node("button", "secondary-action annotation-review-zoom", "Fit"); zoomReset.type = "button"; zoomReset.setAttribute("aria-label", "Fit image");
     const zoomIn = node("button", "secondary-action annotation-review-zoom", "+"); zoomIn.type = "button"; zoomIn.setAttribute("aria-label", "Zoom in");
     controls.append(toggle, zoomOut, zoomReset, zoomIn); heading.append(controls); panel.append(heading);
     const viewport = node("div", "annotation-review-viewport");
@@ -990,19 +992,49 @@
     if (labels.childElementCount) panel.append(labels);
     const link = safeAnnotatorUrl(data.annotatorUrl);
     if (link) { const open = node("a", "secondary-action annotation-review-link", "Open this image in annotator"); open.href = link; open.target = "_blank"; open.rel = "noopener"; panel.append(open); }
-    let zoom = 1, overlayVisible = true;
+    const requestId = String(identity?.requestId || "");
+    const token = identity?.token;
+    const isCurrent = () => panel.isConnected && state.requestPreview.token === token && String(state.requestPreview.requestId) === requestId && String(state.activeRequest?.id) === requestId;
+    let fitZoom = 1, zoom = 1, overlayVisible = true;
     const draw = () => {
-      if (!image.naturalWidth || !image.naturalHeight) return;
-      const ratio = window.devicePixelRatio || 1; canvas.width = Math.min(4096, image.naturalWidth * ratio); canvas.height = Math.min(4096, image.naturalHeight * ratio); canvas.style.width = `${image.naturalWidth}px`; canvas.style.height = `${image.naturalHeight}px`;
-      const context = canvas.getContext("2d"); context.setTransform(canvas.width / image.naturalWidth, 0, 0, canvas.height / image.naturalHeight, 0, 0); context.clearRect(0, 0, image.naturalWidth, image.naturalHeight); if (!overlayVisible) return;
+      if (!image.naturalWidth || !image.naturalHeight) return false;
+      const ratio = window.devicePixelRatio || 1; canvas.width = Math.min(4096, image.naturalWidth * ratio); canvas.height = Math.min(4096, image.naturalHeight * ratio);
+      const context = canvas.getContext("2d"); if (!context) return false;
+      context.setTransform(canvas.width / image.naturalWidth, 0, 0, canvas.height / image.naturalHeight, 0, 0); context.clearRect(0, 0, image.naturalWidth, image.naturalHeight); if (!overlayVisible) return true;
       context.lineWidth = Math.max(1.5, image.naturalWidth / 500); context.strokeStyle = "#ffcc33"; context.fillStyle = "rgba(255, 204, 51, 0.18)"; data.shapes.forEach(shape => drawReviewShape(context, shape));
+      return true;
     };
-    const applyZoom = () => { zoomReset.textContent = `${Math.round(zoom * 100)}%`; stage.style.transform = `scale(${zoom})`; stage.style.transformOrigin = "top left"; };
+    const applyZoom = () => {
+      const width = image.naturalWidth * zoom, height = image.naturalHeight * zoom;
+      if (width && height) {
+        stage.style.width = `${width}px`; stage.style.height = `${height}px`;
+        image.style.width = `${width}px`; image.style.height = `${height}px`;
+        canvas.style.width = `${width}px`; canvas.style.height = `${height}px`;
+      }
+      zoomReset.textContent = Math.abs(zoom - fitZoom) < 0.001 ? "Fit" : `${Math.round(zoom * 100)}%`;
+    };
     toggle.addEventListener("click", () => { overlayVisible = !overlayVisible; toggle.textContent = overlayVisible ? "Hide overlay" : "Show overlay"; toggle.setAttribute("aria-pressed", String(overlayVisible)); draw(); });
-    zoomOut.addEventListener("click", () => { zoom = Math.max(0.75, zoom - 0.25); applyZoom(); });
+    zoomOut.addEventListener("click", () => { zoom = Math.max(0.05, zoom - 0.25); applyZoom(); });
     zoomIn.addEventListener("click", () => { zoom = Math.min(2.5, zoom + 0.25); applyZoom(); });
-    zoomReset.addEventListener("click", () => { zoom = 1; applyZoom(); });
-    image.addEventListener("load", draw, { once: true }); image.addEventListener("error", () => { panel.dataset.loadError = "true"; panel.append(node("p", "form-error", "The source image could not be loaded. Approval is disabled until the preview is available.")); state.requestPreview.status = "error"; renderReviewButtons(state.activeRequest); });
+    zoomReset.addEventListener("click", () => { zoom = fitZoom; applyZoom(); });
+    const fail = (message) => {
+      if (!isCurrent()) return;
+      panel.dataset.loadError = "true"; panel.classList.remove("annotation-review-loading"); const errorTitle = node("h3", "annotation-review-title", "Visual annotation preview"); errorTitle.id = "annotation-review-title"; panel.replaceChildren(errorTitle, node("p", "form-error", message));
+      state.requestPreview.status = "error"; renderReviewButtons(state.activeRequest);
+    };
+    image.addEventListener("load", () => {
+      if (!isCurrent()) return;
+      const availableWidth = Math.max(1, viewport.clientWidth || viewport.getBoundingClientRect().width || 1);
+      const availableHeight = viewport.clientHeight || viewport.getBoundingClientRect().height || 0;
+      fitZoom = Math.min(1, availableWidth / image.naturalWidth, availableHeight ? availableHeight / image.naturalHeight : 1);
+      zoom = fitZoom;
+      applyZoom();
+      if (!draw()) { fail("The source image could not be rendered. Approval is disabled until the preview is available."); return; }
+      panel.classList.remove("annotation-review-loading");
+      state.requestPreview.status = "ready";
+      renderReviewButtons(state.activeRequest);
+    }, { once: true });
+    image.addEventListener("error", () => fail("The source image could not be loaded. Approval is disabled until the preview is available."), { once: true });
     image.src = String(data.image?.url || ""); applyZoom(); return panel;
   }
 
@@ -1162,16 +1194,15 @@
           const preview = await request(`/api/mcp/connections/requests/${encodeURIComponent(id)}/annotations`);
           if (state.requestPreview.token !== token || String(state.activeRequest?.id) !== String(id)) return;
           if (!preview?.image?.url || !Array.isArray(preview.shapes)) throw new Error("The annotation preview response was incomplete.");
-          state.requestPreview = { status: "ready", requestId: String(id), token, data: preview };
+          state.requestPreview = { status: "loading", requestId: String(id), token, data: preview };
           const currentPanel = els.requestDetail.querySelector(".annotation-review-panel");
-          currentPanel?.replaceWith(reviewImagePanel(preview));
-          renderReviewButtons(state.activeRequest);
+          currentPanel?.replaceWith(reviewImagePanel(preview, { requestId: String(id), token }));
         } catch (error) {
           if (state.requestPreview.token !== token || String(state.activeRequest?.id) !== String(id)) return;
           state.requestPreview = { status: "error", requestId: String(id), token, data: null };
           const currentPanel = els.requestDetail.querySelector(".annotation-review-panel");
           currentPanel?.classList.remove("annotation-review-loading");
-          currentPanel?.replaceChildren(node("h3", "annotation-review-title", "Visual annotation preview"), node("p", "form-error", error.message || "The annotation preview could not be loaded. Approval is disabled."));
+          if (currentPanel) { const errorTitle = node("h3", "annotation-review-title", "Visual annotation preview"); errorTitle.id = "annotation-review-title"; currentPanel.replaceChildren(errorTitle, node("p", "form-error", error.message || "The annotation preview could not be loaded. Approval is disabled.")); }
           renderReviewButtons(state.activeRequest);
         }
       }
