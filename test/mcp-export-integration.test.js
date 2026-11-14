@@ -99,13 +99,14 @@ test('browser session, local bearer gateway, and remote OAuth router download th
   const browser = await listen(browserApp); t.after(() => browser.server.close());
   const browserResponse = await fetch(`${browser.origin}/api/mcp/connections/downloads/${PROJECT}/${id}`);
   assert.equal(browserResponse.status, 200);
-  assert.ok(new AdmZip(await body(browserResponse)).getEntry('manifest.json'));
+  const browserBytes=await body(browserResponse);assert.ok(new AdmZip(browserBytes).getEntry('manifest.json'));
+  assert.equal((await fetch(browser.origin+'/api/mcp/connections/downloads/'+PROJECT+'/'+id,{headers:{authorization:'Bearer '+token}})).status,401);
 
   const gateway = createMcpGateway({ policy, queries: { listTools: async () => [], callTool: async () => ({}) } });
   const local = await listen(gateway); t.after(() => local.server.close());
   const localResponse = await fetch(`${local.origin}/v1/downloads/${PROJECT}/${id}`, { headers: { authorization: `Bearer ${token}`, host: `127.0.0.1:${new URL(local.origin).port}` } });
   assert.equal(localResponse.status, 200);
-  assert.ok((await body(localResponse)).length > 0);
+  assert.deepEqual(await body(localResponse),browserBytes);
   const cookieMode = await fetch(`${local.origin}/v1/downloads/${PROJECT}/${id}`, { headers: { cookie: 'libreflow.sid=x', host: `127.0.0.1:${new URL(local.origin).port}` } });
   assert.equal(cookieMode.status, 403);
 
@@ -121,6 +122,7 @@ test('browser session, local bearer gateway, and remote OAuth router download th
   const expectedHost = `127.0.0.1:${remotePort}`;
   const remoteResponse = await fetch(`${remoteOrigin}/mcp-downloads/${PROJECT}/${id}`, { headers: { authorization: `Bearer ${token}`, host: expectedHost } });
   assert.equal(remoteResponse.status, 200);
+  assert.deepEqual(await body(remoteResponse),browserBytes);
   const remoteCookie = await fetch(`${remoteOrigin}/mcp-downloads/${PROJECT}/${id}`, { headers: { authorization: `Bearer ${token}`, cookie: 'x', host: expectedHost } });
   assert.equal(remoteCookie.status, 403);
   const remoteQuery = await fetch(`${remoteOrigin}/mcp-downloads/${PROJECT}/${id}?x=1`, { headers: { authorization: `Bearer ${token}`, host: expectedHost } });
@@ -138,7 +140,7 @@ test('same-user other connection and outsider browser session cannot download th
   browserApp.use('/api/mcp/connections', require('../routes/mcp-connections'));
   const server = await listen(browserApp); t.after(() => server.server.close());
   const response = await fetch(`${server.origin}/api/mcp/connections/downloads/${PROJECT}/${artifact.result.exportId}`);
-  assert.notEqual(response.status, 200);
+  assert.equal(response.status, 401);
 });
 
 test('revocation and explicit abort stop an open download stream', async () => {
@@ -172,22 +174,17 @@ test('canceling a queued approved export publishes no archive', async () => {
 
 test('failed metadata publication keeps the renamed archive while journal recovery is pending', async () => {
   const { principal } = makePrincipal();
-  const originalRename = fs.renameSync;
+  const originalWrite = fs.writeFileSync;
   const journal = path.join(root, '.libreflow-data-command-journal');
-  let injected = false;
-  fs.renameSync = (from, to) => {
-    if (!injected && String(to).endsWith('.zip')) {
+  let injected = false, publicationFailed;
+  const published = new Promise(resolve => { publicationFailed=resolve; });
+  fs.writeFileSync = (to, bytes, options) => {
+    if (!injected && path.resolve(to) === dataFile('mcp-exports.json') && fs.existsSync(journal)) {
       injected = true;
-      const result = originalRename(from, to);
-      // Leave a structurally valid data-command journal behind, matching the
-      // recovery shape used by the durable store rather than a corrupt marker.
-      const bytes = fs.readFileSync(dataFile('jobs.json'));
-      const entry = { path: 'jobs.json', bytes: bytes.toString('base64'), sha256: crypto.createHash('sha256').update(bytes).digest('hex'), size: bytes.length };
-      const integrity = crypto.createHash('sha256').update(JSON.stringify([entry])).digest('hex');
-      fs.writeFileSync(journal, JSON.stringify({ version: 1, state: 'committed', dataDirectory: path.resolve(root), entries: [entry], integrity: { algorithm: 'sha256', digest: integrity } }));
+      publicationFailed();
       throw new Error('simulated metadata publication failure');
     }
-    return originalRename(from, to);
+    return originalWrite(to, bytes, options);
   };
   try {
     const preview = exportsApi.previewExport(principal, { projectId: PROJECT, versionId: VERSION, requestKey: 'journal-export', includeImages: true });
@@ -196,14 +193,27 @@ test('failed metadata publication keeps the renamed archive while journal recove
     // A pending data-command journal intentionally prevents the job runner from
     // persisting its failed status. Wait for the publication attempt itself,
     // then inspect the durable archive before allowing recovery to proceed.
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await published;
+    await new Promise(resolve => setImmediate(resolve));
     const files = fs.readdirSync(path.join(root, 'mcp-exports')).filter(name => name.endsWith('.zip'));
     assert.equal(files.length, 1);
     assert.deepEqual(exportsApi.cleanupExports(), { removed: 0 });
     assert.equal(recoverDataCommands(), true);
     assert.equal(fs.existsSync(journal), false);
+    const records=JSON.parse(fs.readFileSync(dataFile('mcp-exports.json'),'utf8'));assert.equal(records.length,1);
+    const restored=exportsApi.openDownload(principal,{projectId:PROJECT,exportId:records[0].id});
+    const chunks=[];for await(const chunk of restored.stream)chunks.push(chunk);
+    assert.equal(sha256(Buffer.concat(chunks)),records[0].hash);restored.close();
   } finally {
-    fs.renameSync = originalRename;
+    fs.writeFileSync = originalWrite;
     try { fs.unlinkSync(journal); } catch (_) {}
   }
+});
+
+test('caller cancellation stops a download without revoking its connection',async()=>{
+  const {principal}=makePrincipal();const artifact=await prepareExport(principal,'abort-export');
+  const controller=new AbortController();
+  const download=exportsApi.openDownload(principal,{projectId:PROJECT,exportId:artifact.result.exportId,signal:controller.signal});
+  download.stream.on('error',()=>{});download.stream.pause();controller.abort();
+  assert.equal(download.stream.destroyed,true);assert.ok(policy.currentRecord(principal));download.close();
 });
