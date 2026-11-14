@@ -1,10 +1,12 @@
 // auth.js – handles login/register form logic on the login page
 
 (async () => {
+  const requestedReturn = new URLSearchParams(window.location.search).get('returnTo');
+  const returnTo = /^\/ai-authorize\/[A-Za-z0-9_-]{1,128}$/.test(requestedReturn || '') ? requestedReturn : '/dashboard';
   // If already logged in, go straight to dashboard
   try {
     const me = await fetch('/api/auth/me', { credentials: 'include' });
-    if (me.ok) { window.location.href = '/dashboard'; return; }
+    if (me.ok) { window.location.href = returnTo; return; }
   } catch {}
 
   const tabs      = document.querySelectorAll('.auth-tab');
@@ -94,7 +96,7 @@
       });
       const data = await res.json();
       if (!res.ok) { showError(data.error || 'Login failed.'); return; }
-      window.location.href = '/dashboard';
+      window.location.href = returnTo;
     } catch {
       showError('Network error. Please try again.');
     } finally {
@@ -123,7 +125,7 @@
       });
       const data = await res.json();
       if (!res.ok) { showError(data.error || 'Registration failed.'); return; }
-      window.location.href = '/dashboard';
+      window.location.href = returnTo;
     } catch {
       showError('Network error. Please try again.');
     } finally {

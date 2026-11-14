@@ -7,8 +7,15 @@ const { loadSecurityConfig } = require('./lib/security-config');
 const { dataPath } = require('./lib/data-store');
 const { warmJsonIndex } = require('./lib/read-index');
 
+async function startApplication() {
+const { acquireDataWriterLease, recoverDataCommands } = require('./lib/data-command');
+const releaseLease = await acquireDataWriterLease({ retries: { retries: 40, minTimeout: 1000, maxTimeout: 1000 } });
+recoverDataCommands();
 // Reject unsafe production configuration before loading routes or starting services.
 const securityConfig = loadSecurityConfig();
+const remoteConfig = require('./lib/mcp-remote-config').loadRemoteConfig();
+const mcpPolicy = require('./lib/mcp-connections');
+const oauth = remoteConfig.enabled ? await require('./lib/mcp-oauth-provider').createOAuthService({config:remoteConfig,policy:mcpPolicy}) : null;
 
 const authRouter        = require('./routes/auth');
 const imagesRouter      = require('./routes/images');
@@ -51,6 +58,10 @@ if (securityConfig.trustProxy) app.set('trust proxy', securityConfig.trustProxy)
 // Middleware
 const originPolicy = createOriginPolicy(securityConfig);
 app.use(securityHeaders);
+if (oauth) {
+  const remoteRouter = require('./lib/mcp-remote-http').createRemoteMcpRouter({config:remoteConfig,oauth,policy:mcpPolicy,queries:require('./lib/mcp-queries').createQueryService(mcpPolicy)});
+  app.use((req,res,next) => /^\/(?:mcp(?:$|\/)|mcp-downloads(?:$|\/)|oauth(?:$|\/)|\.well-known\/oauth-)/.test(req.path) ? remoteRouter(req,res,next) : next());
+}
 app.use(cors({
   origin(origin, callback) {
     if (!origin || securityConfig.allowedOrigins.includes(origin)) return callback(null, true);
@@ -60,6 +71,7 @@ app.use(cors({
 }));
 app.use('/api/auth', express.json({ limit: '16kb' }));
 app.use('/api/mcp/connections', express.json({ limit: '16kb' }));
+app.use('/ai-authorize', express.json({ limit: '16kb' }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(session({
@@ -76,6 +88,7 @@ app.use(session({
   },
 }));
 app.use(originPolicy.csrf);
+if (oauth) app.use('/ai-authorize', require('./routes/mcp-oauth-consent').createOAuthConsentRouter({oauth,config:remoteConfig,policy:mcpPolicy}));
 
 // Static files
 app.use('/uploads', requireAuth, requireUploadedImageAccess, express.static(path.join(__dirname, 'uploads')));
@@ -122,7 +135,10 @@ app.get('/', (req, res) => {
   return res.redirect('/login');
 });
 app.get('/login',     (req, res) => {
-  if (req.session && req.session.userId) return res.redirect('/dashboard');
+  if (req.session && req.session.userId) {
+    const returnTo = /^\/ai-authorize\/[A-Za-z0-9_-]{1,128}$/.test(req.query.returnTo || '') ? req.query.returnTo : '/dashboard';
+    return res.redirect(returnTo);
+  }
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 app.get('/dashboard', requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'dashboard.html')));
@@ -149,6 +165,7 @@ app.use('/api/reviews',     requireAuth, reviewsRouter);
 // scoped Bearer key. Annotated imports remain session-only in the router.
 app.use('/api/dataset-lifecycle', authenticateAutomation, datasetLifecycleRouter);
 
+require('./lib/mcp-action-handlers').registerActionJobs();
 try { startJobRuntime(); }
 catch (error) { console.error('Automation job recovery failed:', error.message); }
 try { resumeWebhookDeliveries(); }
@@ -158,6 +175,11 @@ catch (error) { console.error('Webhook delivery recovery failed:', error.message
 // The helper keeps missing and oversized files on their normal lazy-read path.
 warmJsonIndex(dataPath('annotations.json'), 'imageId');
 warmJsonIndex(dataPath('annotation-revisions.json'), 'imageId');
+
+app.use((error,req,res,next) => {
+  if (res.headersSent) return next(error);
+  res.status(error.status === 413 ? 413 : 503).json({error:'The request could not be completed. Please try again after checking the server.'});
+});
 
 // ── 404 fallback ──────────────────────────────────────────────────────────────
 app.use((req, res) => res.redirect('/'));
@@ -170,7 +192,7 @@ if (mcpGateway) mcpGateway.once('error', () => {
   process.exit(1);
 });
 
-app.listen(PORT, HOST, () => {
+const httpServer = app.listen(PORT, HOST, () => {
   const { networkInterfaces } = require('os');
   const nets = networkInterfaces();
   console.log(`\n  LibreFlow Annotate`);
@@ -185,3 +207,14 @@ app.listen(PORT, HOST, () => {
   }
   console.log(`  ──────────────────────────────────\n`);
 });
+
+let stopping = false;
+async function stop() {
+  if (stopping) return; stopping = true;
+  httpServer.close(); mcpGateway?.close();
+  // proper-lockfile removes the lease during synchronous process exit.
+  process.exit(0);
+}
+process.once('SIGINT',stop); process.once('SIGTERM',stop);
+}
+startApplication().catch(error => { console.error('LibreFlow startup refused:', error.message); process.exit(1); });

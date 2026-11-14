@@ -1,3 +1,4 @@
+const { transactionalJson } = require('../lib/transactional-json');
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const {
@@ -98,7 +99,7 @@ router.get('/image/:imageId', (req, res) => {
   });
 });
 
-router.patch('/image/:imageId', (req, res) => {
+router.patch('/image/:imageId', transactionalJson((req, res) => {
   const context = accessibleImage(req, res);
   if (!context) return;
   let review = getReview(context.image);
@@ -183,9 +184,9 @@ router.patch('/image/:imageId', (req, res) => {
     ...event,
   }));
   res.json(review);
-});
+}));
 
-router.post('/image/:imageId/comments', (req, res) => {
+router.post('/image/:imageId/comments', transactionalJson((req, res) => {
   const context = accessibleImage(req, res);
   if (!context) return;
   const message = String(req.body?.message || '').trim();
@@ -219,9 +220,9 @@ router.post('/image/:imageId/comments', (req, res) => {
     details: { entryId: entry.id, annotationId: entry.annotationId, message },
   });
   res.status(201).json(saved);
-});
+}));
 
-router.patch('/image/:imageId/issues/:issueId', (req, res) => {
+router.patch('/image/:imageId/issues/:issueId', transactionalJson((req, res) => {
   const context = accessibleImage(req, res);
   if (!context) return;
   const review = getReview(context.image);
@@ -258,6 +259,6 @@ router.patch('/image/:imageId/issues/:issueId', (req, res) => {
     });
   }
   res.json(saved);
-});
+}));
 
 module.exports = router;

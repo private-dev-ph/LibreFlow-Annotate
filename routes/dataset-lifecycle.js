@@ -1,3 +1,4 @@
+const { runDataCommand } = require('../lib/data-command');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -195,16 +196,7 @@ function parseImportFile(filePath, originalName, projectImages) {
 }
 
 function importIntoProject(parsed, plan, projectId, userId, originalName, options = {}) {
-  const transactionFiles = [
-    PROJECTS_FILE,
-    IMAGES_FILE,
-    ANNOTATIONS_FILE,
-    BATCHES_FILE,
-    dataPath('annotation-revisions.json'),
-    dataPath('reviews.json'),
-    dataPath('audit-events.json'),
-  ];
-  const backups = new Map(transactionFiles.map(file => [file, fs.existsSync(file) ? fs.readFileSync(file) : null]));
+  return runDataCommand(() => {
   const currentProjects = readJson(PROJECTS_FILE, []);
   const project = currentProjects.find(item => item.id === projectId);
   if (!project || !projectAccess(project, userId)) throw new Error('Project access changed while the import was running.');
@@ -332,8 +324,7 @@ function importIntoProject(parsed, plan, projectId, userId, originalName, option
     allAnnotations = [...allAnnotations, ...createdAnnotations];
     if (batch) allBatches.push(batch);
 
-    // Keep rollback copies in memory: each write is atomic and all target files
-    // remain valid JSON even if the process is interrupted between writes.
+    // Metadata and history publish together through the recoverable command journal.
     writeJsonAtomic(IMAGES_FILE, allImages);
     writeJsonAtomic(ANNOTATIONS_FILE, allAnnotations);
     if (batch) writeJsonAtomic(BATCHES_FILE, allBatches);
@@ -397,21 +388,12 @@ function importIntoProject(parsed, plan, projectId, userId, originalName, option
     };
   } catch (error) {
     createdFiles.forEach(file => { try { fs.unlinkSync(file); } catch (_) {} });
-    backups.forEach((contents, file) => {
-      try {
-        if (contents === null) {
-          if (fs.existsSync(file)) fs.unlinkSync(file);
-        } else {
-          const restore = `${file}.${process.pid}.${Date.now()}.rollback`;
-          fs.writeFileSync(restore, contents);
-          fs.renameSync(restore, file);
-        }
-      } catch (_) {}
-    });
+
     throw error;
   } finally {
     try { fs.rmSync(staging, { recursive: true, force: true }); } catch (_) {}
   }
+  });
 }
 
 // Dry-run and commit share the exact same parser and planning path. A COCO JSON
