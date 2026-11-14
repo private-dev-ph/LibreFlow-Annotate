@@ -403,10 +403,24 @@ test('consent rejects session, origin, UID, ownership, scope subset, dependency,
   const missingMethod = await fetch(`${app.origin}/oauth/auth?${noS256}`, {
     redirect: 'manual',
   });
-  assert.equal(missingMethod.status, 400);
+  assert.equal(missingMethod.status, 303);
+  const invalidPkce = new URL(missingMethod.headers.get('location'));
+  assert.equal(invalidPkce.origin+invalidPkce.pathname, REDIRECT_URI);
+  assert.equal(invalidPkce.searchParams.get('error'), 'invalid_request');
+  assert.equal(invalidPkce.searchParams.has('code'), false);
   noS256.set('code_challenge_method', 'S256');
   noS256.set('resource', `${app.origin}/wrong`);
-  assert.equal((await fetch(`${app.origin}/oauth/auth?${noS256}`, { redirect: 'manual' })).status, 400);
+  const invalidResource = await request(app.origin, replay.jar, '/oauth/auth?'+noS256);
+  assert.equal(invalidResource.status,303);
+  const resourceRedirect = new URL(invalidResource.headers.get('location'),app.origin);
+  assert.equal(resourceRedirect.searchParams.has('code'),false);
+  if(resourceRedirect.origin===app.origin) {
+    assert.match(resourceRedirect.pathname,/^\/ai-authorize\//);
+    assert.equal((await request(app.origin,replay.jar,resourceRedirect.pathname+'/details')).status,400);
+  } else {
+    assert.equal(resourceRedirect.origin+resourceRedirect.pathname,REDIRECT_URI);
+    assert.equal(resourceRedirect.searchParams.get('error'),'invalid_target');
+  }
 });
 
 test('discovery advertises exact issuer and resource metadata', { concurrency: false, timeout: 60000 }, async (t) => {

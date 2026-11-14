@@ -70,10 +70,10 @@ test('complete read release works with official legacy and modern clients withou
     assert.equal(denied.status, 403, name);
   }
   for (const mode of ['legacy', { pin: '2026-07-28' }]) {
-    const grant = policy.createConnection('owner', { name: 'Full read client', projectIds: ['selected'], scopes: policy.SCOPES });
+    const grant = policy.createConnection('owner', { name: 'Full read client', projectIds: ['selected'], scopes: require('../lib/mcp-permissions').READ_SCOPES });
     const session = await connect(url, grant.token, mode); t.after(() => session.client.close());
     const catalog = await session.client.listTools();
-    assert.deepEqual(catalog.tools.map(tool => tool.name).sort(), [...TOOL_NAMES].sort());
+    assert.deepEqual(catalog.tools.map(tool => tool.name).sort(), ['libreflow_list_projects','libreflow_get_project','libreflow_list_images','libreflow_list_batches','libreflow_get_annotations','libreflow_get_image_preview','libreflow_list_models','libreflow_get_model_classes','libreflow_list_versions','libreflow_get_version','libreflow_get_dataset_health'].sort());
     const call = async (name, args) => {
       const result = await session.client.callTool({ name, arguments: args });
       assert.equal(result.isError, undefined, name + ': ' + JSON.stringify(result.content?.filter(item => item.type === 'text')));
