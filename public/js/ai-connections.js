@@ -951,22 +951,27 @@
       });
       skeletonPoints.forEach(point => { context.beginPath(); context.arc(point.x, point.y, 4, 0, Math.PI * 2); context.fill(); });
       return;
-    } else if (type === "mask") {
-      const contours = Array.isArray(data) ? [{ points: data }] : (Array.isArray(data.contours) ? data.contours : []);
-      contours.forEach(contour => {
-        const contourPoints = Array.isArray(contour.points) ? contour.points : [];
-        if (contourPoints.length < 2) return;
-        context.beginPath(); contourPoints.forEach((point, index) => index ? context.lineTo(Number(point.x), Number(point.y)) : context.moveTo(Number(point.x), Number(point.y)));
-        context.closePath(); context.fill(); context.stroke();
-      });
-      return;
-    } else if (type === "classification") return;
+    } else if (type === "mask" || type === "classification") return;
     if (points.length === 0) return;
     context.beginPath(); context.moveTo(points[0].x, points[0].y); points.slice(1).forEach(point => context.lineTo(point.x, point.y));
     if (["bbox", "rbox", "polygon"].includes(type)) context.closePath();
     context.stroke();
     if (["bbox", "rbox", "polygon"].includes(type)) context.fill();
     if (["point", "keypoint"].includes(type)) { context.beginPath(); context.arc(points[0].x, points[0].y, 5, 0, Math.PI * 2); context.fill(); }
+  }
+
+  function drawReviewMask(context, shape) {
+    const data = shape?.data;
+    const contours = Array.isArray(data) ? [{ points: data }] : (Array.isArray(data?.contours) ? data.contours : []);
+    contours.forEach((contour) => {
+      const points = Array.isArray(contour?.points) ? contour.points : [];
+      if (points.length < 2) return;
+      context.globalCompositeOperation = contour.operation === "subtract" ? "destination-out" : "source-over";
+      context.beginPath();
+      points.forEach((point, index) => index ? context.lineTo(Number(point.x), Number(point.y)) : context.moveTo(Number(point.x), Number(point.y)));
+      context.closePath(); context.fill(); context.stroke();
+    });
+    context.globalCompositeOperation = "source-over";
   }
 
   function reviewImagePanel(data, identity) {
@@ -995,13 +1000,23 @@
     const requestId = String(identity?.requestId || "");
     const token = identity?.token;
     const isCurrent = () => panel.isConnected && state.requestPreview.token === token && String(state.requestPreview.requestId) === requestId && String(state.activeRequest?.id) === requestId;
-    let fitZoom = 1, zoom = 1, overlayVisible = true;
+    let fitZoom = 1, zoom = 1, overlayVisible = true, maskBuffer = null;
     const draw = () => {
       if (!image.naturalWidth || !image.naturalHeight) return false;
       const ratio = window.devicePixelRatio || 1; canvas.width = Math.min(4096, image.naturalWidth * ratio); canvas.height = Math.min(4096, image.naturalHeight * ratio);
       const context = canvas.getContext("2d"); if (!context) return false;
       context.setTransform(canvas.width / image.naturalWidth, 0, 0, canvas.height / image.naturalHeight, 0, 0); context.clearRect(0, 0, image.naturalWidth, image.naturalHeight); if (!overlayVisible) return true;
-      context.lineWidth = Math.max(1.5, image.naturalWidth / 500); context.strokeStyle = "#ffcc33"; context.fillStyle = "rgba(255, 204, 51, 0.18)"; data.shapes.forEach(shape => drawReviewShape(context, shape));
+      context.lineWidth = Math.max(1.5, image.naturalWidth / 500); context.strokeStyle = "#ffcc33"; context.fillStyle = "rgba(255, 204, 51, 0.18)"; data.shapes.forEach(shape => { if (String(shape?.type || "").toLowerCase() !== "mask") drawReviewShape(context, shape); });
+      const maskShapes = data.shapes.filter(shape => String(shape?.type || "").toLowerCase() === "mask");
+      if (maskShapes.length) {
+        if (!maskBuffer) maskBuffer = document.createElement("canvas");
+        if (maskBuffer.width !== canvas.width || maskBuffer.height !== canvas.height) { maskBuffer.width = canvas.width; maskBuffer.height = canvas.height; }
+        const maskContext = maskBuffer.getContext("2d");
+        if (!maskContext) return false;
+        maskContext.setTransform(1, 0, 0, 1, 0, 0); maskContext.clearRect(0, 0, maskBuffer.width, maskBuffer.height);
+        maskContext.setTransform(canvas.width / image.naturalWidth, 0, 0, canvas.height / image.naturalHeight, 0, 0); maskContext.lineWidth = Math.max(1.5, image.naturalWidth / 500); maskContext.strokeStyle = "#ffcc33"; maskContext.fillStyle = "#ffcc33"; maskShapes.forEach(shape => drawReviewMask(maskContext, shape));
+        context.save(); context.setTransform(1, 0, 0, 1, 0, 0); context.globalAlpha = 0.18; context.drawImage(maskBuffer, 0, 0); context.restore();
+      }
       return true;
     };
     const applyZoom = () => {

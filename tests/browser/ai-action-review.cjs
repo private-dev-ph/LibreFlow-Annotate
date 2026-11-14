@@ -17,10 +17,17 @@ const shapes = [
   { type: 'mask', label: 'mask', data: { contours: [{ operation: 'add', points: [{ x: 230, y: 100 }, { x: 290, y: 100 }, { x: 280, y: 145 }, { x: 240, y: 140 }] }] } },
   { type: 'classification', label: 'class', data: { value: 'class' } },
 ];
+const maskShapes = [
+  { type: 'bbox', label: 'underlying', data: { x: 70, y: 70, width: 20, height: 20 } },
+  { type: 'mask', label: 'mask', data: { contours: [
+    { operation: 'add', points: [{ x: 20, y: 20 }, { x: 140, y: 20 }, { x: 140, y: 140 }, { x: 20, y: 140 }] },
+    { operation: 'subtract', points: [{ x: 60, y: 60 }, { x: 100, y: 60 }, { x: 100, y: 100 }, { x: 60, y: 100 }] },
+  ] } },
+];
 const requestData = (id, digest, title) => ({ id, kind: 'annotations.append', status: 'pending', projectId: 'project-1', connectionId: 'connection-1', digest, summary: { title, description: 'The AI client proposes shapes for one image.', counts: { images: 1, annotations: shapes.length }, details: [], warnings: [] }, expiresAt: new Date(Date.now() + 3600000).toISOString() });
 function json(response, status, body) { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(body)); }
 function createFixture() {
-  const state = { approved: false, requests: [requestData('annotation-request', 'digest', 'Review proposed annotations'), requestData('broken-request', 'broken', 'Unavailable preview'), requestData('delayed-request', 'delayed', 'Delayed source image'), requestData('stale-request', 'stale', 'Stale source image'), requestData('large-request', 'large', 'Large source image')] };
+  const state = { approved: false, requests: [requestData('annotation-request', 'digest', 'Review proposed annotations'), requestData('broken-request', 'broken', 'Unavailable preview'), requestData('delayed-request', 'delayed', 'Delayed source image'), requestData('stale-request', 'stale', 'Stale source image'), requestData('large-request', 'large', 'Large source image'), requestData('mask-request', 'mask', 'Mask source image')] };
   const server = http.createServer((request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     if (url.pathname === '/api/auth/me') return json(response, 200, { username: 'reviewer' });
@@ -39,7 +46,8 @@ function createFixture() {
           : annotationMatch[1] === 'delayed-request'
             ? { id: 'delayed-image', width: 320, height: 180, name: 'delayed.svg', url: '/delayed.svg' }
             : { id: 'image-1', width: 320, height: 180, name: 'fixture.svg', url: '/fixture.svg' };
-      return setTimeout(() => json(response, 200, { image, shapes, existingCount: 2, annotatorUrl: '/annotator?projectId=project-1&imageId=' + image.id }), 80);
+      const previewShapes = annotationMatch[1] === 'mask-request' ? maskShapes : shapes;
+      return setTimeout(() => json(response, 200, { image, shapes: previewShapes, existingCount: 2, annotatorUrl: '/annotator?projectId=project-1&imageId=' + image.id }), 80);
     }
     const decision = url.pathname.match(/^\/api\/mcp\/connections\/requests\/([^/]+)\/(approve|reject)$/);
     if (decision && request.method === 'POST') { let raw = ''; request.on('data', chunk => { raw += chunk; }); request.on('end', () => { const item = state.requests.find(value => value.id === decision[1]); if (!item || JSON.parse(raw).digest !== item.digest) return json(response, 409, { error: 'Request is stale.' }); item.status = decision[2] === 'approve' ? 'approved' : 'rejected'; state.approved = item.status === 'approved'; json(response, 200, { request: item }); }); return; }
@@ -73,6 +81,8 @@ async function run() {
     await page.locator('.request-row[data-request-id="delayed-request"] button').click(); await page.waitForSelector('#request-dialog[open]'); await page.waitForSelector('.annotation-review-panel'); assert.equal(await page.locator('#approve-request').isDisabled(), true); await page.waitForSelector('.annotation-review-panel:not(.annotation-review-loading)'); assert.equal(await page.locator('#approve-request').isDisabled(), false);
     await page.locator('#close-request-dialog').click(); await page.locator('.request-row[data-request-id="stale-request"] button').click(); await page.waitForSelector('.annotation-review-panel'); await page.locator('#close-request-dialog').click(); await page.locator('.request-row[data-request-id="annotation-request"] button').click(); await page.waitForSelector('.annotation-review-panel:not(.annotation-review-loading)'); await page.waitForTimeout(650); assert.equal(await page.locator('#approve-request').isDisabled(), false);
     await page.locator('#close-request-dialog').click(); await page.locator('.request-row[data-request-id="large-request"] button').click(); await page.waitForSelector('.annotation-review-panel:not(.annotation-review-loading)'); const fit = await page.evaluate(() => { const viewport = document.querySelector('.annotation-review-viewport').getBoundingClientRect(); const image = document.querySelector('.annotation-review-image').getBoundingClientRect(); const canvas = document.querySelector('.annotation-review-canvas').getBoundingClientRect(); return { viewport, image, canvas, fitLabel: document.querySelector('.annotation-review-zoom[aria-label="Fit image"]').textContent }; }); assert.equal(fit.fitLabel, 'Fit'); assert.ok(fit.image.width <= fit.viewport.width + 1, `large image not fitted: ${fit.image.width} > ${fit.viewport.width}`); assert.ok(Math.abs(fit.image.width - fit.canvas.width) < 1 && Math.abs(fit.image.height - fit.canvas.height) < 1, 'overlay is not aligned with fitted image');
+    await page.locator('#close-request-dialog').click();
+    await page.locator('.request-row[data-request-id="mask-request"] button').click(); await page.waitForSelector('.annotation-review-panel:not(.annotation-review-loading)'); const maskPixels = await page.evaluate(() => { const canvas = document.querySelector('.annotation-review-canvas'); const context = canvas.getContext('2d'); const pixel = (x, y) => Array.from(context.getImageData(x, y, 1, 1).data); return { outer: pixel(30, 30), emptyHole: pixel(95, 95), underlying: pixel(80, 80) }; }); assert.ok(maskPixels.outer[3] > 0, 'additive mask contour was not rendered'); assert.equal(maskPixels.emptyHole[3], 0, 'subtractive mask hole is not transparent'); assert.ok(maskPixels.underlying[3] > 0, 'subtractive mask erased an underlying annotation');
     await page.locator('#close-request-dialog').click();
     await page.locator('.request-row[data-request-id="broken-request"] button').click(); await page.waitForSelector('#request-dialog[open]'); await page.waitForSelector('.annotation-review-panel:not(.annotation-review-loading)'); assert.equal(await page.locator('#approve-request').isDisabled(), true); assert.match(await page.locator('.annotation-review-panel').textContent(), /preview/i); await page.locator('#close-request-dialog').click(); await page.locator('.request-row[data-request-id="annotation-request"] button').click(); await page.waitForSelector('.annotation-review-panel:not(.annotation-review-loading)'); await page.locator('#approve-request').click(); await page.waitForSelector('.request-row[data-request-id="annotation-request"] .status-badge.approved'); assert.equal(fixture.state.approved, true); await context.close();
     console.log('ai-action-review browser fixture passed: safe native-shape overlay, async failure gating, toggle/zoom, annotator link, 320/375/768/1280 light/dark, no overflow');
