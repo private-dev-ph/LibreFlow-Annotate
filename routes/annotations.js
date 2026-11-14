@@ -21,6 +21,7 @@ const {
 const { appendAuditEvent } = require('../lib/audit-log');
 const { touchAfterAnnotation } = require('../lib/review-state');
 const { emitWebhookEvent } = require('../lib/webhooks');
+const { readJsonSnapshot, readJsonByKey, primeJsonSnapshot } = require('../lib/read-index');
 
 const UPLOADS_DIR = uploadsDir();
 
@@ -29,11 +30,16 @@ const DATA_FILE = dataPath('annotations.json');
 const IMAGES_FILE = dataPath('images.json');
 
 function readAnnotations() {
-  return readJson(DATA_FILE);
+  return readJsonSnapshot(DATA_FILE);
 }
 
 function writeAnnotations(annotations) {
   writeJson(DATA_FILE, annotations);
+  primeJsonSnapshot(DATA_FILE, annotations);
+}
+
+function readAnnotationsForImage(imageId) {
+  return readJsonByKey(DATA_FILE, 'imageId', imageId);
 }
 
 function markImageAnnotated(imageId, annotationCount) {
@@ -268,16 +274,21 @@ router.post('/rename-label', (req, res) => {
 router.get('/:imageId/revisions', (req, res) => {
   const context = accessibleImage(req, res, req.params.imageId);
   if (!context) return;
-  const current = readAnnotations().filter(annotation => annotation.imageId === context.image.id);
-  ensureLegacyBaseline({
-    imageId: context.image.id,
-    projectId: context.project.id,
-    annotations: current,
-    actorId: 'legacy',
-    actorUsername: 'Legacy data',
-  });
+  const existingRevisions = revisionsForImage(context.image.id);
+  if (!existingRevisions.length) {
+    ensureLegacyBaseline({
+      imageId: context.image.id,
+      projectId: context.project.id,
+      annotations: readAnnotationsForImage(context.image.id),
+      actorId: 'legacy',
+      actorUsername: 'Legacy data',
+    });
+  }
   const includeAnnotations = req.query.includeAnnotations === 'true';
-  res.json(revisionsForImage(context.image.id).map(revision => revisionSummary(revision, includeAnnotations)));
+  const revisions = existingRevisions.length
+    ? existingRevisions
+    : revisionsForImage(context.image.id);
+  res.json(revisions.map(revision => revisionSummary(revision, includeAnnotations)));
 });
 
 router.post('/:imageId/revisions/:revisionId/restore', (req, res) => {
@@ -330,7 +341,7 @@ router.post('/:imageId/revisions/:revisionId/restore', (req, res) => {
 router.get('/:imageId', (req, res) => {
   const context = accessibleImage(req, res, req.params.imageId);
   if (!context) return;
-  const annotations = readAnnotations().filter(a => a.imageId === context.image.id);
+  const annotations = readAnnotationsForImage(context.image.id);
   res.json(annotations);
 });
 
@@ -359,7 +370,6 @@ router.post('/', (req, res) => {
   if ((shapes || []).some(shape => validAnnotationId(shape.id) && foreignIds.has(shape.id))) {
     return res.status(409).json({ error: 'An annotation ID is already used by another image.' });
   }
-  ensureLegacyBaseline({ imageId, projectId: context.project.id, annotations: existing, ...legacyActor() });
   const newAnnotations = normalizeShapes(shapes || [], existing, req, {
     defaultSource: source,
     defaultModelId: modelId,
@@ -372,6 +382,7 @@ router.post('/', (req, res) => {
     return res.status(200).json(existing);
   }
 
+  ensureLegacyBaseline({ imageId, projectId: context.project.id, annotations: existing, ...legacyActor() });
   annotations = annotations.filter(a => a.imageId !== imageId).concat(newAnnotations);
   writeAnnotations(annotations);
   markImageAnnotated(imageId, newAnnotations.length);
