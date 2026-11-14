@@ -155,3 +155,7 @@ LibreFlow-Annotate/
 ## License
 
 Released under the [Apache License 2.0](LICENSE).
+
+## Local AI connections (MCP)
+
+An optional, disabled-by-default stdio connection gives local AI clients read access to explicitly selected projects and, with a separate permission, annotation geometry. See [setup and security boundaries](docs/mcp-local-setup.md).

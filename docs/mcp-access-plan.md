@@ -1,3 +1,5 @@
+> Implementation status: the first local read-only slice is described in [Local AI connections](mcp-local-setup.md). It covers selected-project metadata and optional annotation reads, permission management, and a stdio bridge. Previews, models/versions tools, write actions, and remote OAuth below remain planned.
+
 # Secure MCP access for LibreFlow
 
 Status: proposed plan, with no application or deployment changes.

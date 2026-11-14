@@ -32,6 +32,7 @@ const {
   canAccessDataset,
 } = require('./lib/access-control');
 const automationRouter  = require('./routes/automation');
+const mcpConnectionsRouter = require('./routes/mcp-connections');
 const { startJobRuntime } = require('./lib/job-runner');
 const { resumeWebhookDeliveries } = require('./lib/webhooks');
 const { DurableFileSessionStore } = require('./lib/security-session-store');
@@ -58,6 +59,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use('/api/auth', express.json({ limit: '16kb' }));
+app.use('/api/mcp/connections', express.json({ limit: '16kb' }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(session({
@@ -127,11 +129,14 @@ app.get('/dashboard', requireAuth, (req, res) => res.sendFile(path.join(__dirnam
 app.get('/project',   requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'project.html')));
 app.get('/annotator', requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'annotator.html')));
 app.get('/jobs',      requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'jobs.html')));
+app.get('/ai-connections', requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'ai-connections.html')));
 app.get('/models',    requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'models.html')));
 app.get('/datasets',  requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'datasets.html')));
 app.get('/dataset-lifecycle', requireAuth, (req, res) => res.sendFile(path.join(__dirname, 'public', 'dataset-lifecycle.html')));
 
 // ── Protected API routes ──────────────────────────────────────────────────────
+// Connection consent stays on the browser/session surface, behind the existing CSRF policy.
+app.use('/api/mcp/connections', mcpConnectionsRouter);
 app.use('/api/projects',    requireAuth, projectsRouter);
 app.use('/api/images',      requireAuth, imagesRouter);
 app.use('/api/annotations', requireAuth, annotationsRouter);
@@ -156,6 +161,14 @@ warmJsonIndex(dataPath('annotation-revisions.json'), 'imageId');
 
 // ── 404 fallback ──────────────────────────────────────────────────────────────
 app.use((req, res) => res.redirect('/'));
+
+// Disabled by default. The local bridge has no browser-session authority.
+const { startMcpGateway } = require('./lib/mcp-gateway');
+const mcpGateway = startMcpGateway();
+if (mcpGateway) mcpGateway.once('error', () => {
+  console.error('Local MCP listener failed to start. Check its port and configuration.');
+  process.exit(1);
+});
 
 app.listen(PORT, HOST, () => {
   const { networkInterfaces } = require('os');
