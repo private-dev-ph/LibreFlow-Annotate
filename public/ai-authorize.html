@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="/js/theme-init.js"></script>
+    <title>Authorize AI client – LibreFlow Annotate</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/css/nav.css" />
+    <link rel="stylesheet" href="/css/ai-authorize.css" />
+    <link rel="stylesheet" href="/css/theme.css" />
+    <link rel="stylesheet" href="/css/icons.css" />
+  </head>
+  <body>
+    <nav id="top-nav">
+      <div class="nav-left">
+        <a class="nav-logo" href="/dashboard">
+          <img class="nav-logo-icon" src="/assets/libreflow-logo.svg" alt="" />
+          <span class="nav-logo-name">LibreFlow Annotate</span>
+        </a>
+        <div class="nav-links">
+          <a class="nav-link" href="/dashboard"
+            ><span data-lf-icon="grid" aria-hidden="true"></span>Dashboard</a
+          >
+          <a class="nav-link" href="/jobs"
+            ><span data-lf-icon="briefcase" aria-hidden="true"></span>Jobs</a
+          >
+          <a class="nav-link" href="/models"
+            ><span data-lf-icon="brain" aria-hidden="true"></span>Models</a
+          >
+          <a class="nav-link" href="/datasets"
+            ><span data-lf-icon="package" aria-hidden="true"></span>Datasets</a
+          >
+        </div>
+      </div>
+      <div class="nav-right">
+        <div class="nav-user">
+          <div class="nav-avatar" id="nav-avatar">?</div>
+          <span class="nav-username" id="nav-username">Loading…</span>
+        </div>
+        <button
+          class="btn-theme-settings"
+          id="btn-theme-settings"
+          type="button"
+          aria-label="Theme settings"
+          aria-expanded="false"
+          title="Theme settings"
+        >
+          <span data-lf-icon="settings" aria-hidden="true"></span
+          ><span class="btn-theme-label">Theme</span>
+        </button>
+      </div>
+    </nav>
+
+    <main class="authorize-body">
+      <div class="authorize-container">
+        <a class="back-link" href="/ai-connections">← Back to AI connections</a>
+        <section class="authorize-card" aria-labelledby="authorize-title">
+          <div class="authorize-heading">
+            <p class="eyebrow">Remote client access</p>
+            <h1 id="authorize-title">Authorize an AI client</h1>
+            <p id="authorize-intro" class="lede">
+              Review what this named client is asking to access before you
+              continue.
+            </p>
+          </div>
+          <div
+            id="page-status"
+            class="page-status"
+            role="status"
+            aria-live="polite"
+          >
+            Loading authorization details…
+          </div>
+          <div
+            id="page-error"
+            class="form-error"
+            role="alert"
+            tabindex="-1"
+          ></div>
+
+          <section
+            id="login-step"
+            class="authorize-step"
+            hidden
+            aria-labelledby="login-title"
+          >
+            <div class="step-icon" data-lf-icon="key" aria-hidden="true"></div>
+            <h2 id="login-title">Continue to sign in</h2>
+            <p id="login-copy">
+              The provider will confirm your browser session before showing the
+              requested access.
+            </p>
+            <button id="continue-login" class="primary-action" type="button">
+              Continue
+            </button>
+          </section>
+
+          <form id="consent-form" class="authorize-step" hidden novalidate>
+            <div class="consent-context">
+              <span
+                class="context-icon"
+                data-lf-icon="link"
+                aria-hidden="true"
+              ></span>
+              <p>
+                Signed in as
+                <strong id="user-name">this LibreFlow user</strong>. You are
+                authorizing <strong id="client-name">this client</strong>.
+              </p>
+            </div>
+            <fieldset class="consent-fieldset">
+              <legend>
+                Projects <span class="required-label">Choose at least one</span>
+              </legend>
+              <p class="field-help">
+                Selected project data will be shared with the named client.
+              </p>
+              <div id="project-list" class="project-list"></div>
+            </fieldset>
+            <fieldset class="consent-fieldset">
+              <legend>
+                Permissions
+                <span class="required-label">Choose explicitly</span>
+              </legend>
+              <p class="field-help">
+                Only the permissions requested by this client are shown. New
+                action permissions start unchecked.
+              </p>
+              <div id="scope-list" class="scope-list"></div>
+              <p id="scope-help" class="field-help scope-help"></p>
+            </fieldset>
+            <fieldset class="consent-fieldset expiry-fieldset">
+              <legend>Expires after</legend>
+              <div id="expiry-options" class="expiry-options"></div>
+            </fieldset>
+            <aside class="review-note">
+              <span data-lf-icon="info" aria-hidden="true"></span>
+              <p>
+                Approving shares the selected data with
+                <strong id="client-note-name">this client</strong>. Each
+                requested action still needs its own review. Inference produces
+                drafts; saving drafts needs separate approval.
+              </p>
+            </aside>
+            <div class="consent-actions">
+              <button
+                id="deny-consent"
+                class="secondary-action danger-action"
+                type="button"
+              >
+                Deny
+              </button>
+              <button id="approve-consent" class="primary-action" type="submit">
+                Approve access
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </main>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/icons.js"></script>
+    <script src="/js/theme.js"></script>
+    <script src="/js/ai-authorize.js"></script>
+  </body>
+</html>
