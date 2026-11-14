@@ -614,6 +614,7 @@
 }
 
 .client-dialog {
+  margin: auto;
   width: min(680px, calc(100% - 28px));
   max-height: min(780px, calc(100dvh - 28px));
   padding: 0;
@@ -634,6 +635,7 @@
 }
 .dialog-header {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 15px;
 }
@@ -1250,3 +1252,5 @@ summary:focus-visible,
     animation-duration: 0.01ms !important;
   }
 }
+
+.annotation-review-viewport:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

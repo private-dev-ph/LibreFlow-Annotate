@@ -989,6 +989,7 @@
     const zoomIn = node("button", "secondary-action annotation-review-zoom", "+"); zoomIn.type = "button"; zoomIn.setAttribute("aria-label", "Zoom in");
     controls.append(toggle, zoomOut, zoomReset, zoomIn); heading.append(controls); panel.append(heading);
     const viewport = node("div", "annotation-review-viewport");
+    viewport.tabIndex = 0; viewport.setAttribute("role", "region"); viewport.setAttribute("aria-label", "Annotation preview. Use arrow keys to pan when zoomed in.");
     const stage = node("div", "annotation-review-stage");
     const image = document.createElement("img"); image.className = "annotation-review-image"; image.alt = data.image?.name || "Source image for annotation review"; image.decoding = "async";
     const canvas = document.createElement("canvas"); canvas.className = "annotation-review-canvas"; canvas.setAttribute("aria-hidden", "true"); stage.append(image, canvas); viewport.append(stage); panel.append(viewport);
