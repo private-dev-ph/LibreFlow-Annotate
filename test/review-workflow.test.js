@@ -19,6 +19,7 @@ class FakeElement {
     this.checked = false;
     this.open = false;
     this.dataset = {};
+    this.attributes = {};
     this.listeners = new Map();
     this.classList = {
       add: () => {},
@@ -29,6 +30,14 @@ class FakeElement {
 
   addEventListener(type, listener) {
     this.listeners.set(type, listener);
+  }
+
+  setAttribute(name, value) {
+    this.attributes[name] = String(value);
+  }
+
+  getAttribute(name) {
+    return this.attributes[name] ?? null;
   }
 
   dispatchEvent(event) {
@@ -61,17 +70,23 @@ function makeFixture() {
   const elements = Object.fromEntries(ids.map(id => [id, new FakeElement(id)]));
   const reviewCalls = [];
   const historyRequests = [];
+  const annotationFailures = new Map();
+  const reviewPending = new Map();
   const reviews = {
     a: { status: 'submitted', comments: [], issues: [], members: [] },
     b: { status: 'approved', comments: [], issues: [], members: [] },
     c: { status: 'changes_requested', comments: [], issues: [], members: [] },
   };
   const API = {
-    getAnnotations: async imageId => ({ imageId }),
+    getAnnotations: async imageId => {
+      if (annotationFailures.has(imageId)) throw annotationFailures.get(imageId);
+      return { imageId };
+    },
     saveAnnotations: async () => ({ ok: true }),
     updateImage: async () => ({ ok: true }),
     getImageReview: async imageId => {
       reviewCalls.push(imageId);
+      if (reviewPending.has(imageId)) return reviewPending.get(imageId).promise;
       return reviews[imageId];
     },
     getAnnotationRevisions: imageId => {
@@ -97,7 +112,7 @@ function makeFixture() {
       location: { href: 'http://localhost/annotator' },
     },
   });
-  return { API, elements, historyRequests, reviewCalls };
+  return { API, elements, historyRequests, reviewCalls, annotationFailures, reviewPending };
 }
 
 test('review workflow loads history only when open and ignores stale image responses', async () => {
@@ -108,6 +123,9 @@ test('review workflow loads history only when open and ignores stale image respo
   const revisions = elements['review-revision-select'];
 
   await API.getAnnotations('a');
+  assert.equal(badge.textContent, 'Loading…');
+  assert.equal(badge.dataset.status, 'loading');
+  assert.equal(badge.getAttribute('aria-busy'), 'true');
   await flush();
   assert.deepEqual(reviewCalls, ['a']);
   assert.equal(historyRequests.length, 0, 'collapsed image load does not fetch history');
@@ -139,6 +157,55 @@ test('review workflow loads history only when open and ignores stale image respo
   await flush();
   assert.match(revisions.innerHTML, /current-b/);
   assert.equal(badge.dataset.status, 'approved');
+  assert.equal(badge.getAttribute('aria-busy'), 'false');
+});
+
+test('current annotation failure shows unavailable and rethrows without affecting a newer image', async () => {
+  const fixture = makeFixture();
+  const { API, elements, annotationFailures } = fixture;
+  const badge = elements['review-status-badge'];
+  const annotationError = new Error('annotations unavailable');
+  annotationFailures.set('a', annotationError);
+
+  await assert.rejects(API.getAnnotations('a'), annotationError);
+  assert.equal(badge.textContent, 'Unavailable');
+  assert.equal(badge.dataset.status, 'unavailable');
+  assert.equal(badge.getAttribute('aria-busy'), 'false');
+
+  await API.getAnnotations('b');
+  await flush();
+  assert.equal(badge.dataset.status, 'approved');
+  assert.equal(badge.getAttribute('aria-busy'), 'false');
+});
+
+test('current review failure shows unavailable while stale review errors are ignored', async () => {
+  const fixture = makeFixture();
+  const { API, elements, reviewPending } = fixture;
+  const badge = elements['review-status-badge'];
+  const staleReview = deferred();
+  reviewPending.set('a', staleReview);
+
+  await API.getAnnotations('a');
+  await flush();
+  assert.equal(badge.dataset.status, 'loading');
+
+  await API.getAnnotations('b');
+  await flush();
+  assert.equal(badge.dataset.status, 'approved');
+  staleReview.reject(new Error('stale review unavailable'));
+  await flush();
+  assert.equal(badge.dataset.status, 'approved');
+  assert.equal(badge.getAttribute('aria-busy'), 'false');
+
+  const currentReview = deferred();
+  reviewPending.set('c', currentReview);
+  await API.getAnnotations('c');
+  await flush();
+  currentReview.reject(new Error('current review unavailable'));
+  await flush();
+  assert.equal(badge.textContent, 'Unavailable');
+  assert.equal(badge.dataset.status, 'unavailable');
+  assert.equal(badge.getAttribute('aria-busy'), 'false');
 });
 
 test('closed saves invalidate cached history without fetching it', async () => {

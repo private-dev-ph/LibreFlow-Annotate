@@ -44,6 +44,12 @@
     feedback.classList.toggle('error', error);
   }
 
+  function setBadge(label, status, busy) {
+    badge.textContent = label;
+    badge.dataset.status = status;
+    if (typeof badge.setAttribute === 'function') badge.setAttribute('aria-busy', String(busy));
+  }
+
   function formatDate(value) {
     if (!value) return '';
     const date = new Date(value);
@@ -99,8 +105,7 @@
     statusSelect.innerHTML = statuses.map(status =>
       `<option value="${escapeHtml(status)}" ${status === review.status ? 'selected' : ''}>${escapeHtml(statusLabels[status] || status)}</option>`
     ).join('');
-    badge.textContent = statusLabels[review.status] || review.status;
-    badge.dataset.status = review.status;
+    setBadge(statusLabels[review.status] || review.status, review.status, false);
 
     const members = review.members || [];
     reviewerSelect.innerHTML = '<option value="">Unassigned</option>' + members.map(member =>
@@ -129,8 +134,7 @@
     historyLoading = null;
     refreshGeneration += 1;
     historyGeneration += 1;
-    badge.textContent = statusLabels.unannotated;
-    badge.dataset.status = 'unannotated';
+    setBadge('Loading…', 'loading', true);
     statusSelect.innerHTML = '';
     reviewerSelect.innerHTML = '';
     rejection.textContent = '';
@@ -191,6 +195,7 @@
       if (panel.open) loadHistory(imageId);
     } catch (error) {
       if (currentImageId !== imageId || refreshId !== refreshGeneration) return;
+      setBadge('Unavailable', 'unavailable', false);
       setFeedback(error.message || 'Could not load review.', true);
     }
   }
@@ -200,9 +205,16 @@
     currentImageId = imageId;
     const requestId = ++imageRequestGeneration;
     clearImageState();
-    const annotations = await originalGetAnnotations(imageId);
-    if (currentImageId === imageId && requestId === imageRequestGeneration) refresh(imageId);
-    return annotations;
+    try {
+      const annotations = await originalGetAnnotations(imageId);
+      if (currentImageId === imageId && requestId === imageRequestGeneration) refresh(imageId);
+      return annotations;
+    } catch (error) {
+      if (currentImageId === imageId && requestId === imageRequestGeneration) {
+        setBadge('Unavailable', 'unavailable', false);
+      }
+      throw error;
+    }
   };
 
   const originalSaveAnnotations = API.saveAnnotations.bind(API);
