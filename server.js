@@ -59,6 +59,15 @@ if (securityConfig.trustProxy) app.set('trust proxy', securityConfig.trustProxy)
 const originPolicy = createOriginPolicy(securityConfig);
 app.use(securityHeaders);
 if (oauth) {
+  // Derive proxy facts through Express's configured trusted-hop policy. Never let
+  // the provider trust arbitrary forwarded host/protocol headers directly.
+  app.use((req,res,next)=>{
+    const protocol=req.protocol;
+    delete req.headers.forwarded;delete req.headers['x-forwarded-host'];delete req.headers['x-forwarded-proto'];
+    if(protocol!=='https')return res.status(400).json({error:'HTTPS is required when remote AI connections are enabled.'});
+    req.headers['x-forwarded-host']=new URL(remoteConfig.origin).host;req.headers['x-forwarded-proto']='https';
+    next();
+  });
   const remoteRouter = require('./lib/mcp-remote-http').createRemoteMcpRouter({config:remoteConfig,oauth,policy:mcpPolicy,queries:require('./lib/mcp-queries').createQueryService(mcpPolicy)});
   app.use((req,res,next) => /^\/(?:mcp(?:$|\/)|mcp-downloads(?:$|\/)|oauth(?:$|\/)|\.well-known\/oauth-)/.test(req.path) ? remoteRouter(req,res,next) : next());
 }
@@ -82,7 +91,7 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure: securityConfig.production,
+    secure: securityConfig.production || remoteConfig.enabled,
     sameSite: securityConfig.sameSite,
     maxAge: 7 * 24 * 60 * 60 * 1000,
   },
@@ -166,6 +175,12 @@ app.use('/api/reviews',     requireAuth, reviewsRouter);
 app.use('/api/dataset-lifecycle', authenticateAutomation, datasetLifecycleRouter);
 
 require('./lib/mcp-action-handlers').registerActionJobs();
+function cleanupAiArtifacts(){
+  try { require('./lib/mcp-inference-actions').cleanupDrafts(); require('./lib/mcp-export-actions').cleanupExports(); }
+  catch { console.error('AI artifact cleanup deferred; saved data remains available.'); }
+}
+cleanupAiArtifacts();
+setInterval(cleanupAiArtifacts, 60 * 60 * 1000).unref();
 try { startJobRuntime(); }
 catch (error) { console.error('Automation job recovery failed:', error.message); }
 try { resumeWebhookDeliveries(); }

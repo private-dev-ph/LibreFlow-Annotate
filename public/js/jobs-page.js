@@ -106,8 +106,8 @@
       const failures = job.progress?.failed ? ` · ${job.progress.failed} failed` : '';
       const timestamp = new Date(job.updatedAt || job.createdAt).toLocaleString();
       const canCancel = job.source === 'server' && ['queued', 'running'].includes(job.status);
-      const canRetry = job.source === 'server' && ['completed_with_errors', 'failed', 'canceled'].includes(job.status);
-      const icon = job.type === 'batch_inference' ? LibreFlowIcons.icon('brain', 'Inference job') : (job.type?.includes('ingestion') ? LibreFlowIcons.icon('image', 'Image ingestion') : (job.type === 'model_upload' ? LibreFlowIcons.icon('brain', 'Model upload') : LibreFlowIcons.icon('package', 'Job')));
+      const canRetry = job.canRetry !== false && job.source === 'server' && ['completed_with_errors', 'failed', 'canceled'].includes(job.status);
+      const icon = (job.type === 'batch_inference' || job.type === 'mcp_inference') ? LibreFlowIcons.icon('brain', 'Inference job') : (job.type?.includes('ingestion') ? LibreFlowIcons.icon('image', 'Image ingestion') : (job.type === 'model_upload' ? LibreFlowIcons.icon('brain', 'Model upload') : LibreFlowIcons.icon('package', 'Job')));
       return `<article class="job-card status-${status.css}">
         <div class="job-top"><div class="job-icon">${icon}</div><div class="job-info"><div class="job-name">${esc(job.name)}</div><div class="job-meta">${esc(count)}${esc(failures)} · ${esc(timestamp)} · ${job.source === 'server' ? 'server' : 'this browser'}</div></div><span class="job-badge badge-${status.css}">${esc(status.label)}</span></div>
         <div class="job-progress-wrap"><div class="job-progress-bar" style="width:${Math.max(0, Math.min(100, percent))}%"></div></div>

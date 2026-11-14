@@ -95,6 +95,11 @@ test('tool schemas and browser approval endpoints enforce the complete action co
  assert.equal((await post({'x-fixture-user':'owner',Origin:'https://fixture.test',Authorization:'Bearer client-token'})).status,401);
  assert.equal((await post({Origin:'https://fixture.test'})).status,401);
  assert.equal((await post({'x-fixture-user':'owner',Origin:'https://fixture.test'},{digest:request.digest,shapes:[]})).status,400);
+ const previewUrl=url.replace(/approve$/, 'annotations');
+ assert.equal((await fetch(previewUrl,{headers:{Authorization:'Bearer client-token'}})).status,401);
+ assert.equal((await fetch(previewUrl,{headers:{'x-fixture-user':'outsider'}})).status,401);
+ const imagePreview=await fetch(previewUrl,{headers:{'x-fixture-user':'owner'}});assert.equal(imagePreview.status,200);
+ const shown=await imagePreview.json();assert.deepEqual(shown.shapes,[B]);assert.equal(shown.existingCount,1);assert.equal(shown.image.url,'/uploads/image.png');
  const approved=await post({'x-fixture-user':'owner',Origin:'https://fixture.test'});assert.equal(approved.status,200);
  const result=await queries.callTool(principal,'libreflow_apply_annotation_proposal',{projectId:'p',operationId:request.id});assert.equal(result.added,1);
  await assert.rejects(queries.callTool(principal,'libreflow_propose_annotations',{projectId:'p',requestKey:'bad',shapes:[],unexpected:true}),e=>e.code==='INVALID_ARGUMENT');

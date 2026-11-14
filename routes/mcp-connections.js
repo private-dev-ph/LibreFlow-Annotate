@@ -55,6 +55,19 @@ router.get('/requests/:id', requireSessionOnly, (req, res) => {
   try { res.json({ request: operations.publicProposal(operations.getUserProposal(req.session.userId, req.params.id)) }); }
   catch (error) { safeError(res, error); }
 });
+router.get('/requests/:id/annotations', requireSessionOnly, (req,res) => {
+  try {
+    const record=operations.getUserProposal(req.session.userId,req.params.id);
+    if(record.kind!=='annotations.append')return errorResponse(res,404,'NOT_FOUND','This request has no annotation preview.');
+    const source=require('../lib/mcp-source-state');
+    source.assertFrozenImages(record.projectId,[record.payload.frozen]);
+    const current=source.imageState(record.projectId,record.payload.imageId);
+    res.json({image:{id:current.image.id,width:current.image.width,height:current.image.height,
+      name:current.image.originalName||'',url:'/uploads/'+encodeURIComponent(require('path').basename(source.sourceFile(current.image)))},
+      shapes:record.payload.shapes,existingCount:current.annotations.length,
+      annotatorUrl:'/annotator?projectId='+encodeURIComponent(record.projectId)+'&imageId='+encodeURIComponent(current.image.id)});
+  }catch(error){safeError(res,error);}
+});
 for (const action of ['approve', 'reject']) {
   router.post('/requests/:id/' + action, requireSessionOnly, (req, res) => {
     try {
@@ -66,6 +79,10 @@ for (const action of ['approve', 'reject']) {
     } catch (error) { safeError(res, error); }
   });
 }
+
+router.get('/downloads/:projectId/:exportId', requireSessionOnly, (req,res) => {
+  try {const principal=require('../lib/mcp-export-actions').resolveBrowserDownload(req.session.userId,req.params.projectId,req.params.exportId);return require('../lib/mcp-downloads').sendExportDownload(req,res,principal);}catch(error){return safeError(res,error);}
+});
 
 router.get('/', requireSessionOnly, (req, res) => {
   try {
@@ -81,6 +98,7 @@ router.get('/', requireSessionOnly, (req, res) => {
         local: { enabled: process.env.LIBREFLOW_MCP_ENABLED === 'true', url: 'http://127.0.0.1:' + (process.env.LIBREFLOW_MCP_PORT || '6769') },
         remote: { enabled: process.env.LIBREFLOW_MCP_REMOTE_ENABLED === 'true', configured: Boolean(process.env.LIBREFLOW_MCP_PUBLIC_URL), url: process.env.LIBREFLOW_MCP_PUBLIC_URL ? process.env.LIBREFLOW_MCP_PUBLIC_URL.replace(/\/$/, '') + '/mcp' : null },
         writes: { enabled: writesEnabled() },
+        limits: require('../lib/mcp-job-context').LIMITS,
       },
       projects,
       connections: listConnections(req.session.userId),
@@ -104,9 +122,12 @@ router.post('/', requireSessionOnly, (req, res) => {
 
 router.delete('/:id', requireSessionOnly, (req, res) => {
   try {
-    const connection = revokeConnection(req.session.userId, req.params.id);
+    const connection = require('../lib/data-command').runDataCommand(() => {
+      const record = revokeConnection(req.session.userId, req.params.id);
+      if(record) require('../lib/job-runner').cancelConnectionJobs(req.session.userId, record.id);
+      return record;
+    });
     if (!connection) return errorResponse(res, 404, 'NOT_FOUND', 'MCP connection not found.');
-    require('../lib/job-runner').cancelConnectionJobs(req.session.userId, connection.id);
     return res.json({ connection });
   } catch (error) {
     return safeError(res, error);
