@@ -102,3 +102,32 @@ test('batch preview ignores an unrelated missing upload and publication retains 
   assert.equal(index.some(item => item.id === 'other'), true);
   assert.equal(index.some(item => item.id === completed.result.versionId), true);
 });
+
+test('frozen source bytes and live grants are rechecked before queueing and execution', async () => {
+  await addImage({ id: 'mutable' });
+  put('annotations', [{ id: 'annotation-1', imageId: 'mutable', label: 'raw', type: 'bbox', data: { x: 0, y: 0, width: 2, height: 2 } }]);
+  const p = principal();
+  const preview = actions.previewVersion(p, { projectId: 'project-1', requestKey: 'mutation' });
+  operations.approveProposal('owner', preview.id, preview.digest);
+  await sharp({ create: { width: 4, height: 4, channels: 3, background: '#112233' } }).png().toFile(path.join(uploadsRoot, 'mutable.png'));
+  const queued = actions.createVersion(p, { projectId: 'project-1', operationId: preview.id });
+  const failed = await waitForJob(queued.jobId);
+  assert.equal(failed.status, 'failed');
+  assert.match(failed.error, /AI operation stopped|changed/i);
+
+  const second = actions.previewVersion(p, { projectId: 'project-1', requestKey: 'revoked' });
+  operations.approveProposal('owner', second.id, second.digest);
+  policy.revokeConnection('owner', p.connectionId);
+  assert.throws(() => actions.createVersion(p, { projectId: 'project-1', operationId: second.id }), error => error.code === 'UNAUTHORIZED');
+});
+
+test('preview persists normalized settings and reserves disk/output budgets', async () => {
+  await addImage({ id: 'budget' });
+  put('annotations', [{ id: 'annotation-1', imageId: 'budget', label: 'raw', type: 'bbox', data: { x: 0, y: 0, width: 2, height: 2 } }]);
+  const p = principal();
+  const preview = actions.previewVersion(p, { projectId: 'project-1', requestKey: 'budget', processing: { preprocessing: { resize: { enabled: true, width: 224, height: 224 } }, augmentation: { multiplier: 2, rotate: [0] } } });
+  const record = operations.getInternalProposal(p, 'project-1', preview.id, 'versions.create');
+  assert.ok(record.payload.estimatedBytes >= 512 * 1024 ** 2);
+  assert.equal(preview.summary.details.find(item => item.label === 'Preprocessing').value.resize.width, 224);
+  assert.equal(preview.summary.details.find(item => item.label === 'Augmentation').value.multiplier, 2);
+});
