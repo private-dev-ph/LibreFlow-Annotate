@@ -1,6 +1,6 @@
 # Local AI connections (MCP)
 
-This local read-only release lets an MCP client inspect selected LibreFlow projects, with separate optional permissions for annotations, previews, models, and dataset versions. It is disabled by default and does not change existing annotation, export, or inference workflows.
+Local MCP lets a client inspect selected LibreFlow projects. Approved inference, annotation additions, version builds and exports are available through separate permissions and a server-side action switch. See [actions and optional remote access](mcp-actions-and-remote.md). Local use needs no domain or HTTPS.
 
 ## Available tools
 
@@ -18,11 +18,11 @@ This local read-only release lets an MCP client inspect selected LibreFlow proje
 | `libreflow_get_version` | Verified version summary, splits, and processing settings; requires version permission |
 | `libreflow_get_dataset_health` | Bounded live-project or version health statistics; requires version permission |
 
-Original image downloads, model weights, inference runs, annotation writes, dataset generation, and deletion are not exposed in this release. Image previews disclose visible image contents only when explicitly granted. Remote/cloud-only clients need the later HTTPS/OAuth phase; this connection is for a client running on the same machine as LibreFlow.
+Image previews and image-containing exports require explicit permissions. Model weights and deletion are not exposed. This guide covers a client on the same machine; [remote OAuth setup](mcp-actions-and-remote.md#optional-remote-oauth-access) is optional.
 
 ## Enable the local bridge service
 
-Use Node 20 or later with the dependencies installed using `npm ci`. Set these variables on the **app server**, then start `node server.js`:
+Use Node 24 LTS with the dependencies installed using `npm ci`. Set these variables on the **app server**, then start `node server.js`:
 
 ```text
 LIBREFLOW_MCP_ENABLED=true
@@ -83,7 +83,7 @@ The credential is separate from existing automation API keys: `lfm_` credentials
 
 LibreFlow records only recent operation metadata (tool, outcome, time, and authorized project ID). Credentials, tool arguments, annotation contents, and original image bytes are not logged. Only the newest 20 activity entries per connection are retained; this is an activity aid, not a durable compliance audit. Up to 100 connection records per user are supported in this milestone.
 
-The private listener rejects browser origins/cookies and unexpected Host headers, limits requests per connection/user, and accepts only curated read operations. The stdio bridge does not read LibreFlow's storage files. Its tools cannot run shell commands, upload files, or fetch caller-selected URLs.
+The private listener rejects browser origins/cookies and unexpected Host headers, limits requests per connection/user, and accepts only curated operations permitted by the current grant. The stdio bridge does not read LibreFlow's storage files. Its tools cannot run shell commands, upload files, or fetch caller-selected URLs.
 
 ## Troubleshooting
 
@@ -105,7 +105,7 @@ Version tools cover versions sourced directly from selected projects. Standalone
 
 ## Implementation and protocol references
 
-See [the implementation plan](mcp-access-plan.md) for later write/proposal, dataset job, and remote OAuth phases. The plan is a roadmap; only the tools listed above are implemented here.
+See [approved actions and remote access](mcp-actions-and-remote.md) for the additional workflows and [the original implementation plan](mcp-access-plan.md) for design context.
 
 - [Official TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
 - [Official stdio serving guidance](https://ts.sdk.modelcontextprotocol.io/v2/serving/stdio)

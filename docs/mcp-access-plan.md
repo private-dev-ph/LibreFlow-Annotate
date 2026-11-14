@@ -1,8 +1,8 @@
-> Implementation status: the local read-only release is described in [Local AI connections](mcp-local-setup.md). It covers scoped project/annotation reads, previews, models/classes, version/health summaries, permission management, and a stdio bridge. Write actions, dataset jobs, and remote OAuth below remain planned.
+> Implementation status: local inspection, browser-approved inference/annotation additions, version/export jobs and optional remote OAuth are implemented. See [current setup and boundaries](mcp-actions-and-remote.md). Remote public exposure remains disabled until configured.
 
 # Secure MCP access for LibreFlow
 
-Status: phased roadmap; the local read-only release is implemented. Later phases remain proposed.
+Status: original roadmap retained for design context; current setup is documented above. Optional protocol Tasks/resources and broader destructive/standalone-dataset access remain future work.
 Reviewed: 2026-11-14.
 Code baseline: c6cb37846f54a0518430a9298c4930a5aeeaa0ea.
 Branch: `plan-secure-mcp-access`.

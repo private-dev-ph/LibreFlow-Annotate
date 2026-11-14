@@ -58,6 +58,7 @@ if (securityConfig.trustProxy) app.set('trust proxy', securityConfig.trustProxy)
 // Middleware
 const originPolicy = createOriginPolicy(securityConfig);
 app.use(securityHeaders);
+app.get('/healthz', (req,res) => res.json({ok:true}));
 if (oauth) {
   // Derive proxy facts through Express's configured trusted-hop policy. Never let
   // the provider trust arbitrary forwarded host/protocol headers directly.

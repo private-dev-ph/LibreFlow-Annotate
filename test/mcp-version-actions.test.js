@@ -70,7 +70,7 @@ test('approved preview queues and persists an immutable version with one class m
   put('annotations', [{ id: 'annotation-1', imageId: 'image-1', label: 'raw', type: 'bbox', data: { x: 0, y: 0, width: 2, height: 2 } }]);
   const p = principal();
   const args = { projectId: 'project-1', requestKey: 'version-one', name: '', selection: 'all', splitRatios: { train: 1, valid: 0, test: 0 }, processing: { preprocessing: { modifyClasses: { raw: 'final', final: 'double' } }, augmentation: { multiplier: 2, rotate: [0] } } };
-  const first = actions.previewVersion(p, args);
+  const first = await require('../lib/mcp-queries').createQueryService(policy).callTool(p, 'libreflow_preview_version', args);
   const second = actions.previewVersion(p, args);
   assert.equal(first.id, second.id);
   assert.throws(() => actions.createVersion(p, { projectId: 'project-1', operationId: first.id }), error => error.code === 'APPROVAL_REQUIRED');
@@ -128,6 +128,6 @@ test('preview persists normalized settings and reserves disk/output budgets', as
   const preview = actions.previewVersion(p, { projectId: 'project-1', requestKey: 'budget', processing: { preprocessing: { resize: { enabled: true, width: 224, height: 224 } }, augmentation: { multiplier: 2, rotate: [0] } } });
   const record = operations.getInternalProposal(p, 'project-1', preview.id, 'versions.create');
   assert.ok(record.payload.estimatedBytes >= 512 * 1024 ** 2);
-  assert.equal(preview.summary.details.find(item => item.label === 'Preprocessing').value.resize.width, 224);
-  assert.equal(preview.summary.details.find(item => item.label === 'Augmentation').value.multiplier, 2);
+  assert.equal(JSON.parse(preview.summary.details.find(item => item.label === 'Preprocessing').value).resize.width, 224);
+  assert.equal(JSON.parse(preview.summary.details.find(item => item.label === 'Augmentation').value).multiplier, 2);
 });

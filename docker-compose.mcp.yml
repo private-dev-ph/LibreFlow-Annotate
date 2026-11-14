@@ -4,6 +4,7 @@ services:
   app:
     environment:
       LIBREFLOW_MCP_ENABLED: "true"
+      LIBREFLOW_MCP_WRITES_ENABLED: "${LIBREFLOW_MCP_WRITES_ENABLED:-false}"
       LIBREFLOW_MCP_HOST: "0.0.0.0"
       LIBREFLOW_MCP_PORT: "6769"
     ports:
