@@ -44,6 +44,29 @@ router.use((req, res, next) => {
   next();
 });
 
+
+const operations = require('../lib/mcp-operations');
+// Only trusted browser sessions can approve requests. AI bearer credentials cannot.
+router.get('/requests', requireSessionOnly, (req, res) => {
+  try { res.json({ requests: operations.listUserProposals(req.session.userId) }); }
+  catch (error) { safeError(res, error); }
+});
+router.get('/requests/:id', requireSessionOnly, (req, res) => {
+  try { res.json({ request: operations.publicProposal(operations.getUserProposal(req.session.userId, req.params.id)) }); }
+  catch (error) { safeError(res, error); }
+});
+for (const action of ['approve', 'reject']) {
+  router.post('/requests/:id/' + action, requireSessionOnly, (req, res) => {
+    try {
+      if (!req.body || Object.keys(req.body).some(key => key !== 'digest')) {
+        return errorResponse(res, 400, 'INVALID_INPUT', 'Only the reviewed request digest is accepted.');
+      }
+      const decide = action === 'approve' ? operations.approveProposal : operations.rejectProposal;
+      res.json({ request: decide(req.session.userId, req.params.id, req.body.digest) });
+    } catch (error) { safeError(res, error); }
+  });
+}
+
 router.get('/', requireSessionOnly, (req, res) => {
   try {
     const projects = readJson(dataFile('projects.json'), [])
@@ -83,6 +106,7 @@ router.delete('/:id', requireSessionOnly, (req, res) => {
   try {
     const connection = revokeConnection(req.session.userId, req.params.id);
     if (!connection) return errorResponse(res, 404, 'NOT_FOUND', 'MCP connection not found.');
+    require('../lib/job-runner').cancelConnectionJobs(req.session.userId, connection.id);
     return res.json({ connection });
   } catch (error) {
     return safeError(res, error);
