@@ -1,0 +1,71 @@
+/* Shared navigation for the Automation workspace and its standalone sections. */
+.automation-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 22px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.automation-tab {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 44px;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  transition: color .15s, background .15s, border-color .15s;
+}
+
+.automation-tab .lf-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.automation-tab:hover {
+  background: var(--bg3);
+  color: var(--text);
+}
+
+.automation-tab.active,
+.automation-tab[aria-current="page"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 650;
+}
+
+.automation-tab:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 420px) {
+  .automation-tab {
+    flex-basis: calc(50% - 4px);
+    padding-inline: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .automation-tab {
+    transition: none;
+  }
+}

@@ -4,9 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="/js/theme-init.js"></script>
-    <title>AI connections – LibreFlow Annotate</title>
+    <title>Instance-level MCP – LibreFlow Annotate</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="/css/nav.css" />
+    <link rel="stylesheet" href="/css/automation-nav.css" />
     <link rel="stylesheet" href="/css/ai-connections.css" />
     <link rel="stylesheet" href="/css/theme.css" />
     <link rel="stylesheet" href="/css/icons.css" />
@@ -69,11 +70,21 @@
 
     <main class="connections-body">
       <div class="connections-container">
-        <a class="back-link" href="/jobs">← Back to Automation</a>
+        <a class="back-link" href="/jobs#jobs">← Back to Automation</a>
+        <nav class="automation-tabs" aria-label="Automation sections">
+          <a class="automation-tab" href="/jobs#jobs">Jobs</a>
+          <a class="automation-tab" href="/jobs#run">Run automation</a>
+          <a class="automation-tab" href="/jobs#integrations">Integrations</a>
+          <a class="automation-tab" href="/jobs#api-keys">API keys</a>
+          <a class="automation-tab active" href="/ai-connections" aria-current="page">
+            <span data-lf-icon="link" aria-hidden="true"></span>
+            Instance-level MCP
+          </a>
+        </nav>
         <header class="connections-header">
           <div>
             <p class="eyebrow">MCP client access</p>
-            <h1>AI connections</h1>
+            <h1>Instance-level MCP</h1>
             <p class="lede">
               Connect a trusted AI client to selected LibreFlow projects with
               the smallest access it needs.

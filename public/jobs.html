@@ -7,6 +7,7 @@
   <title>Jobs – LibreFlow Annotate</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/css/nav.css" />
+  <link rel="stylesheet" href="/css/automation-nav.css" />
   <link rel="stylesheet" href="/css/jobs.css" />
   <link rel="stylesheet" href="/css/theme.css" />
   <link rel="stylesheet" href="/css/icons.css" />
@@ -69,18 +70,21 @@
           <p>Persistent jobs, ingestion, webhooks, and API access.</p>
         </div>
         <div class="header-actions">
-          <a class="btn-clear" href="/ai-connections">AI connections</a>
           <button class="btn-clear" id="btn-refresh" type="button">Refresh</button>
           <button class="btn-clear" id="btn-clear" type="button">Clear Completed</button>
         </div>
       </div>
 
-      <div class="automation-tabs" role="tablist">
-        <button class="automation-tab active" data-tab="jobs" type="button">Jobs</button>
-        <button class="automation-tab" data-tab="run" type="button">Run automation</button>
-        <button class="automation-tab" data-tab="integrations" type="button">Integrations</button>
-        <button class="automation-tab" data-tab="api-keys" type="button">API keys</button>
-      </div>
+      <nav class="automation-tabs" aria-label="Automation sections">
+        <button class="automation-tab active" data-tab="jobs" type="button" aria-pressed="true">Jobs</button>
+        <button class="automation-tab" data-tab="run" type="button" aria-pressed="false">Run automation</button>
+        <button class="automation-tab" data-tab="integrations" type="button" aria-pressed="false">Integrations</button>
+        <button class="automation-tab" data-tab="api-keys" type="button" aria-pressed="false">API keys</button>
+        <a class="automation-tab" href="/ai-connections" data-automation-link="mcp">
+          <span data-lf-icon="link" aria-hidden="true"></span>
+          Instance-level MCP
+        </a>
+      </nav>
 
       <section class="automation-panel active" data-panel="jobs">
         <div id="jobs-list" class="jobs-list"></div>

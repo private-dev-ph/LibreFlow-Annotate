@@ -240,10 +240,24 @@
 
   async function fullRefresh() { await Promise.all([loadJobs(), loadIntegrations()]); await loadReviewQueue(); }
 
-  document.querySelectorAll('.automation-tab').forEach(tab => tab.addEventListener('click', () => {
-    document.querySelectorAll('.automation-tab').forEach(item => item.classList.toggle('active', item === tab));
+  const automationTabs = [...document.querySelectorAll('.automation-tab[data-tab]')];
+  function selectAutomationTab(tabName, updateHash = false) {
+    const tab = automationTabs.find(item => item.dataset.tab === tabName) || automationTabs[0];
+    if (!tab) return;
+    automationTabs.forEach(item => {
+      const isActive = item === tab;
+      item.classList.toggle('active', isActive);
+      item.setAttribute('aria-pressed', String(isActive));
+    });
     document.querySelectorAll('.automation-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab.dataset.tab));
-  }));
+    if (updateHash && window.location.hash !== `#${tab.dataset.tab}`) window.history.replaceState(null, '', `#${tab.dataset.tab}`);
+  }
+  function selectAutomationHash() {
+    selectAutomationTab(window.location.hash.slice(1) || 'jobs');
+  }
+  automationTabs.forEach(tab => tab.addEventListener('click', () => selectAutomationTab(tab.dataset.tab, true)));
+  window.addEventListener('hashchange', selectAutomationHash);
+  selectAutomationHash();
 
   document.getElementById('inference-project').addEventListener('change', event => loadModels(event.target.value).catch(error => toast('error', 'Could not load models', error.message)));
   document.getElementById('review-project').addEventListener('change', () => loadReviewQueue().catch(error => toast('error', 'Review queue failed', error.message)));
