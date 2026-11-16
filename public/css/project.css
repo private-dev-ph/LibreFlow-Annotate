@@ -1291,3 +1291,25 @@
   .img-tag-edit { flex-wrap: wrap; }
   .img-tag-input { width: 100%; flex-basis: 100%; }
 }
+
+/* Project tabs stay on one readable line on phones and tablets. Scrolling is
+ * contained to the tab strip so the document itself never gains horizontal
+ * overflow; theme.js keeps the active tab in view after selection. */
+@media (max-width: 1000px) {
+  .project-container { min-width: 0; max-width: 100%; }
+  .project-tabs {
+    display: flex;
+    flex-wrap: nowrap !important;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  .project-tabs .tab-btn {
+    flex: 0 0 auto;
+    min-height: 44px;
+    white-space: nowrap;
+  }
+}

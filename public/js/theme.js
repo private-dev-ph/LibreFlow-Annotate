@@ -129,6 +129,11 @@
   function closeModal() {
     modal.classList.add('hidden');
     button.setAttribute('aria-expanded', 'false');
+    const mobileMenuToggle = document.getElementById('mobile-nav-toggle');
+    const compactMenuClosed = mobileMenuToggle
+      && window.matchMedia('(max-width: 1000px)').matches
+      && mobileMenuToggle.getAttribute('aria-expanded') !== 'true';
+    (compactMenuClosed ? mobileMenuToggle : button).focus();
   }
 
   function openModal() {
@@ -154,4 +159,144 @@
 
   applyTheme(activeTheme, false);
   applyMode(activeMode, false);
+})();
+
+// Responsive navigation keeps the authenticated controls and their existing
+// listeners intact while presenting one compact, branded header on small
+// screens. This is intentionally outside the theme IIFE so pages without a
+// theme control (including login) can safely use the guard below.
+(function initResponsiveNavigation() {
+  const nav = document.getElementById('top-nav');
+  const navLeft = nav?.querySelector('.nav-left');
+  const navLinks = nav?.querySelector('.nav-links');
+  const navRight = nav?.querySelector('.nav-right');
+  if (!nav || !navLeft || !navLinks || !navRight) return;
+
+  const mobileQuery = window.matchMedia('(max-width: 1000px)');
+  const renderIcon = name => window.LibreFlowIcons?.icon(name) || '';
+  const menuButton = document.createElement('button');
+  menuButton.id = 'mobile-nav-toggle';
+  menuButton.className = 'mobile-nav-toggle';
+  menuButton.type = 'button';
+  menuButton.setAttribute('aria-expanded', 'false');
+  menuButton.setAttribute('aria-controls', 'mobile-nav-panel');
+  menuButton.innerHTML = `${renderIcon('list')}<span>Menu</span>`;
+
+  const panel = document.createElement('div');
+  panel.id = 'mobile-nav-panel';
+  panel.className = 'mobile-nav-panel';
+  panel.hidden = true;
+  panel.setAttribute('aria-label', 'Mobile navigation');
+
+  const primarySection = document.createElement('section');
+  primarySection.className = 'mobile-nav-section mobile-nav-primary';
+  primarySection.setAttribute('aria-labelledby', 'mobile-nav-primary-title');
+  primarySection.innerHTML = '<h2 id="mobile-nav-primary-title" class="mobile-nav-section-title">Workspace</h2>';
+  primarySection.append(navLinks);
+
+  const accountSection = document.createElement('section');
+  accountSection.className = 'mobile-nav-section mobile-nav-account';
+  accountSection.setAttribute('aria-labelledby', 'mobile-nav-account-title');
+  accountSection.innerHTML = '<h2 id="mobile-nav-account-title" class="mobile-nav-section-title">Account</h2>';
+  accountSection.append(navRight);
+  panel.append(primarySection, accountSection);
+
+  navLeft.append(menuButton);
+  nav.append(panel);
+
+  let mobileLayout = false;
+  let panelOpen = false;
+
+  function setPanelVisibility(open, { restoreFocus = false } = {}) {
+    panelOpen = Boolean(open && mobileLayout);
+    panel.hidden = !panelOpen;
+    panel.toggleAttribute('inert', !panelOpen);
+    panel.setAttribute('aria-hidden', String(!panelOpen));
+    menuButton.setAttribute('aria-expanded', String(panelOpen));
+    menuButton.setAttribute('aria-label', panelOpen ? 'Close menu' : 'Open menu');
+    menuButton.title = panelOpen ? 'Close menu' : 'Open menu';
+    menuButton.classList.toggle('is-open', panelOpen);
+    if (restoreFocus) menuButton.focus();
+  }
+
+  function restoreDesktopLayout() {
+    setPanelVisibility(false);
+    navLeft.insertBefore(navLinks, menuButton);
+    nav.append(navRight);
+    mobileLayout = false;
+  }
+
+  function applyResponsiveLayout() {
+    if (mobileQuery.matches) {
+      if (!mobileLayout) {
+        mobileLayout = true;
+        primarySection.append(navLinks);
+        accountSection.append(navRight);
+        panel.append(primarySection, accountSection);
+        setPanelVisibility(false);
+      }
+      return;
+    }
+    if (mobileLayout || navLinks.parentElement !== navLeft || navRight.parentElement !== nav) restoreDesktopLayout();
+    else setPanelVisibility(false);
+  }
+
+  menuButton.addEventListener('click', () => setPanelVisibility(!panelOpen));
+  panel.addEventListener('click', event => {
+    if (event.target.closest('a, #btn-logout')) setPanelVisibility(false);
+  });
+  // Close before the theme button's target-phase listener opens the modal;
+  // this avoids stealing the modal's intentional focus.
+  navRight.addEventListener('click', event => {
+    if (event.target.closest('#btn-theme-settings')) setPanelVisibility(false);
+  }, true);
+  document.addEventListener('click', event => {
+    if (panelOpen && !nav.contains(event.target)) setPanelVisibility(false);
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && panelOpen) setPanelVisibility(false, { restoreFocus: true });
+  });
+  const handleViewportChange = () => applyResponsiveLayout();
+  if (typeof mobileQuery.addEventListener === 'function') mobileQuery.addEventListener('change', handleViewportChange);
+  else mobileQuery.addListener(handleViewportChange);
+
+  applyResponsiveLayout();
+})();
+
+// Keep project tabs usable without wrapping the page at phone and tablet
+// widths. The project page owns tab state; this initializer only observes it.
+(function initProjectTabScrolling() {
+  const tabBar = document.querySelector('.project-tabs');
+  if (!tabBar) return;
+  const tabs = [...tabBar.querySelectorAll('.tab-btn')];
+  if (!tabs.length) return;
+  const compactQuery = window.matchMedia('(max-width: 1000px)');
+  const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  function scrollActiveTab(behavior = 'auto') {
+    if (!compactQuery.matches) return;
+    const active = [...tabBar.querySelectorAll('.tab-btn')].find(tab => tab.classList.contains('active'));
+    if (!active) return;
+    const maxScroll = Math.max(0, tabBar.scrollWidth - tabBar.clientWidth);
+    const target = active.offsetLeft - Math.max(0, (tabBar.clientWidth - active.offsetWidth) / 2);
+    tabBar.scrollTo({
+      left: Math.max(0, Math.min(maxScroll, target)),
+      behavior: behavior === 'smooth' && !reducedMotionQuery.matches ? 'smooth' : 'auto',
+    });
+  }
+
+  tabs.forEach(tab => tab.addEventListener('click', () => {
+    window.requestAnimationFrame(() => scrollActiveTab('smooth'));
+  }));
+  window.addEventListener('hashchange', () => window.requestAnimationFrame(() => scrollActiveTab('auto')));
+  const activeObserver = new MutationObserver(records => {
+    if (records.some(record => record.attributeName === 'class')) {
+      window.requestAnimationFrame(() => scrollActiveTab('auto'));
+    }
+  });
+  activeObserver.observe(tabBar, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  const handleCompactChange = () => window.requestAnimationFrame(() => scrollActiveTab('auto'));
+  if (typeof compactQuery.addEventListener === 'function') compactQuery.addEventListener('change', handleCompactChange);
+  else compactQuery.addListener(handleCompactChange);
+  window.requestAnimationFrame(() => scrollActiveTab('auto'));
 })();
