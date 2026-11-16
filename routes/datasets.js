@@ -7,6 +7,7 @@ const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
 const { validateArchiveEntries } = require('../lib/archive-safety');
 const { parseLibraryQuery, browseLibrary } = require('../lib/library-pagination');
+const { parseDatasetImageQuery, browseDatasetImages } = require('../lib/dataset-image-browser');
 
 const router = express.Router();
 
@@ -227,6 +228,37 @@ router.get('/browse', (req, res) => {
       shareProjectId: dataset.shareProjectId ?? null,
     }),
   }));
+});
+
+router.get('/:id/images/browse', (req, res) => {
+  let query;
+  try {
+    query = parseDatasetImageQuery(req.query);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  const uid = req.session.userId;
+  const ds = readDatasets().find(d => d.id === req.params.id);
+  if (!ds) return res.status(404).json({ error: 'Dataset not found.' });
+  if (!canAccessDataset(ds, uid)) return res.status(403).json({ error: 'Not authorized.' });
+
+  const images = Array.isArray(ds.images) ? ds.images : [];
+  return res.json({
+    dataset: {
+      id: ds.id ?? null,
+      userId: ds.userId ?? null,
+      name: ds.name ?? null,
+      description: ds.description ?? null,
+      createdAt: ds.createdAt ?? null,
+      updatedAt: ds.updatedAt ?? null,
+      imageCount: images.length,
+      sharedWithCollaborators: ds.sharedWithCollaborators === true,
+      sourceProjectId: ds.sourceProjectId ?? null,
+      shareProjectId: ds.shareProjectId ?? null,
+    },
+    ...browseDatasetImages(images, query),
+  });
 });
 
 router.get('/:id', (req, res) => {

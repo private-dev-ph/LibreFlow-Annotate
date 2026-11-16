@@ -135,25 +135,46 @@
         </div>
 
         <div class="images-tools">
-          <input id="dataset-image-search" type="text" placeholder='Search images (e.g. name:item tag:"component A" size:>1mb date:2026-04-30)' />
-          <select id="dataset-image-sort">
-            <option value="uploadedAt_desc">Newest</option>
-            <option value="uploadedAt_asc">Oldest</option>
-            <option value="name_asc">Name A-Z</option>
-            <option value="name_desc">Name Z-A</option>
-            <option value="size_desc">Size High-Low</option>
-            <option value="size_asc">Size Low-High</option>
-          </select>
-          <select id="dataset-image-group">
-            <option value="none">Group: None</option>
-            <option value="tag">Group: Tag</option>
-            <option value="date">Group: Date</option>
-            <option value="size">Group: Size</option>
-          </select>
+          <label class="image-search-label" for="dataset-image-search">Search images
+            <input id="dataset-image-search" type="search" maxlength="200" aria-describedby="dataset-image-search-hint" placeholder='name:item tag:"component A" size:>1mb date:2026-04-30' autocomplete="off" />
+          </label>
+          <label for="dataset-image-sort">Sort images
+            <select id="dataset-image-sort">
+              <option value="uploadedAt_desc">Newest</option>
+              <option value="uploadedAt_asc">Oldest</option>
+              <option value="name_asc">Name A-Z</option>
+              <option value="name_desc">Name Z-A</option>
+              <option value="size_desc">Size High-Low</option>
+              <option value="size_asc">Size Low-High</option>
+            </select>
+          </label>
+          <label for="dataset-image-group">Group images
+            <select id="dataset-image-group">
+              <option value="none">Group: None</option>
+              <option value="tag">Group: Tag</option>
+              <option value="date">Group: Date (UTC)</option>
+              <option value="size">Group: Size</option>
+            </select>
+          </label>
         </div>
+        <p id="dataset-image-search-hint" class="image-search-hint">Supports name:, tag:, size:, and UTC dates (YYYY-MM-DD).</p>
 
-        <div id="dataset-images-scroll" class="dataset-images-scroll">
+        <div id="dataset-image-status" class="library-list-status" role="status" aria-live="polite"></div>
+        <button id="dataset-image-retry" class="btn" type="button" hidden>Retry</button>
+        <div id="dataset-images-scroll" class="dataset-images-scroll" aria-busy="false">
           <div id="dataset-images-grid" class="dataset-images-grid"></div>
+        </div>
+        <div class="library-pagination dataset-image-pagination" aria-label="Dataset image pages">
+          <button id="dataset-image-page-prev" class="library-page-button" type="button" aria-label="Previous image page">Previous</button>
+          <span id="dataset-image-page-status" class="library-page-status" role="status" aria-live="polite">0 images</span>
+          <label class="dataset-image-page-size-label" for="dataset-image-page-size">Images per page
+            <select id="dataset-image-page-size">
+              <option value="24">24</option>
+              <option value="48">48</option>
+              <option value="96">96</option>
+            </select>
+          </label>
+          <button id="dataset-image-page-next" class="library-page-button" type="button" aria-label="Next image page">Next</button>
         </div>
       </section>
     </div>

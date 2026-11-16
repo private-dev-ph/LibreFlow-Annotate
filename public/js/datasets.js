@@ -31,9 +31,13 @@
   let browseError = null;
   let libraryTotal = 0;
   let libraryTotalPages = 1;
-  let imageSearch = '';
-  let imageSort = 'uploadedAt_desc';
-  let imageGroup = 'none';
+  const imageQuery = { page: 1, pageSize: 24, q: '', sort: 'uploadedAt_desc', group: 'none' };
+  let imageGroups = [];
+  let imageTotal = 0;
+  let imageTotalPages = 1;
+  let imageBrowseLoading = false;
+  let imageBrowseError = null;
+  let imageBrowseDebounce = null;
   let uploadMode = 'new'; // new | add
 
   const layout = document.querySelector('.datasets-layout');
@@ -172,12 +176,20 @@
     const dsTitle = document.getElementById('dataset-title');
     const dsSub = document.getElementById('dataset-sub');
     const grid = document.getElementById('dataset-images-grid');
-    const btnAddImage = document.getElementById('btn-add-image');
 
     const requestedId = selectedId;
     const requestSeq = ++detailRequestSeq;
+    clearTimeout(imageBrowseDebounce);
+    imageBrowseDebounce = null;
     selectedRecord = null;
+    imageGroups = [];
+    imageTotal = 0;
+    imageTotalPages = 1;
+    imageBrowseError = null;
+    imageBrowseLoading = false;
     setDetailActionsDisabled(true);
+    renderImageStatus();
+    renderImagePagination();
 
     if (!requestedId) {
       layout.classList.add('show-dataset-list');
@@ -188,126 +200,107 @@
     }
 
     dsTitle.textContent = 'Loading dataset…';
-    dsSub.textContent = 'Fetching dataset details…';
+    dsSub.textContent = 'Fetching dataset images…';
     grid.innerHTML = '';
+    imageBrowseLoading = true;
+    renderImageStatus();
+    renderImagePagination();
     try {
-      const full = await API.getDataset(requestedId);
+      const response = await API.browseDatasetImages(requestedId, { ...imageQuery });
       if (requestSeq !== detailRequestSeq || selectedId !== requestedId) return;
-      if (full?.error) throw new Error(full.error);
-      selectedRecord = full;
+      if (response?.error) throw new Error(response.error);
+      if (!response?.dataset) throw new Error('The dataset response was invalid. Please retry.');
+      selectedRecord = response.dataset;
+      imageGroups = Array.isArray(response.groups) ? response.groups : [];
+      imageTotal = Number(response.total) || 0;
+      imageTotalPages = Math.max(1, Number(response.totalPages) || 1);
+      imageQuery.page = Math.max(1, Number(response.page) || 1);
+      imageQuery.pageSize = Number(response.pageSize) || imageQuery.pageSize;
       const summary = datasets.find(d => d.id === requestedId);
       if (summary) Object.assign(summary, {
-        name: full.name,
-        description: full.description,
-        imageCount: full.imageCount ?? (full.images || []).length,
-        sharedWithCollaborators: full.sharedWithCollaborators,
+        name: selectedRecord.name,
+        description: selectedRecord.description,
+        imageCount: selectedRecord.imageCount,
+        sharedWithCollaborators: selectedRecord.sharedWithCollaborators,
       });
-      dsTitle.textContent = full.name || 'Untitled dataset';
-      dsSub.textContent = full.description || '';
+      dsTitle.textContent = selectedRecord.name || 'Untitled dataset';
+      dsSub.textContent = selectedRecord.description || '';
       setDetailActionsDisabled(false);
-      const isOwner = full.userId === me.id;
+      const isOwner = selectedRecord.userId === me.id;
       ['btn-add-image', 'btn-edit-dataset', 'btn-delete-dataset']
         .forEach(id => { const button = document.getElementById(id); if (button) button.disabled = !isOwner; });
       renderDatasetsList();
       renderDatasetImages();
+      renderImageStatus();
+      renderImagePagination();
     } catch (error) {
       if (requestSeq !== detailRequestSeq || selectedId !== requestedId) return;
+      imageBrowseError = errorMessage(error);
+      imageGroups = [];
       dsTitle.textContent = 'Dataset unavailable';
       dsSub.innerHTML = `${esc(errorMessage(error))} <button type="button" class="btn" id="dataset-detail-retry">Retry</button>`;
       document.getElementById('dataset-detail-retry').addEventListener('click', refreshSelectedDataset);
-      grid.innerHTML = '';
+      renderDatasetImages();
+      renderImageStatus();
+      renderImagePagination();
       setDetailActionsDisabled(true);
-    }
-  }
-
-  function tokenizeQuery(query) {
-    const tokens = [];
-    const re = /([a-zA-Z]+):"([^"]*)"|([a-zA-Z]+):(\S+)|"([^"]*)"|(\S+)/g;
-    let match;
-    while ((match = re.exec(query || '')) !== null) {
-      if (match[1]) tokens.push({ field: match[1].toLowerCase(), value: match[2] });
-      else if (match[3]) tokens.push({ field: match[3].toLowerCase(), value: match[4] });
-      else if (match[5]) tokens.push({ field: null, value: match[5] });
-      else if (match[6]) tokens.push({ field: null, value: match[6] });
-    }
-    return tokens;
-  }
-
-  function parseSize(raw) {
-    const m = String(raw || '').trim().toLowerCase().match(/^([<>]=?|=)?\s*([\d.]+)\s*(b|kb|mb|gb)?$/);
-    if (!m) return null;
-    const n = Number(m[2]);
-    if (!Number.isFinite(n)) return null;
-    const op = m[1] || '=';
-    const unit = m[3] || 'b';
-    const mult = unit === 'gb' ? 1024 * 1024 * 1024 : unit === 'mb' ? 1024 * 1024 : unit === 'kb' ? 1024 : 1;
-    return { op, bytes: n * mult };
-  }
-
-  function imageMatches(img, field, value) {
-    const q = String(value || '').toLowerCase();
-    const name = String(img.originalName || '').toLowerCase();
-    const tags = (img.tags || []).map(t => String(t).toLowerCase());
-    const date = img.uploadedAt ? new Date(img.uploadedAt).toISOString().slice(0, 10) : '';
-
-    if (!field) {
-      return name.includes(q)
-        || tags.some(t => t.includes(q))
-        || date.includes(q)
-        || formatBytes(img.size).toLowerCase().includes(q);
-    }
-    if (field === 'tag' || field === 'tags') return tags.some(t => t.includes(q));
-    if (field === 'name' || field === 'filename') return name.includes(q);
-    if (field === 'date' || field === 'uploaded' || field === 'uploadedat') return date.includes(q);
-    if (field === 'size') {
-      const p = parseSize(value);
-      if (!p) return formatBytes(img.size).toLowerCase().includes(q);
-      if (p.op === '>') return img.size > p.bytes;
-      if (p.op === '>=') return img.size >= p.bytes;
-      if (p.op === '<') return img.size < p.bytes;
-      if (p.op === '<=') return img.size <= p.bytes;
-      return Math.abs((img.size || 0) - p.bytes) < 1024;
-    }
-    return false;
-  }
-
-  function filterImages(images, query) {
-    const tokens = tokenizeQuery(query);
-    if (!tokens.length) return [...images];
-    return images.filter(img => tokens.every(t => imageMatches(img, t.field, t.value)));
-  }
-
-  function sortImages(images, mode) {
-    const arr = [...images];
-    const byName = (a, b) => String(a.originalName || '').localeCompare(String(b.originalName || ''), undefined, { sensitivity: 'base' });
-    const byDate = (a, b) => new Date(a.uploadedAt || 0).getTime() - new Date(b.uploadedAt || 0).getTime();
-    const bySize = (a, b) => (a.size || 0) - (b.size || 0);
-    if (mode === 'uploadedAt_asc') arr.sort(byDate);
-    else if (mode === 'uploadedAt_desc') arr.sort((a, b) => byDate(b, a));
-    else if (mode === 'name_asc') arr.sort(byName);
-    else if (mode === 'name_desc') arr.sort((a, b) => byName(b, a));
-    else if (mode === 'size_asc') arr.sort(bySize);
-    else if (mode === 'size_desc') arr.sort((a, b) => bySize(b, a));
-    return arr;
-  }
-
-  function groupImages(images, mode) {
-    if (mode === 'none') return [{ label: '', items: images }];
-    const map = new Map();
-    images.forEach(img => {
-      let key = 'Ungrouped';
-      if (mode === 'tag') key = (img.tags && img.tags[0]) ? img.tags[0] : 'No Tag';
-      if (mode === 'date') key = img.uploadedAt ? new Date(img.uploadedAt).toLocaleDateString() : 'Unknown Date';
-      if (mode === 'size') {
-        if ((img.size || 0) < 500 * 1024) key = '< 500 KB';
-        else if (img.size < 2 * 1024 * 1024) key = '500 KB - 2 MB';
-        else if (img.size < 10 * 1024 * 1024) key = '2 MB - 10 MB';
-        else key = '>= 10 MB';
+    } finally {
+      if (requestSeq === detailRequestSeq && selectedId === requestedId) {
+        imageBrowseLoading = false;
+        renderDatasetImages();
+        renderImageStatus();
+        renderImagePagination();
       }
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(img);
-    });
-    return [...map.entries()].map(([label, items]) => ({ label, items }));
+    }
+  }
+
+  function formatUtcDate(value) {
+    if (!value) return 'Unknown date';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 'Unknown date' : date.toISOString().slice(0, 10);
+  }
+
+  function renderImageStatus() {
+    const status = document.getElementById('dataset-image-status');
+    const retry = document.getElementById('dataset-image-retry');
+    const scroll = document.getElementById('dataset-images-scroll');
+    if (!status || !retry || !scroll) return;
+    scroll.setAttribute('aria-busy', imageBrowseLoading ? 'true' : 'false');
+    if (imageBrowseError) {
+      status.textContent = `Unable to load images: ${imageBrowseError}`;
+      retry.hidden = false;
+      return;
+    }
+    retry.hidden = true;
+    if (imageBrowseLoading) {
+      status.textContent = 'Loading images…';
+      return;
+    }
+    if (!selectedRecord) {
+      status.textContent = 'Select a dataset to view images.';
+      return;
+    }
+    if (!imageTotal) {
+      status.textContent = imageQuery.q ? `No images match “${imageQuery.q}”.` : 'No images in this dataset yet.';
+      return;
+    }
+    status.textContent = `${imageTotal} image${imageTotal === 1 ? '' : 's'}${imageQuery.q ? ` matching “${imageQuery.q}”` : ''}`;
+  }
+
+  function renderImagePagination() {
+    const prev = document.getElementById('dataset-image-page-prev');
+    const next = document.getElementById('dataset-image-page-next');
+    const status = document.getElementById('dataset-image-page-status');
+    const pageSize = document.getElementById('dataset-image-page-size');
+    if (!prev || !next || !status || !pageSize) return;
+    const start = imageTotal ? ((imageQuery.page - 1) * imageQuery.pageSize) + 1 : 0;
+    const end = imageTotal ? Math.min(imageTotal, imageQuery.page * imageQuery.pageSize) : 0;
+    status.textContent = imageTotal
+      ? `${start}–${end} of ${imageTotal} · Page ${imageQuery.page} of ${imageTotalPages}`
+      : '0 images';
+    prev.disabled = imageBrowseLoading || imageQuery.page <= 1;
+    next.disabled = imageBrowseLoading || imageQuery.page >= imageTotalPages;
+    pageSize.disabled = imageBrowseLoading;
   }
 
   function renderDatasetImages() {
@@ -315,46 +308,137 @@
     const grid = document.getElementById('dataset-images-grid');
     if (!ds) { grid.innerHTML = ''; return; }
 
-    const filtered = filterImages(ds.images || [], imageSearch);
-    const sorted = sortImages(filtered, imageSort);
-    const groups = groupImages(sorted, imageGroup);
+    if (imageBrowseLoading) {
+      grid.innerHTML = '<div class="dataset-images-empty">Loading images…</div>';
+      return;
+    }
 
-    grid.innerHTML = groups.map(g => {
-      const cards = g.items.map(img => `
+    if (!imageTotal || !imageGroups.some(group => Array.isArray(group.items) && group.items.length)) {
+      const message = imageBrowseError
+        ? `Unable to load images: ${esc(imageBrowseError)}`
+        : imageQuery.q ? `No images match “${esc(imageQuery.q)}”.` : 'This dataset has no images yet.';
+      grid.innerHTML = `<div class="dataset-images-empty">${message}</div>`;
+      return;
+    }
+
+    grid.innerHTML = imageGroups.map(g => {
+      const items = Array.isArray(g.items) ? g.items : [];
+      const cards = items.map(img => `
         <div class="img-card">
           ${ds.userId === me.id ? `<button class="btn btn-del-img" data-id="${esc(img.id)}" title="Delete image" aria-label="Delete image">${LibreFlowIcons.icon('close')}</button>` : ''}
           <img src="/datasets-files/${esc(img.filename)}" alt="${esc(img.originalName)}" loading="lazy" />
           <div class="img-name">${esc(img.originalName)}</div>
-          <div class="img-meta">${new Date(img.uploadedAt).toLocaleDateString()} · ${formatBytes(img.size)}</div>
+          <div class="img-meta">${formatUtcDate(img.uploadedAt)} · ${formatBytes(img.size)}</div>
           <div>${(img.tags || []).map(t => `<span class="img-tag-chip">${esc(t)}</span>`).join('')}</div>
           <div class="img-actions">
-            <input class="img-tag-input" data-id="${esc(img.id)}" type="text" value="${esc((img.tags && img.tags[0]) || '')}" placeholder="tag" ${ds.userId !== me.id ? 'disabled' : ''} />
-            ${ds.userId === me.id ? `<button class="btn btn-save-tag" data-id="${esc(img.id)}">Save</button>` : ''}
+            <input class="img-tag-input" data-id="${esc(img.id)}" type="text" value="${esc((img.tags && img.tags[0]) || '')}" placeholder="tag" aria-label="Tag for ${esc(img.originalName)}" ${ds.userId !== me.id ? 'disabled' : ''} />
+            ${ds.userId === me.id ? `<button class="btn btn-save-tag" data-id="${esc(img.id)}" aria-label="Save tag for ${esc(img.originalName)}">Save</button>` : ''}
           </div>
         </div>
       `).join('');
-      if (imageGroup === 'none') return cards;
-      return `<div class="group-title">${esc(g.label)}</div>${cards}`;
+      if (imageQuery.group === 'none') return cards;
+      const total = Number(g.total) || items.length;
+      const offset = Number(g.offset) || 0;
+      const first = items.length ? offset + 1 : 0;
+      const last = items.length ? offset + items.length : 0;
+      const position = total ? ` <span class="group-position">${first}–${last} of ${total}</span>` : '';
+      return `<div class="group-title"><span>${esc(g.label || g.key || 'Ungrouped')}</span>${position}</div>${cards}`;
     }).join('');
 
     grid.querySelectorAll('.btn-save-tag').forEach(btn => {
       btn.addEventListener('click', async () => {
         const input = grid.querySelector(`.img-tag-input[data-id="${btn.dataset.id}"]`);
         const val = input ? input.value.trim() : '';
-        const r = await API.patchDatasetImage(ds.id, btn.dataset.id, { tags: val ? [val] : [] });
+        const mutationDatasetId = ds.id;
+        const r = await API.patchDatasetImage(mutationDatasetId, btn.dataset.id, { tags: val ? [val] : [] });
         if (r.error) return Notify.error('Failed to save tag', r.error);
-        await refreshSelectedDataset();
+        if (selectedId === mutationDatasetId) await refreshSelectedDataset();
       });
     });
 
     grid.querySelectorAll('.btn-del-img').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const r = await API.deleteDatasetImage(ds.id, btn.dataset.id);
+        const mutationDatasetId = ds.id;
+        const r = await API.deleteDatasetImage(mutationDatasetId, btn.dataset.id);
         if (r.error) return Notify.error('Failed to delete image', r.error);
         Notify.success('Image deleted from dataset');
-        await refreshSelectedDataset();
+        if (selectedId === mutationDatasetId) await refreshSelectedDataset();
       });
     });
+  }
+
+  async function loadImageBrowse(requestedId, requestSeq) {
+    if (requestSeq !== detailRequestSeq || selectedId !== requestedId) return;
+    imageBrowseLoading = true;
+    imageBrowseError = null;
+    renderImageStatus();
+    renderImagePagination();
+    try {
+      const response = await API.browseDatasetImages(requestedId, { ...imageQuery });
+      if (requestSeq !== detailRequestSeq || selectedId !== requestedId) return;
+      if (response?.error) throw new Error(response.error);
+      if (!response?.dataset) throw new Error('The dataset response was invalid. Please retry.');
+      selectedRecord = response.dataset;
+      imageGroups = Array.isArray(response.groups) ? response.groups : [];
+      imageTotal = Number(response.total) || 0;
+      imageTotalPages = Math.max(1, Number(response.totalPages) || 1);
+      imageQuery.page = Math.max(1, Number(response.page) || 1);
+      imageQuery.pageSize = Number(response.pageSize) || imageQuery.pageSize;
+      const summary = datasets.find(d => d.id === requestedId);
+      if (summary) Object.assign(summary, {
+        name: selectedRecord.name,
+        description: selectedRecord.description,
+        imageCount: selectedRecord.imageCount,
+        sharedWithCollaborators: selectedRecord.sharedWithCollaborators,
+      });
+      document.getElementById('dataset-title').textContent = selectedRecord.name || 'Untitled dataset';
+      document.getElementById('dataset-sub').textContent = selectedRecord.description || '';
+      setDetailActionsDisabled(false);
+      const isOwner = selectedRecord.userId === me.id;
+      ['btn-add-image', 'btn-edit-dataset', 'btn-delete-dataset']
+        .forEach(id => { const button = document.getElementById(id); if (button) button.disabled = !isOwner; });
+      renderDatasetsList();
+      renderDatasetImages();
+    } catch (error) {
+      if (requestSeq !== detailRequestSeq || selectedId !== requestedId) return;
+      imageBrowseError = errorMessage(error);
+      imageGroups = [];
+      renderDatasetImages();
+    } finally {
+      if (requestSeq === detailRequestSeq && selectedId === requestedId) {
+        imageBrowseLoading = false;
+        renderDatasetImages();
+        renderImageStatus();
+        renderImagePagination();
+      }
+    }
+  }
+
+  function requestImageBrowse({ debounced = false } = {}) {
+    clearTimeout(imageBrowseDebounce);
+    imageBrowseDebounce = null;
+    imageBrowseError = null;
+    imageBrowseLoading = true;
+    imageGroups = [];
+    imageTotal = 0;
+    imageTotalPages = 1;
+    const requestedId = selectedId;
+    const requestSeq = ++detailRequestSeq;
+    renderDatasetImages();
+    renderImageStatus();
+    renderImagePagination();
+    if (!requestedId) {
+      imageBrowseLoading = false;
+      renderImageStatus();
+      renderImagePagination();
+      return;
+    }
+    const run = () => {
+      imageBrowseDebounce = null;
+      loadImageBrowse(requestedId, requestSeq);
+    };
+    if (debounced) imageBrowseDebounce = setTimeout(run, 250);
+    else run();
   }
 
   function openUploadModal(mode) {
@@ -414,9 +498,37 @@
     loadDatasets();
   });
   document.getElementById('dataset-list-retry').addEventListener('click', () => loadDatasets());
-  document.getElementById('dataset-image-search').addEventListener('input', e => { imageSearch = e.target.value || ''; renderDatasetImages(); });
-  document.getElementById('dataset-image-sort').addEventListener('change', e => { imageSort = e.target.value || 'uploadedAt_desc'; renderDatasetImages(); });
-  document.getElementById('dataset-image-group').addEventListener('change', e => { imageGroup = e.target.value || 'none'; renderDatasetImages(); });
+  document.getElementById('dataset-image-search').addEventListener('input', e => {
+    imageQuery.q = e.target.value || '';
+    imageQuery.page = 1;
+    requestImageBrowse({ debounced: true });
+  });
+  document.getElementById('dataset-image-sort').addEventListener('change', e => {
+    imageQuery.sort = e.target.value || 'uploadedAt_desc';
+    imageQuery.page = 1;
+    requestImageBrowse();
+  });
+  document.getElementById('dataset-image-group').addEventListener('change', e => {
+    imageQuery.group = e.target.value || 'none';
+    imageQuery.page = 1;
+    requestImageBrowse();
+  });
+  document.getElementById('dataset-image-page-size').addEventListener('change', e => {
+    imageQuery.pageSize = Number(e.target.value) || 24;
+    imageQuery.page = 1;
+    requestImageBrowse();
+  });
+  document.getElementById('dataset-image-page-prev').addEventListener('click', () => {
+    if (imageQuery.page <= 1) return;
+    imageQuery.page -= 1;
+    requestImageBrowse();
+  });
+  document.getElementById('dataset-image-page-next').addEventListener('click', () => {
+    if (imageQuery.page >= imageTotalPages) return;
+    imageQuery.page += 1;
+    requestImageBrowse();
+  });
+  document.getElementById('dataset-image-retry').addEventListener('click', () => requestImageBrowse());
   document.getElementById('btn-refresh').addEventListener('click', () => loadDatasets({ refreshDetail: Boolean(selectedId) }));
   document.getElementById('btn-new-dataset').addEventListener('click', () => openUploadModal('new'));
   document.getElementById('btn-add-image').addEventListener('click', () => {
@@ -445,6 +557,7 @@
     } else {
       const ds = selectedDataset();
       if (!ds) return Notify.warn('Select a dataset first.');
+      const mutationDatasetId = ds.id;
       const resp = await fetch(`/api/datasets/${ds.id}/upload-images`, {
         method: 'POST',
         credentials: 'include',
@@ -452,6 +565,11 @@
       }).then(r => r.json());
       if (resp.error) return Notify.error('Failed to add images', resp.error);
       Notify.success(`Added ${resp.added} image(s)`);
+      if (selectedId !== mutationDatasetId) {
+        closeUploadModal();
+        await loadDatasets({ refreshDetail: false });
+        return;
+      }
     }
 
     closeUploadModal();
@@ -509,7 +627,8 @@
   document.getElementById('btn-save-edit-dataset').addEventListener('click', async () => {
     const ds = selectedDataset();
     if (!ds) return;
-    const r = await API.patchDataset(ds.id, {
+    const mutationDatasetId = ds.id;
+    const r = await API.patchDataset(mutationDatasetId, {
       name: document.getElementById('edit-dataset-name').value.trim(),
       description: document.getElementById('edit-dataset-desc').value.trim(),
       sharedWithCollaborators: document.getElementById('edit-dataset-shared').checked,
@@ -518,7 +637,7 @@
     if (r.error) return Notify.error('Failed to update dataset', r.error);
     document.getElementById('edit-modal').classList.add('hidden');
     Notify.success('Dataset updated');
-    await loadDatasets({ refreshDetail: true });
+    await loadDatasets({ refreshDetail: selectedId === mutationDatasetId });
   });
 
   document.getElementById('btn-delete-dataset').addEventListener('click', async () => {
@@ -526,12 +645,16 @@
     if (!ds) return Notify.warn('Select a dataset first.');
     if (ds.userId !== me.id) return Notify.warn('Only owner can delete dataset.');
     if (!confirm(`Delete dataset "${ds.name}"?`)) return;
-    const r = await API.deleteDataset(ds.id);
+    const mutationDatasetId = ds.id;
+    const r = await API.deleteDataset(mutationDatasetId);
     if (r.error) return Notify.error('Failed to delete dataset', r.error);
-    selectedId = null;
-    selectedRecord = null;
+    const shouldRefreshDetail = selectedId === mutationDatasetId;
+    if (shouldRefreshDetail) {
+      selectedId = null;
+      selectedRecord = null;
+    }
     Notify.success('Dataset deleted');
-    await loadDatasets({ refreshDetail: true });
+    await loadDatasets({ refreshDetail: shouldRefreshDetail });
   });
 
   await loadDatasets({ refreshDetail: true });

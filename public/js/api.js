@@ -303,6 +303,20 @@ const API = {
   },
 
   browseDatasets(parameters = {}) { return fetchLibraryPage('datasets', parameters); },
+  async browseDatasetImages(id, parameters = {}) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(parameters)) {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    }
+    const response = await fetch(`/api/datasets/${encodeURIComponent(id)}/images/browse?${query}`, { credentials: 'include' });
+    const data = await response.json().catch(() => { throw new Error('The image response could not be read. Please retry.'); });
+    if (!response.ok) throw new Error(data.error || `Could not load dataset images (${response.status}).`);
+    if (!data.dataset || !Array.isArray(data.groups) || !data.groups.every(group => Array.isArray(group.items))
+        || !Number.isInteger(data.page) || !Number.isInteger(data.totalPages) || !Number.isInteger(data.total)) {
+      throw new Error('The image response was invalid. Please retry.');
+    }
+    return data;
+  },
   browseModels(parameters = {}) { return fetchLibraryPage('models', parameters); },
 
   // ── Datasets ─────────────────────────────────────────────────────────────
