@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/css/datasets.css" />
   <link rel="stylesheet" href="/css/theme.css" />
   <link rel="stylesheet" href="/css/icons.css" />
+  <link rel="stylesheet" href="/css/resource-picker.css" />
 </head>
 <body>
   <nav id="top-nav">
@@ -137,7 +138,7 @@
       <input type="text" id="edit-dataset-name" placeholder="Dataset name" />
       <input type="text" id="edit-dataset-desc" placeholder="Description" />
       <label><input type="checkbox" id="edit-dataset-shared" /> Share with project collaborators</label>
-      <select id="edit-dataset-share-project" aria-label="Dataset sharing project"></select>
+      <select id="edit-dataset-share-project" data-resource-picker="project" data-picker-label="Dataset sharing project" aria-label="Dataset sharing project"></select>
       <p id="edit-dataset-share-help" class="modal-help">Choose exactly which project's collaborators receive access.</p>
       <div class="modal-row">
         <button id="btn-save-edit-dataset" class="btn primary">Save</button>
@@ -165,6 +166,7 @@
   <script src="/js/jobs.js"></script>
   <script src="/js/notifications.js"></script>
   <script src="/js/theme.js"></script>
+  <script src="/js/resource-picker.js"></script>
   <script src="/js/datasets.js"></script>
 </body>
 </html>

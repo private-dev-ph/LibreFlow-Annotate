@@ -19,6 +19,7 @@ window.__libreFlowAutomationShell = true;
   function esc(value) {
     return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+  function refreshPicker(select) { window.LibreFlowPicker?.refresh?.(select); }
 
   function toast(type, title, message = '') {
     if (typeof Notify !== 'undefined' && typeof Notify[type] === 'function') Notify[type](title, message);
@@ -65,9 +66,21 @@ window.__libreFlowAutomationShell = true;
     document.querySelectorAll('.project-select').forEach(select => {
       const previous = select.value;
       const includeAll = select.id === 'webhook-project';
-      select.innerHTML = `${includeAll ? '<option value="">All my projects</option>' : '<option value="">Select project</option>'}${state.projects.map(project => `<option value="${esc(project.id)}">${esc(project.name)}</option>`).join('')}`;
+      select.innerHTML = '';
+      const placeholder = new Option(includeAll ? 'All my projects' : 'Select project', '');
+      placeholder.disabled = select.required;
+      placeholder.defaultSelected = select.required;
+      select.appendChild(placeholder);
+      state.projects.forEach(project => {
+        const option = new Option(project.name, project.id);
+        if (project.description) option.dataset.description = project.description;
+        option.dataset.meta = project.id;
+        select.appendChild(option);
+      });
       if ([...select.options].some(option => option.value === previous)) select.value = previous;
       else if (!includeAll && state.projects[0]) select.value = state.projects[0].id;
+      else select.value = '';
+      refreshPicker(select);
     });
     document.getElementById('api-key-projects').innerHTML = state.projects.map(project => `
       <label class="project-restriction">
@@ -125,10 +138,28 @@ window.__libreFlowAutomationShell = true;
 
   async function loadModels(projectId) {
     const select = document.getElementById('inference-model');
-    if (!projectId) { select.innerHTML = '<option value="">Select a project first</option>'; return; }
+    if (!projectId) {
+      select.innerHTML = '<option value="" disabled>Select a project first</option>';
+      select.options[0].defaultSelected = true;
+      select.value = '';
+      refreshPicker(select);
+      return;
+    }
     const models = await API.getModels(projectId);
     if (!Array.isArray(models)) throw new Error(models?.error || 'Models response was invalid.');
-    select.innerHTML = `<option value="">Select model</option>${models.map(model => `<option value="${esc(model.id)}">${esc(model.name)} (${esc(model.format)})</option>`).join('')}`;
+    select.innerHTML = '';
+    const placeholder = new Option('Select model', '');
+    placeholder.disabled = select.required;
+    placeholder.defaultSelected = select.required;
+    select.appendChild(placeholder);
+    models.forEach(model => {
+      const option = new Option(`${model.name} (${model.format})`, model.id);
+      if (model.description) option.dataset.description = model.description;
+      option.dataset.meta = [model.type, model.format, projectName(projectId)].filter(Boolean).join(' · ');
+      select.appendChild(option);
+    });
+    select.value = '';
+    refreshPicker(select);
   }
 
   function jobProgress(job) {

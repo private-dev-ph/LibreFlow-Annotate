@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/css/icons.css" />
   <link rel="stylesheet" href="/css/project-versions.css" />
   <link rel="stylesheet" href="/css/version-source.css" />
+  <link rel="stylesheet" href="/css/resource-picker.css" />
 </head>
 <body>
 
@@ -174,7 +175,7 @@
             <button id="btn-add-from-dataset" class="btn-sm-ghost" type="button">Add from Dataset</button>
           </div>
           <div class="dataset-import-row hidden" id="dataset-import-row">
-            <select id="dataset-select"></select>
+            <select id="dataset-select" data-resource-picker="dataset" data-picker-label="Dataset"></select>
             <label class="dataset-checkbox"><input type="checkbox" id="import-dataset-include-tags" checked /> Include tags</label>
             <button id="btn-import-dataset" class="btn-sm-primary" type="button">Import</button>
           </div>
@@ -403,6 +404,7 @@
   <script src="/js/jobs.js"></script>
   <script src="/js/nav-inbox.js"></script>
   <script src="/js/theme.js"></script>
+  <script src="/js/resource-picker.js"></script>
   <script src="/js/project.js"></script>
   <script src="/js/project-review.js"></script>
   <script src="/js/version-splits.js"></script>

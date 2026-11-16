@@ -577,20 +577,87 @@
   const btnImportDataset = document.getElementById('btn-import-dataset');
   const chkExportIncludeTags = document.getElementById('export-dataset-include-tags');
   const chkImportIncludeTags = document.getElementById('import-dataset-include-tags');
+  let datasetImporting = false;
+  let datasetOptionsLoading = false;
+  let datasetRefreshVersion = 0;
+
+  function datasetHasValidSelection() {
+    const value = datasetSelect?.value;
+    return Boolean(value) && [...(datasetSelect?.options || [])].some(option =>
+      option.value === value && !option.disabled
+    );
+  }
+
+  function syncDatasetImportState() {
+    if (btnImportDataset) btnImportDataset.disabled = datasetImporting || datasetOptionsLoading || !datasetHasValidSelection();
+  }
+
+  function refreshDatasetPicker() {
+    if (typeof LibreFlowPicker !== 'undefined' && typeof LibreFlowPicker.refresh === 'function') {
+      LibreFlowPicker.refresh(datasetSelect);
+    }
+  }
+
+  function datasetMeta(dataset) {
+    const parts = [];
+    const imageCount = dataset.imageCount ?? (Array.isArray(dataset.images) ? dataset.images.length : null);
+    if (imageCount !== null && imageCount !== undefined) parts.push(`${imageCount} images`);
+    if (typeof dataset.sharedWithCollaborators === 'boolean') {
+      parts.push(dataset.sharedWithCollaborators ? 'Shared' : 'Private');
+    }
+    if (dataset.userId) parts.push(dataset.userId === me.id ? 'Owned by you' : 'Shared with you');
+    if (dataset.createdAt) {
+      const date = new Date(dataset.createdAt);
+      if (!Number.isNaN(date.getTime())) parts.push(`Created ${date.toLocaleDateString()}`);
+    }
+    return parts.join(' · ');
+  }
 
   async function refreshDatasetOptions() {
     if (!datasetSelect) return;
-    const datasets = await API.getDatasets();
-    const owned = datasets.filter(d => d.userId === me.id || d.sharedWithCollaborators);
-    datasetSelect.innerHTML = owned.length
-      ? owned.map(d => `<option value="${escHtml(d.id)}">${escHtml(d.name)} (${d.imageCount || 0})</option>`).join('')
-      : '<option value="">No datasets available</option>';
+    const refreshVersion = ++datasetRefreshVersion;
+    const isCurrentRefresh = () => refreshVersion === datasetRefreshVersion;
+    const previousSelection = datasetHasValidSelection() ? datasetSelect.value : '';
+    datasetOptionsLoading = true;
+    datasetSelect.disabled = true;
+    datasetSelect.innerHTML = '<option value="" disabled selected>Loading datasets…</option>';
+    refreshDatasetPicker();
+    syncDatasetImportState();
+    try {
+      const datasets = await API.getDatasets();
+      if (!isCurrentRefresh()) return [];
+      if (!Array.isArray(datasets)) throw new Error(datasets?.error || 'Unable to load datasets.');
+      const owned = datasets
+        .filter(d => d.userId === me.id || d.sharedWithCollaborators);
+      const previousStillAvailable = owned.some(d => d.id === previousSelection);
+      datasetSelect.innerHTML = owned.length
+        ? '<option value="" disabled>Choose a dataset</option>' + owned.map(d => `<option value="${escHtml(d.id)}" data-description="${escHtml(d.description || '')}" data-meta="${escHtml(datasetMeta(d))}">${escHtml(d.name)}</option>`).join('')
+        : '<option value="" disabled selected>Choose a dataset — no datasets available.</option>';
+      if (owned.length) datasetSelect.value = previousStillAvailable ? previousSelection : '';
+      datasetSelect.disabled = false;
+      refreshDatasetPicker();
+      datasetOptionsLoading = false;
+      syncDatasetImportState();
+      return owned;
+    } catch (e) {
+      if (!isCurrentRefresh()) return [];
+      datasetSelect.innerHTML = '<option value="" disabled selected>Unable to load datasets. Open this section to retry.</option>';
+      datasetSelect.disabled = false;
+      refreshDatasetPicker();
+      datasetOptionsLoading = false;
+      syncDatasetImportState();
+      throw e;
+    }
   }
+
+  datasetSelect?.addEventListener('change', syncDatasetImportState);
+  syncDatasetImportState();
 
   btnAddFromDataset?.addEventListener('click', async () => {
     datasetImportRow?.classList.toggle('hidden');
     if (!datasetImportRow?.classList.contains('hidden')) {
-      try { await refreshDatasetOptions(); } catch {}
+      try { await refreshDatasetOptions(); }
+      catch (e) { Notify.error('Dataset list failed', e?.message || 'Unable to load datasets.'); }
     }
   });
 
@@ -610,14 +677,22 @@
 
   btnImportDataset?.addEventListener('click', async () => {
     const datasetId = datasetSelect?.value;
-    if (!datasetId) return;
+    if (datasetImporting || !datasetHasValidSelection()) {
+      syncDatasetImportState();
+      return;
+    }
+    datasetImporting = true;
+    syncDatasetImportState();
     try {
       const out = await API.importDatasetToProject(datasetId, projectId, Boolean(chkImportIncludeTags?.checked));
       if (out.error) throw new Error(out.error);
       Notify.success('Dataset imported', `${out.images?.length || 0} images added.`);
       await Promise.all([loadImages(), loadBatches()]);
     } catch (e) {
-      Notify.error('Dataset import failed', e.message);
+      Notify.error('Dataset import failed', e?.message || 'Unable to import dataset.');
+    } finally {
+      datasetImporting = false;
+      syncDatasetImportState();
     }
   });
   document.getElementById('image-search')?.addEventListener('input', e => {

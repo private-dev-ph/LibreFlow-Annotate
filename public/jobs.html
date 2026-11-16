@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/css/ai-connections.css" />
   <link rel="stylesheet" href="/css/theme.css" />
   <link rel="stylesheet" href="/css/icons.css" />
+  <link rel="stylesheet" href="/css/resource-picker.css" />
 </head>
 <body>
 
@@ -103,8 +104,8 @@
               <div><h2>Batch auto-annotation</h2><p>Run a model across selected or unannotated images.</p></div>
               <span class="feature-chip">Resumable</span>
             </div>
-            <label>Project<select id="inference-project" class="project-select" required></select></label>
-            <label>Model<select id="inference-model" required><option value="">Select a project first</option></select></label>
+            <label>Project<select id="inference-project" class="project-select" data-resource-picker="project" data-picker-label="Project" required></select></label>
+            <label>Model<select id="inference-model" data-resource-picker="model" data-picker-label="Model" required><option value="" disabled selected>Select a project first</option></select></label>
             <div class="form-row">
               <label>Images<select id="inference-selection"><option value="unannotated">Unannotated only</option><option value="all">All images</option><option value="review_queue">Review queue</option></select></label>
               <label>Confidence<input id="inference-confidence" type="number" min="0.01" max="1" step="0.01" value="0.25" /></label>
@@ -119,7 +120,7 @@
               <div><h2>Import image URLs</h2><p>Downloads are validated and processed in the background.</p></div>
               <span class="feature-chip">HTTP(S)</span>
             </div>
-            <label>Project<select id="url-project" class="project-select" required></select></label>
+            <label>Project<select id="url-project" class="project-select" data-resource-picker="project" data-picker-label="Project" required></select></label>
             <label>Batch name<input id="url-batch-name" value="URL import" maxlength="120" /></label>
             <label>Image URLs <span class="label-help">one per line, up to 500</span><textarea id="url-list" rows="8" required placeholder="https://example.com/image-01.jpg"></textarea></label>
             <button class="primary-action" type="submit">Queue URL import</button>
@@ -129,7 +130,7 @@
         <div class="automation-card review-card">
           <div class="card-heading">
             <div><h2>Auto-annotation review queue</h2><p>Approve model-generated annotations or request specific changes.</p></div>
-            <select id="review-project" class="project-select compact-select"></select>
+            <select id="review-project" class="project-select compact-select" data-resource-picker="project" data-picker-label="Project"></select>
           </div>
           <div id="review-list" class="compact-list"><p class="muted">Choose a project to load its queue.</p></div>
         </div>
@@ -140,7 +141,7 @@
         <div class="automation-grid two-columns">
           <form class="automation-card" id="folder-form">
             <div class="card-heading"><div><h2>Watched folder</h2><p>Poll a mounted, allowlisted folder for new images.</p></div></div>
-            <label>Project<select id="folder-project" class="project-select" required></select></label>
+            <label>Project<select id="folder-project" class="project-select" data-resource-picker="project" data-picker-label="Project" required></select></label>
             <label>Name<input id="folder-name" value="Production drop folder" maxlength="120" required /></label>
             <label>Mounted path<input id="folder-path" placeholder="/imports/camera-1" required /></label>
             <div class="form-row"><label>Interval (seconds)<input id="folder-interval" type="number" min="30" value="300" /></label><label class="check-row lower"><input id="folder-recursive" type="checkbox" checked /> Include subfolders</label></div>
@@ -149,7 +150,7 @@
 
           <form class="automation-card" id="s3-form">
             <div class="card-heading"><div><h2>S3-compatible connector</h2><p>Sync MinIO or S3 objects through a resumable import job.</p></div><span class="feature-chip neutral">Sync</span></div>
-            <label>Project<select id="s3-project" class="project-select" required></select></label>
+            <label>Project<select id="s3-project" class="project-select" data-resource-picker="project" data-picker-label="Project" required></select></label>
             <div class="form-row"><label>Name<input id="s3-name" value="Object storage" /></label><label>Region<input id="s3-region" value="us-east-1" /></label></div>
             <label>Endpoint<input id="s3-endpoint" type="url" placeholder="https://s3.example.com" /></label>
             <div class="form-row"><label>Bucket<input id="s3-bucket" required /></label><label>Prefix<input id="s3-prefix" placeholder="incoming/" /></label></div>
@@ -167,7 +168,7 @@
         <div class="automation-grid two-columns">
           <form class="automation-card" id="webhook-form">
             <div class="card-heading"><div><h2>Signed webhook</h2><p>Receive selected project and job events with an HMAC signature.</p></div></div>
-            <label>Project<select id="webhook-project" class="project-select"><option value="">All my projects</option></select></label>
+            <label>Project<select id="webhook-project" class="project-select" data-resource-picker="project" data-picker-label="Project"><option value="">All my projects</option></select></label>
             <label>Name<input id="webhook-name" value="Automation webhook" maxlength="120" /></label>
             <label>Endpoint URL<input id="webhook-url" type="url" required placeholder="https://example.com/libreflow-events" /></label>
             <div><span class="field-label">Events</span><div id="webhook-events" class="checkbox-grid"></div></div>
@@ -670,6 +671,7 @@
   <script src="/js/jobs.js"></script>
   <script src="/js/nav-inbox.js"></script>
   <script src="/js/theme.js"></script>
+  <script src="/js/resource-picker.js"></script>
   <script src="/js/jobs-page.js"></script>
   <script src="/js/ai-connections.js"></script>
 </body>

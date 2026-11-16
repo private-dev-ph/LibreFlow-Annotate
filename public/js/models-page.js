@@ -30,6 +30,7 @@
     const i = Math.floor(Math.log(b) / Math.log(k));
     return (b / Math.pow(k, i)).toFixed(1) + ' ' + sz[i];
   }
+  function refreshPicker(select) { window.LibreFlowPicker?.refresh?.(select); }
 
   // ── State ───────────────────────────────────────────────────────────────────
   let allModels   = [];
@@ -51,6 +52,8 @@
     // Keep first "All projects" option, rebuild rest
     sel.innerHTML = '<option value="">All projects</option>';
     const seen = new Set();
+    const modelCounts = new Map();
+    allModels.forEach(model => modelCounts.set(model.projectId, (modelCounts.get(model.projectId) || 0) + 1));
     allModels.forEach(m => {
       if (!seen.has(m.projectId)) {
         seen.add(m.projectId);
@@ -58,9 +61,13 @@
         const opt = document.createElement('option');
         opt.value = m.projectId;
         opt.textContent = p ? p.name : m.projectId;
+        if (p?.description) opt.dataset.description = p.description;
+        const count = modelCounts.get(m.projectId) || 0;
+        opt.dataset.meta = `${count} model${count === 1 ? '' : 's'}`;
         sel.appendChild(opt);
       }
     });
+    refreshPicker(sel);
   }
 
   // ── Upload modal ──────────────────────────────────────────────────────────
@@ -81,20 +88,26 @@
   }
 
   function populateUploadProjects() {
-    uploadProject.innerHTML = '<option value="">Select a project</option>';
+    uploadProject.innerHTML = '<option value="" disabled>Select a project</option>';
+    uploadProject.options[0].defaultSelected = true;
     allProjects.forEach(project => {
       const option = document.createElement('option');
       option.value = project.id;
       option.textContent = project.name;
+      if (project.description) option.dataset.description = project.description;
+      option.dataset.meta = project.id;
       uploadProject.appendChild(option);
     });
+    uploadProject.value = '';
+    refreshPicker(uploadProject);
   }
 
   function openUploadModal() {
     populateUploadProjects();
     setUploadError();
     uploadModal.classList.remove('hidden');
-    uploadProject.focus();
+    if (window.LibreFlowPicker?.focus) window.LibreFlowPicker.focus(uploadProject);
+    else uploadProject.focus();
   }
 
   function closeUploadModal() {

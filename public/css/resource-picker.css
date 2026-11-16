@@ -1,0 +1,304 @@
+.lf-resource-picker {
+  position: relative;
+  display: block;
+  min-width: 0;
+  width: 100%;
+}
+
+.lf-resource-picker [hidden],
+.lf-resource-picker-dialog [hidden] {
+  display: none !important;
+}
+
+.lf-resource-picker-native {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.lf-resource-picker-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 36px 9px 12px;
+  border: 1px solid var(--border, #d8d2c7);
+  border-radius: 8px;
+  background: var(--surface-2, #f5f2eb);
+  color: var(--text, #343535);
+  font: inherit;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+}
+
+.lf-resource-picker-trigger::after {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  color: var(--text-dim, #686762);
+  content: '';
+  transform: translateY(-65%) rotate(45deg);
+}
+
+.lf-resource-picker-trigger:hover:not(:disabled) {
+  border-color: var(--accent, #c24238);
+  background: var(--accent-soft, #f5d4c9);
+}
+
+.lf-resource-picker-trigger:focus-visible,
+.lf-resource-picker-dialog button:focus-visible,
+.lf-resource-picker-dialog input:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent, #c24238) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.lf-resource-picker-trigger:disabled {
+  cursor: not-allowed;
+  opacity: .6;
+}
+
+.lf-resource-picker-trigger[aria-invalid="true"] {
+  border-color: var(--danger, #c94d45);
+}
+
+.lf-resource-picker-dialog {
+  width: min(520px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: min(720px, calc(100dvh - 24px));
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border, #d8d2c7);
+  border-radius: 16px;
+  background: var(--surface, #fbfaf7);
+  color: var(--text, #343535);
+  box-shadow: var(--shadow, 0 18px 50px rgba(52, 53, 53, .12));
+}
+
+.lf-resource-picker-dialog::backdrop {
+  background: var(--overlay, rgba(52, 53, 53, .3));
+}
+
+.lf-resource-picker-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: min(720px, calc(100dvh - 24px));
+  padding: 20px;
+  overflow: hidden;
+}
+
+.lf-resource-picker-header,
+.lf-resource-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lf-resource-picker-title {
+  min-width: 0;
+  margin: 0;
+  color: var(--text, #343535);
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.lf-resource-picker-close,
+.lf-resource-picker-page-button,
+.lf-resource-picker-clear {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--border, #d8d2c7);
+  border-radius: 8px;
+  background: var(--surface-2, #f5f2eb);
+  color: var(--text-dim, #686762);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lf-resource-picker-close {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+}
+
+.lf-resource-picker-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.lf-resource-picker-close:hover,
+.lf-resource-picker-page-button:hover:not(:disabled),
+.lf-resource-picker-clear:hover {
+  border-color: var(--accent, #c24238);
+  color: var(--accent-strong, #87443d);
+}
+
+.lf-resource-picker-search-label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-dim, #686762);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lf-resource-picker-search {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--border, #d8d2c7);
+  border-radius: 8px;
+  background: var(--surface-2, #f5f2eb);
+  color: var(--text, #343535);
+  font: inherit;
+}
+
+@media (max-width: 420px) {
+  .lf-resource-picker-search {
+    font-size: 16px;
+  }
+}
+
+.lf-resource-picker-count,
+.lf-resource-picker-page {
+  margin: 0;
+  color: var(--text-dim, #686762);
+  font-size: 12px;
+}
+
+.lf-resource-picker-results {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px;
+}
+
+.lf-resource-picker-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text, #343535);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lf-resource-picker-option:hover,
+.lf-resource-picker-option[aria-selected="true"] {
+  border-color: var(--accent, #c24238);
+  background: var(--accent-soft, #f5d4c9);
+}
+
+.lf-resource-picker-option-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.lf-resource-picker-option-label,
+.lf-resource-picker-option-description,
+.lf-resource-picker-option-meta {
+  overflow-wrap: anywhere;
+}
+
+.lf-resource-picker-option-label {
+  font-weight: 650;
+}
+
+.lf-resource-picker-option-description,
+.lf-resource-picker-option-meta {
+  color: var(--text-dim, #686762);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.lf-resource-picker-option-meta {
+  font-size: 11px;
+}
+
+.lf-resource-picker-selected-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--accent-strong, #87443d);
+}
+
+.lf-resource-picker-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px 12px;
+  color: var(--text-dim, #686762);
+  text-align: center;
+}
+
+.lf-resource-picker-empty-text {
+  margin: 0;
+}
+
+.lf-resource-picker-footer {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.lf-resource-picker-page {
+  margin-right: auto;
+}
+
+.lf-resource-picker-page-button:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+@media (max-width: 420px) {
+  .lf-resource-picker-dialog {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+
+  .lf-resource-picker-shell {
+    max-height: calc(100dvh - 16px);
+    padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lf-resource-picker-trigger,
+  .lf-resource-picker-dialog button,
+  .lf-resource-picker-dialog input {
+    transition: none;
+  }
+}

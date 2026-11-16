@@ -12,6 +12,7 @@
   });
 
   function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function refreshPicker(select) { window.LibreFlowPicker?.refresh?.(select); }
   function formatBytes(b) {
     if (!b) return '0 B';
     const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
@@ -340,10 +341,17 @@
     document.getElementById('edit-dataset-shared').checked = Boolean(ds.sharedWithCollaborators);
     const projectSelect = document.getElementById('edit-dataset-share-project');
     const scopeId = ds.sourceProjectId || ds.shareProjectId || '';
-    projectSelect.innerHTML = `<option value="">Choose sharing project…</option>${projects.map(project =>
-      `<option value="${esc(project.id)}">${esc(project.name)}</option>`).join('')}`;
+    projectSelect.innerHTML = '';
+    projectSelect.appendChild(new Option('Choose sharing project…', ''));
+    projects.forEach(project => {
+      const option = new Option(project.name, project.id);
+      if (project.description) option.dataset.description = project.description;
+      option.dataset.meta = project.id;
+      projectSelect.appendChild(option);
+    });
     projectSelect.value = scopeId;
     projectSelect.disabled = Boolean(ds.sourceProjectId);
+    refreshPicker(projectSelect);
     document.getElementById('edit-dataset-share-help').textContent = ds.sourceProjectId
       ? 'This dataset stays scoped to the project it was exported from.'
       : 'Choose exactly which project\'s collaborators receive access.';

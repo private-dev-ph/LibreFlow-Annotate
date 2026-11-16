@@ -836,11 +836,15 @@
         const opt = document.createElement('option');
         opt.value = m.id;
         opt.textContent = `${m.name} (${m.type})`;
+        if (m.description) opt.dataset.description = m.description;
+        opt.dataset.meta = [m.type, m.format, project.name].filter(Boolean).join(' · ');
         sel.appendChild(opt);
       });
 
       // Restore previously selected model
       if (lastModelId && Object.prototype.hasOwnProperty.call(modelTypeMap, lastModelId)) sel.value = lastModelId;
+      else sel.value = '';
+      window.LibreFlowPicker?.refresh?.(sel);
 
       function updateSliders() {
         lastModelId = sel.value;   // remember across navigation
