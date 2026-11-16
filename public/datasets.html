@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/css/theme.css" />
   <link rel="stylesheet" href="/css/icons.css" />
   <link rel="stylesheet" href="/css/resource-picker.css" />
+  <link rel="stylesheet" href="/css/library-pagination.css" />
 </head>
 <body>
   <nav id="top-nav">
@@ -68,8 +69,34 @@
             </button>
           </div>
         </div>
-        <input id="dataset-search" type="text" placeholder="Search datasets..." />
+        <div class="library-query-controls">
+          <label for="dataset-search">Search datasets
+            <input id="dataset-search" type="search" placeholder="Search datasets..." autocomplete="off" />
+          </label>
+          <label for="dataset-sort">Sort
+            <select id="dataset-sort">
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="name_asc">Name A–Z</option>
+              <option value="name_desc">Name Z–A</option>
+            </select>
+          </label>
+          <label for="dataset-page-size">Per page
+            <select id="dataset-page-size">
+              <option value="24">24</option>
+              <option value="48">48</option>
+              <option value="96">96</option>
+            </select>
+          </label>
+        </div>
+        <div class="library-list-status" id="dataset-list-status" role="status" aria-live="polite"></div>
+        <button id="dataset-list-retry" class="btn" type="button" hidden>Retry</button>
         <div id="datasets-list"></div>
+        <div class="library-pagination" aria-label="Dataset pages">
+          <button id="dataset-page-prev" class="library-page-button" type="button">Previous</button>
+          <span id="dataset-page-status" class="library-page-status" role="status" aria-live="polite">0 datasets</span>
+          <button id="dataset-page-next" class="library-page-button" type="button">Next</button>
+        </div>
       </section>
 
       <section class="dataset-main-card">

@@ -15,6 +15,7 @@ const { appendAuditEvent } = require('../lib/audit-log');
 const { shouldBlockPyTorchModel } = require('../lib/security-model-policy');
 const InferenceTilingSettings = require('../public/js/inference-tiling-settings');
 const { normalizeClassIds, validateClassSelectionResponse } = require('../lib/inference-classes');
+const { parseLibraryQuery, browseLibrary } = require('../lib/library-pagination');
 
 const router = express.Router();
 const DATA_FILE    = dataPath('models.json');
@@ -139,6 +140,36 @@ router.get('/available', (req, res) => {
     ...model,
     sourceProjectName: getProject(model.projectId)?.name || '',
   })));
+});
+
+router.get('/browse', (req, res) => {
+  let query;
+  try {
+    query = parseLibraryQuery(req.query, { allowProjectId: true, allowType: true });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  const owned = readModels().filter(model => model.userId === req.session.userId &&
+    (query.projectId === undefined || model.projectId === query.projectId) &&
+    (query.type === undefined || model.type === query.type));
+  return res.json(browseLibrary(owned, query, {
+    timestampField: model => model.uploadedAt || model.createdAt,
+    summary: model => ({
+      id: model.id ?? null,
+      userId: model.userId ?? null,
+      projectId: model.projectId ?? null,
+      name: model.name ?? null,
+      description: model.description ?? null,
+      type: model.type ?? null,
+      format: model.format ?? null,
+      size: model.size ?? null,
+      uploadedAt: model.uploadedAt ?? null,
+      createdAt: model.createdAt ?? null,
+      sharedWithCollaborators: model.sharedWithCollaborators === true,
+      yamlOriginalName: model.yamlOriginalName ?? null,
+    }),
+  }));
 });
 
 // ── GET /api/models?projectId=  ───────────────────────────────────────────────

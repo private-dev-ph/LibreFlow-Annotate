@@ -1,5 +1,19 @@
 // api.js – thin wrapper around fetch for the REST API
 
+async function fetchLibraryPage(resource, parameters = {}) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(parameters)) {
+    if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+  }
+  const response = await fetch(`/api/${resource}/browse?${query}`, { credentials: 'include' });
+  const data = await response.json().catch(() => { throw new Error('The library response could not be read. Please retry.'); });
+  if (!response.ok) throw new Error(data.error || `Could not load ${resource} (${response.status}).`);
+  if (!Array.isArray(data.items) || !Number.isInteger(data.page) || !Number.isInteger(data.totalPages) || !Number.isInteger(data.total)) {
+    throw new Error('The library response was invalid. Please retry.');
+  }
+  return data;
+}
+
 const API = {
   // ── Auth ──────────────────────────────────────────────────────────────────
   async getMe() {
@@ -287,6 +301,9 @@ const API = {
     });
     return r.json();
   },
+
+  browseDatasets(parameters = {}) { return fetchLibraryPage('datasets', parameters); },
+  browseModels(parameters = {}) { return fetchLibraryPage('models', parameters); },
 
   // ── Datasets ─────────────────────────────────────────────────────────────
   async getDatasets() {

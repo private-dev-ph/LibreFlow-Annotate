@@ -6,6 +6,7 @@ const AdmZip = require('adm-zip');
 const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
 const { validateArchiveEntries } = require('../lib/archive-safety');
+const { parseLibraryQuery, browseLibrary } = require('../lib/library-pagination');
 
 const router = express.Router();
 
@@ -180,11 +181,52 @@ function publicDataset(ds) {
   };
 }
 
+function canAccessDatasetFromProjectIds(dataset, userId, accessibleProjectIds) {
+  if (!dataset) return false;
+  if (dataset.userId === userId) return true;
+  if (!dataset.sharedWithCollaborators) return false;
+  const shareProjectId = dataset.sourceProjectId || dataset.shareProjectId;
+  if (!shareProjectId) return false;
+  return accessibleProjectIds.has(shareProjectId);
+}
+
 router.get('/', (req, res) => {
   const uid = req.session.userId;
   const all = readDatasets();
   const visible = all.filter(d => canAccessDataset(d, uid)).map(publicDataset);
   res.json(visible);
+});
+
+router.get('/browse', (req, res) => {
+  let query;
+  try {
+    query = parseLibraryQuery(req.query);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  const uid = req.session.userId;
+  const all = readDatasets();
+  const projects = readProjects();
+  const accessibleProjectIds = new Set(projects.filter(project => project.userId === uid ||
+    (project.collaborators || []).some(collaborator => collaborator.userId === uid))
+    .map(project => project.id));
+  const visible = all.filter(dataset => canAccessDatasetFromProjectIds(dataset, uid, accessibleProjectIds));
+  return res.json(browseLibrary(visible, query, {
+    timestampField: 'createdAt',
+    summary: dataset => ({
+      id: dataset.id ?? null,
+      userId: dataset.userId ?? null,
+      name: dataset.name ?? null,
+      description: dataset.description ?? null,
+      createdAt: dataset.createdAt ?? null,
+      updatedAt: dataset.updatedAt ?? null,
+      imageCount: (dataset.images || []).length,
+      sharedWithCollaborators: dataset.sharedWithCollaborators === true,
+      sourceProjectId: dataset.sourceProjectId ?? null,
+      shareProjectId: dataset.shareProjectId ?? null,
+    }),
+  }));
 });
 
 router.get('/:id', (req, res) => {

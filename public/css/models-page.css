@@ -3,6 +3,8 @@
 .models-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
 .models-title { margin: 0; color: var(--text); font-size: 1.85rem; font-weight: 800; letter-spacing: -.02em; }
 .models-sub { margin: 4px 0 0; color: var(--text-dim); font-size: .9rem; }
+.library-query-controls input { min-height: 44px; }
+.library-list-status.hidden, .library-page-button.hidden { display: none !important; }
 .btn-upload-model, .btn-primary-sm, .btn-cancel, .btn-danger, .btn-model-edit, .btn-model-delete, .modal-close { font: inherit; font-weight: 700; cursor: pointer; transition: background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease; }
 .btn-upload-model, .btn-primary-sm { border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); border-radius: 9px; }
 .btn-upload-model { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 0 13px; white-space: nowrap; }

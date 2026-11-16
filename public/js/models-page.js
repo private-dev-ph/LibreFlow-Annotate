@@ -36,38 +36,146 @@
   let allModels   = [];
   let allProjects = [];
   let pendingDeleteId = null;
+  let projectsLoaded = false;
+  let modelsRequestSeq = 0;
+  let modelsSearchTimer = null;
+  let modelsLoading = false;
+  const modelsPage = { page: 1, pageSize: 24, total: 0, totalPages: 0 };
+
+  const modelsList = document.getElementById('models-list');
+  const modelsEmpty = document.getElementById('models-empty');
+  const modelsEmptyTitle = document.getElementById('models-empty-title');
+  const modelsEmptyCopy = document.getElementById('models-empty-copy');
+  const modelsListStatus = document.getElementById('models-list-status');
+  const modelsListRetry = document.getElementById('models-list-retry');
+  const modelsPagePrev = document.getElementById('models-page-prev');
+  const modelsPageNext = document.getElementById('models-page-next');
+  const modelsPageStatus = document.getElementById('models-page-status');
+
+  function currentModelQuery() {
+    return {
+      q: document.getElementById('search-models').value.trim(),
+      projectId: document.getElementById('filter-project').value,
+      type: document.getElementById('filter-type').value,
+      sort: document.getElementById('models-sort').value,
+    };
+  }
+
+  function setModelsStatus(message = '', { retry = false } = {}) {
+    modelsListStatus.textContent = message;
+    modelsListStatus.classList.toggle('hidden', !message);
+    modelsListRetry.classList.toggle('hidden', !retry);
+  }
+
+  function updateModelsPager() {
+    const hasPages = modelsPage.total > 0 && modelsPage.totalPages > 0;
+    const totalLabel = modelsPage.total.toLocaleString();
+    modelsPageStatus.textContent = hasPages
+      ? `Page ${modelsPage.page} of ${modelsPage.totalPages} · ${totalLabel} model${modelsPage.total === 1 ? '' : 's'}`
+      : 'No pages';
+    modelsPagePrev.disabled = modelsLoading || !hasPages || modelsPage.page <= 1;
+    modelsPageNext.disabled = modelsLoading || !hasPages || modelsPage.page >= modelsPage.totalPages;
+  }
 
   // ── Load ────────────────────────────────────────────────────────────────────
   async function loadAll() {
-    [allModels, allProjects] = await Promise.all([
-      API.getModels(''),   // no projectId → returns all owned models
-      API.getProjects(),
-    ]);
-    populateProjectFilter();
-    renderModels();
+    setModelsStatus('Loading models…');
+    try {
+      const projects = await API.getProjects();
+      if (!Array.isArray(projects)) throw new Error(projects?.error || 'Failed to load projects.');
+      allProjects = projects;
+      projectsLoaded = true;
+      populateProjectFilter();
+      populateUploadProjects();
+      await loadModels();
+    } catch (error) {
+      setModelsStatus(error.message || 'Unable to load models.', { retry: true });
+      modelsList.innerHTML = '';
+      modelsEmpty.classList.add('hidden');
+      modelsPage.total = 0;
+      modelsPage.totalPages = 0;
+      updateModelsPager();
+    }
   }
 
   function populateProjectFilter() {
     const sel = document.getElementById('filter-project');
+    const selected = sel.value;
     // Keep first "All projects" option, rebuild rest
     sel.innerHTML = '<option value="">All projects</option>';
-    const seen = new Set();
-    const modelCounts = new Map();
-    allModels.forEach(model => modelCounts.set(model.projectId, (modelCounts.get(model.projectId) || 0) + 1));
-    allModels.forEach(m => {
-      if (!seen.has(m.projectId)) {
-        seen.add(m.projectId);
-        const p = allProjects.find(pr => pr.id === m.projectId);
-        const opt = document.createElement('option');
-        opt.value = m.projectId;
-        opt.textContent = p ? p.name : m.projectId;
-        if (p?.description) opt.dataset.description = p.description;
-        const count = modelCounts.get(m.projectId) || 0;
-        opt.dataset.meta = `${count} model${count === 1 ? '' : 's'}`;
-        sel.appendChild(opt);
-      }
+    allProjects.forEach(project => {
+      const opt = document.createElement('option');
+      opt.value = project.id;
+      opt.textContent = project.name;
+      if (project.description) opt.dataset.description = project.description;
+      sel.appendChild(opt);
     });
+    sel.value = [...sel.options].some(option => option.value === selected) ? selected : '';
     refreshPicker(sel);
+  }
+
+  async function loadModels({ focusResults = false } = {}) {
+    const requestSeq = ++modelsRequestSeq;
+    modelsLoading = true;
+    setModelsStatus('Loading models…');
+    modelsEmpty.classList.add('hidden');
+    modelsList.innerHTML = '';
+    updateModelsPager();
+    try {
+      const result = await API.browseModels({
+        page: modelsPage.page,
+        pageSize: modelsPage.pageSize,
+        ...currentModelQuery(),
+      });
+      if (requestSeq !== modelsRequestSeq) return;
+      if (!result || !Array.isArray(result.items)) throw new Error('The models response was invalid.');
+      allModels = result.items;
+      modelsPage.page = Math.max(1, Number(result.page) || 1);
+      modelsPage.pageSize = Math.max(1, Number(result.pageSize) || modelsPage.pageSize);
+      modelsPage.total = Math.max(0, Number(result.total) || 0);
+      modelsPage.totalPages = Math.max(0, Number(result.totalPages) || 0);
+      renderModels();
+      setModelsStatus();
+      if (focusResults) {
+        modelsList.focus({ preventScroll: true });
+        const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        modelsList.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+      }
+    } catch (error) {
+      if (requestSeq !== modelsRequestSeq) return;
+      allModels = [];
+      modelsList.innerHTML = '';
+      modelsEmpty.classList.add('hidden');
+      modelsPage.total = 0;
+      modelsPage.totalPages = 0;
+      setModelsStatus(error.message || 'Unable to load models.', { retry: true });
+    } finally {
+      if (requestSeq !== modelsRequestSeq) return;
+      modelsLoading = false;
+      updateModelsPager();
+    }
+  }
+
+  function requestModels({ resetPage = false, focusResults = false } = {}) {
+    if (modelsSearchTimer) {
+      clearTimeout(modelsSearchTimer);
+      modelsSearchTimer = null;
+    }
+    if (resetPage) modelsPage.page = 1;
+    loadModels({ focusResults });
+  }
+
+  function scheduleModelSearch() {
+    if (modelsSearchTimer) clearTimeout(modelsSearchTimer);
+    modelsRequestSeq += 1;
+    modelsPage.page = 1;
+    modelsLoading = true;
+    setModelsStatus('Loading models…');
+    updateModelsPager();
+    modelsSearchTimer = setTimeout(() => {
+      modelsSearchTimer = null;
+      loadModels();
+    }, 250);
   }
 
   // ── Upload modal ──────────────────────────────────────────────────────────
@@ -159,11 +267,10 @@
     Jobs.uploadModel(projectId, formData, {
       name,
       onDone: model => {
-        if (model?.id) allModels.unshift(model);
-        populateProjectFilter();
-        renderModels();
-        uploadSubmit.disabled = false;
-        closeUploadModal();
+        loadModels().finally(() => {
+          uploadSubmit.disabled = false;
+          closeUploadModal();
+        });
         Notify.success(`Model "${name}" uploaded`);
       },
       onError: message => {
@@ -175,28 +282,20 @@
 
   // ── Render ──────────────────────────────────────────────────────────────────
   function renderModels() {
-    const q        = document.getElementById('search-models').value.toLowerCase();
-    const byProj   = document.getElementById('filter-project').value;
-    const byType   = document.getElementById('filter-type').value;
-
-    const filtered = allModels.filter(m => {
-      if (byProj && m.projectId !== byProj) return false;
-      if (byType && m.type !== byType)      return false;
-      if (q && !m.name.toLowerCase().includes(q) && !(m.description || '').toLowerCase().includes(q)) return false;
-      return true;
-    });
-
-    const list  = document.getElementById('models-list');
-    const empty = document.getElementById('models-empty');
-
-    if (!filtered.length) {
-      list.innerHTML = '';
-      empty.classList.remove('hidden');
+    if (!allModels.length) {
+      modelsList.innerHTML = '';
+      const query = currentModelQuery();
+      const hasFilters = Boolean(query.q || query.projectId || query.type);
+      modelsEmptyTitle.textContent = hasFilters ? 'No matching models' : 'No models yet';
+      modelsEmptyCopy.textContent = hasFilters
+        ? 'Try changing your search or filters.'
+        : "Upload a model from a project's Models tab to see it here.";
+      modelsEmpty.classList.remove('hidden');
       return;
     }
-    empty.classList.add('hidden');
+    modelsEmpty.classList.add('hidden');
 
-    list.innerHTML = filtered.map(m => {
+    modelsList.innerHTML = allModels.map(m => {
       const proj = allProjects.find(p => p.id === m.projectId);
       const projName = proj ? proj.name : 'Unknown project';
       const isOwner  = m.userId === me.id;
@@ -241,7 +340,7 @@
     }).join('');
 
     // Toggle share
-    list.querySelectorAll('.toggle-switch').forEach(toggle => {
+    modelsList.querySelectorAll('.toggle-switch').forEach(toggle => {
       toggle.addEventListener('click', async () => {
         const id     = toggle.dataset.id;
         const oldVal = toggle.dataset.shared === '1';
@@ -249,29 +348,33 @@
         toggle.classList.toggle('on', newVal);
         toggle.dataset.shared = newVal ? '1' : '0';
         try {
-          await API.patchModel(id, { sharedWithCollaborators: newVal });
+          const updated = await API.patchModel(id, { sharedWithCollaborators: newVal });
+          if (updated.error) throw new Error(updated.error);
           const m = allModels.find(x => x.id === id);
           if (m) m.sharedWithCollaborators = newVal;
           Notify.success(newVal ? 'Model shared with collaborators' : 'Model sharing disabled');
-          renderModels(); // re-render to show/hide chip
+          await loadModels();
         } catch(e) {
           // revert
           toggle.classList.toggle('on', oldVal);
           toggle.dataset.shared = oldVal ? '1' : '0';
           Notify.error('Failed to update sharing', e.message);
+          await loadModels();
         }
       });
     });
 
     // Edit button
-    list.querySelectorAll('.btn-model-edit').forEach(btn => {
+    modelsList.querySelectorAll('.btn-model-edit').forEach(btn => {
       btn.addEventListener('click', () => openEditModal(btn.dataset.id));
     });
 
     // Delete button
-    list.querySelectorAll('.btn-model-delete').forEach(btn => {
+    modelsList.querySelectorAll('.btn-model-delete').forEach(btn => {
       btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
     });
+
+    updateModelsPager();
   }
 
   // ── Edit modal ──────────────────────────────────────────────────────────────
@@ -299,10 +402,8 @@
     try {
       const updated = await API.patchModel(id, { name, type, description: desc });
       if (updated.error) throw new Error(updated.error);
-      const m = allModels.find(x => x.id === id);
-      if (m) Object.assign(m, { name, type, description: desc });
       document.getElementById('modal-edit').classList.add('hidden');
-      renderModels();
+      await loadModels();
       Notify.success('Model updated');
     } catch(e) { Notify.error('Failed to update model', e.message); }
   });
@@ -319,11 +420,10 @@
 
   document.getElementById('btn-confirm-delete').addEventListener('click', async () => {
     try {
-      await API.deleteModel(pendingDeleteId);
-      allModels = allModels.filter(m => m.id !== pendingDeleteId);
+      const deleted = await API.deleteModel(pendingDeleteId);
+      if (deleted.error) throw new Error(deleted.error);
       document.getElementById('modal-delete').classList.add('hidden');
-      populateProjectFilter();
-      renderModels();
+      await loadModels();
       Notify.success('Model deleted');
     } catch(e) { Notify.error('Delete failed', e.message); }
   });
@@ -334,9 +434,30 @@
   });
 
   // ── Filter / search ─────────────────────────────────────────────────────────
-  document.getElementById('search-models').addEventListener('input', renderModels);
-  document.getElementById('filter-project').addEventListener('change', renderModels);
-  document.getElementById('filter-type').addEventListener('change', renderModels);
+  document.getElementById('search-models').addEventListener('input', scheduleModelSearch);
+  document.getElementById('filter-project').addEventListener('change', () => requestModels({ resetPage: true }));
+  document.getElementById('filter-type').addEventListener('change', () => requestModels({ resetPage: true }));
+  document.getElementById('models-sort').addEventListener('change', () => requestModels({ resetPage: true }));
+  document.getElementById('models-page-size').addEventListener('change', event => {
+    modelsPage.pageSize = Number(event.target.value) || 24;
+    requestModels({ resetPage: true });
+  });
+  modelsPagePrev.addEventListener('click', () => {
+    if (modelsPage.page > 1) {
+      modelsPage.page -= 1;
+      requestModels({ focusResults: true });
+    }
+  });
+  modelsPageNext.addEventListener('click', () => {
+    if (modelsPage.page < modelsPage.totalPages) {
+      modelsPage.page += 1;
+      requestModels({ focusResults: true });
+    }
+  });
+  modelsListRetry.addEventListener('click', () => {
+    if (projectsLoaded) requestModels();
+    else loadAll();
+  });
 
   // ── Init ────────────────────────────────────────────────────────────────────
   await loadAll();

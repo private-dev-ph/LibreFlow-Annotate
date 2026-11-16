@@ -81,6 +81,10 @@ input:focus, select:focus { outline: none; border-color: #6c63ff; }
 .icon-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
 
 #dataset-search { width: 100%; margin-top: 10px; }
+.library-query-controls input { width: 100%; min-height: 44px; box-sizing: border-box; font-size: 16px; }
+.library-query-controls label:first-child { flex-basis: 100%; }
+#dataset-list-retry { align-self: flex-start; margin-bottom: 8px; }
+.btn:disabled { cursor: default; opacity: .55; transform: none; }
 #datasets-list {
   margin-top: 10px;
   display: flex;
@@ -97,6 +101,7 @@ input:focus, select:focus { outline: none; border-color: #6c63ff; }
   padding: 9px;
   cursor: pointer;
   background: rgba(15,19,32,.5);
+  flex-shrink: 0;
 }
 .dataset-item.active {
   border-color: #6c63ff;
@@ -274,7 +279,8 @@ input:focus, select:focus { outline: none; border-color: #6c63ff; }
   .images-tools input { flex-basis: 100%; }
   .modal { padding: 12px; }
   .modal-box { max-width: 100%; max-height: calc(100dvh - 24px); overflow-y: auto; }
-  #datasets-list { overflow: visible; }
+  .datasets-list-card { max-height: calc(100dvh - 80px); }
+  #datasets-list { overflow: auto; }
 }
 @media (hover: none), (pointer: coarse) {
   .btn-del-img { opacity: 1; pointer-events: auto; }

@@ -21,7 +21,16 @@
   }
 
   let datasets = [];
+  let selectedRecord = null;
   let selectedId = null;
+  const libraryQuery = { page: 1, pageSize: 24, q: '', sort: 'newest' };
+  let browseRequestSeq = 0;
+  let detailRequestSeq = 0;
+  let browseDebounce = null;
+  let browseLoading = false;
+  let browseError = null;
+  let libraryTotal = 0;
+  let libraryTotalPages = 1;
   let imageSearch = '';
   let imageSort = 'uploadedAt_desc';
   let imageGroup = 'none';
@@ -33,26 +42,58 @@
     document.getElementById('dataset-search').focus();
   });
 
-  function selectedDataset() { return datasets.find(d => d.id === selectedId) || null; }
+  function selectedDataset() { return selectedRecord; }
 
-  async function loadDatasets() {
-    datasets = await API.getDatasets();
-    if (!selectedId && datasets.length) selectedId = datasets[0].id;
-    if (selectedId && !datasets.some(d => d.id === selectedId)) selectedId = datasets[0]?.id || null;
-    renderDatasetsList();
-    await refreshSelectedDataset();
+  function errorMessage(error) {
+    return error?.message || error?.error || 'Unable to load datasets.';
+  }
+
+  function setDetailActionsDisabled(disabled) {
+    ['btn-add-image', 'btn-export-zip', 'btn-dataset-lifecycle', 'btn-edit-dataset', 'btn-delete-dataset']
+      .forEach(id => { const button = document.getElementById(id); if (button) button.disabled = disabled; });
+  }
+
+  function renderBrowseStatus() {
+    const status = document.getElementById('dataset-list-status');
+    const retry = document.getElementById('dataset-list-retry');
+    if (!status || !retry) return;
+    if (browseError) {
+      status.textContent = `Unable to load datasets: ${browseError}`;
+      retry.hidden = false;
+      return;
+    }
+    retry.hidden = true;
+    if (browseLoading) {
+      status.textContent = 'Loading datasets…';
+      return;
+    }
+    if (!libraryTotal) {
+      status.textContent = libraryQuery.q ? `No datasets match “${libraryQuery.q}”.` : 'No datasets yet.';
+      return;
+    }
+    status.textContent = `${libraryTotal} dataset${libraryTotal === 1 ? '' : 's'} available`;
+  }
+
+  function renderPagination() {
+    const prev = document.getElementById('dataset-page-prev');
+    const next = document.getElementById('dataset-page-next');
+    const status = document.getElementById('dataset-page-status');
+    if (!prev || !next || !status) return;
+    const start = libraryTotal ? ((libraryQuery.page - 1) * libraryQuery.pageSize) + 1 : 0;
+    const end = libraryTotal ? Math.min(libraryTotal, libraryQuery.page * libraryQuery.pageSize) : 0;
+    status.textContent = libraryTotal
+      ? `${start}–${end} of ${libraryTotal} · Page ${libraryQuery.page} of ${libraryTotalPages}`
+      : '0 datasets';
+    prev.disabled = browseLoading || libraryQuery.page <= 1;
+    next.disabled = browseLoading || libraryQuery.page >= libraryTotalPages;
   }
 
   function renderDatasetsList() {
-    const q = (document.getElementById('dataset-search').value || '').toLowerCase();
     const list = document.getElementById('datasets-list');
-    const filtered = datasets.filter(d =>
-      (d.name || '').toLowerCase().includes(q) || (d.description || '').toLowerCase().includes(q)
-    );
-    list.innerHTML = filtered.map(d => `
+    list.innerHTML = datasets.map(d => `
       <button type="button" class="dataset-item ${d.id === selectedId ? 'active' : ''}" data-id="${esc(d.id)}">
         <div><strong>${esc(d.name)}</strong></div>
-        <div class="dataset-meta">${d.imageCount || (d.images || []).length} images · ${d.sharedWithCollaborators ? 'Shared' : 'Private'}</div>
+        <div class="dataset-meta">${d.imageCount || 0} images · ${d.sharedWithCollaborators ? 'Shared' : 'Private'}</div>
       </button>
     `).join('');
     list.querySelectorAll('.dataset-item').forEach(el => {
@@ -65,37 +106,118 @@
     });
   }
 
+  async function loadDatasets({ refreshDetail = false, requestSeq } = {}) {
+    const scheduled = requestSeq !== undefined;
+    if (!scheduled) {
+      clearTimeout(browseDebounce);
+      browseDebounce = null;
+    }
+    const seq = requestSeq ?? ++browseRequestSeq;
+    if (seq !== browseRequestSeq) return;
+    browseLoading = true;
+    browseError = null;
+    datasets = [];
+    renderDatasetsList();
+    renderBrowseStatus();
+    renderPagination();
+    try {
+      const response = await API.browseDatasets({ ...libraryQuery });
+      if (seq !== browseRequestSeq) return;
+      datasets = Array.isArray(response?.items) ? response.items : [];
+      document.getElementById('datasets-list').scrollTop = 0;
+      libraryTotal = Number(response?.total) || 0;
+      libraryTotalPages = Math.max(1, Number(response?.totalPages) || 1);
+      libraryQuery.page = Math.max(1, Number(response?.page) || 1);
+      libraryQuery.pageSize = Number(response?.pageSize) || libraryQuery.pageSize;
+      if (!selectedId && datasets.length) {
+        selectedId = datasets[0].id;
+        refreshDetail = true;
+      }
+      renderDatasetsList();
+      renderBrowseStatus();
+      renderPagination();
+      if (refreshDetail) await refreshSelectedDataset();
+    } catch (error) {
+      if (seq !== browseRequestSeq) return;
+      browseError = errorMessage(error);
+      datasets = [];
+      renderDatasetsList();
+      renderBrowseStatus();
+      renderPagination();
+    } finally {
+      if (seq === browseRequestSeq) {
+        browseLoading = false;
+        renderBrowseStatus();
+        renderPagination();
+      }
+    }
+  }
+
+  function scheduleDatasetBrowse() {
+    const seq = ++browseRequestSeq;
+    clearTimeout(browseDebounce);
+    browseDebounce = setTimeout(() => {
+      browseDebounce = null;
+      loadDatasets({ requestSeq: seq });
+    }, 250);
+    browseLoading = true;
+    browseError = null;
+    datasets = [];
+    renderDatasetsList();
+    renderBrowseStatus();
+    renderPagination();
+  }
+
   async function refreshSelectedDataset() {
     const dsTitle = document.getElementById('dataset-title');
     const dsSub = document.getElementById('dataset-sub');
     const grid = document.getElementById('dataset-images-grid');
     const btnAddImage = document.getElementById('btn-add-image');
 
-    if (!selectedId) {
+    const requestedId = selectedId;
+    const requestSeq = ++detailRequestSeq;
+    selectedRecord = null;
+    setDetailActionsDisabled(true);
+
+    if (!requestedId) {
       layout.classList.add('show-dataset-list');
       dsTitle.textContent = 'Select dataset';
       dsSub.textContent = 'Choose a dataset to view and manage images.';
       grid.innerHTML = '';
-      btnAddImage.disabled = true;
       return;
     }
 
-    const full = await API.getDataset(selectedId);
-    if (full.error) {
+    dsTitle.textContent = 'Loading dataset…';
+    dsSub.textContent = 'Fetching dataset details…';
+    grid.innerHTML = '';
+    try {
+      const full = await API.getDataset(requestedId);
+      if (requestSeq !== detailRequestSeq || selectedId !== requestedId) return;
+      if (full?.error) throw new Error(full.error);
+      selectedRecord = full;
+      const summary = datasets.find(d => d.id === requestedId);
+      if (summary) Object.assign(summary, {
+        name: full.name,
+        description: full.description,
+        imageCount: full.imageCount ?? (full.images || []).length,
+        sharedWithCollaborators: full.sharedWithCollaborators,
+      });
+      dsTitle.textContent = full.name || 'Untitled dataset';
+      dsSub.textContent = full.description || '';
+      setDetailActionsDisabled(false);
+      const isOwner = full.userId === me.id;
+      ['btn-add-image', 'btn-edit-dataset', 'btn-delete-dataset']
+        .forEach(id => { const button = document.getElementById(id); if (button) button.disabled = !isOwner; });
+      renderDatasetsList();
+      renderDatasetImages();
+    } catch (error) {
+      if (requestSeq !== detailRequestSeq || selectedId !== requestedId) return;
       dsTitle.textContent = 'Dataset unavailable';
-      dsSub.textContent = full.error;
+      dsSub.innerHTML = `${esc(errorMessage(error))} <button type="button" class="btn" id="dataset-detail-retry">Retry</button>`;
+      document.getElementById('dataset-detail-retry').addEventListener('click', refreshSelectedDataset);
       grid.innerHTML = '';
-      return;
+      setDetailActionsDisabled(true);
     }
-
-    const idx = datasets.findIndex(d => d.id === selectedId);
-    if (idx >= 0) datasets[idx] = full;
-
-    const ds = selectedDataset();
-    dsTitle.textContent = ds.name;
-    dsSub.textContent = ds.description || '';
-    btnAddImage.disabled = ds.userId !== me.id;
-    renderDatasetImages();
   }
 
   function tokenizeQuery(query) {
@@ -266,11 +388,36 @@
     document.getElementById('upload-modal').classList.add('hidden');
   }
 
-  document.getElementById('dataset-search').addEventListener('input', renderDatasetsList);
+  document.getElementById('dataset-search').addEventListener('input', e => {
+    libraryQuery.q = e.target.value || '';
+    libraryQuery.page = 1;
+    scheduleDatasetBrowse();
+  });
+  document.getElementById('dataset-sort').addEventListener('change', e => {
+    libraryQuery.sort = e.target.value || 'newest';
+    libraryQuery.page = 1;
+    loadDatasets();
+  });
+  document.getElementById('dataset-page-size').addEventListener('change', e => {
+    libraryQuery.pageSize = Number(e.target.value) || 24;
+    libraryQuery.page = 1;
+    loadDatasets();
+  });
+  document.getElementById('dataset-page-prev').addEventListener('click', () => {
+    if (libraryQuery.page <= 1) return;
+    libraryQuery.page -= 1;
+    loadDatasets();
+  });
+  document.getElementById('dataset-page-next').addEventListener('click', () => {
+    if (libraryQuery.page >= libraryTotalPages) return;
+    libraryQuery.page += 1;
+    loadDatasets();
+  });
+  document.getElementById('dataset-list-retry').addEventListener('click', () => loadDatasets());
   document.getElementById('dataset-image-search').addEventListener('input', e => { imageSearch = e.target.value || ''; renderDatasetImages(); });
   document.getElementById('dataset-image-sort').addEventListener('change', e => { imageSort = e.target.value || 'uploadedAt_desc'; renderDatasetImages(); });
   document.getElementById('dataset-image-group').addEventListener('change', e => { imageGroup = e.target.value || 'none'; renderDatasetImages(); });
-  document.getElementById('btn-refresh').addEventListener('click', loadDatasets);
+  document.getElementById('btn-refresh').addEventListener('click', () => loadDatasets({ refreshDetail: Boolean(selectedId) }));
   document.getElementById('btn-new-dataset').addEventListener('click', () => openUploadModal('new'));
   document.getElementById('btn-add-image').addEventListener('click', () => {
     const ds = selectedDataset();
@@ -308,8 +455,7 @@
     }
 
     closeUploadModal();
-    await loadDatasets();
-    await refreshSelectedDataset();
+    await loadDatasets({ refreshDetail: true });
   });
 
   document.getElementById('btn-cancel-upload-modal').addEventListener('click', closeUploadModal);
@@ -372,8 +518,7 @@
     if (r.error) return Notify.error('Failed to update dataset', r.error);
     document.getElementById('edit-modal').classList.add('hidden');
     Notify.success('Dataset updated');
-    await loadDatasets();
-    await refreshSelectedDataset();
+    await loadDatasets({ refreshDetail: true });
   });
 
   document.getElementById('btn-delete-dataset').addEventListener('click', async () => {
@@ -384,9 +529,10 @@
     const r = await API.deleteDataset(ds.id);
     if (r.error) return Notify.error('Failed to delete dataset', r.error);
     selectedId = null;
+    selectedRecord = null;
     Notify.success('Dataset deleted');
-    await loadDatasets();
+    await loadDatasets({ refreshDetail: true });
   });
 
-  await loadDatasets();
+  await loadDatasets({ refreshDetail: true });
 })();

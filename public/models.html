@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/css/theme.css" />
   <link rel="stylesheet" href="/css/icons.css" />
   <link rel="stylesheet" href="/css/resource-picker.css" />
+  <link rel="stylesheet" href="/css/library-pagination.css" />
 </head>
 <body>
 
@@ -76,28 +77,63 @@
       </div>
 
       <!-- Filter bar -->
-      <div class="models-toolbar">
-        <input id="search-models" type="text" placeholder="Search models…" aria-label="Search models" />
-        <select id="filter-project" data-resource-picker="project" data-picker-label="Project">
-          <option value="">All projects</option>
-        </select>
-        <select id="filter-type">
-          <option value="">All types</option>
-          <option value="detection">Detection</option>
-          <option value="classification">Classification</option>
-          <option value="segmentation">Segmentation</option>
-          <option value="custom">Custom</option>
-        </select>
+      <div class="models-toolbar library-query-controls">
+        <label class="library-query-field library-search-control" for="search-models">
+          <span>Search</span>
+          <input id="search-models" type="text" placeholder="Search models…" aria-label="Search models" />
+        </label>
+        <label class="library-query-field" for="filter-project">
+          <span>Project</span>
+          <select id="filter-project" data-resource-picker="project" data-picker-label="Project">
+            <option value="">All projects</option>
+          </select>
+        </label>
+        <label class="library-query-field" for="filter-type">
+          <span>Type</span>
+          <select id="filter-type">
+            <option value="">All types</option>
+            <option value="detection">Detection</option>
+            <option value="classification">Classification</option>
+            <option value="segmentation">Segmentation</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        <label class="library-query-field" for="models-sort">
+          <span>Sort</span>
+          <select id="models-sort">
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="name_asc">Name A–Z</option>
+            <option value="name_desc">Name Z–A</option>
+          </select>
+        </label>
+        <label class="library-query-field" for="models-page-size">
+          <span>Models per page</span>
+          <select id="models-page-size">
+            <option value="24">24</option>
+            <option value="48">48</option>
+            <option value="96">96</option>
+          </select>
+        </label>
       </div>
 
+      <div id="models-list-status" class="library-list-status hidden" role="status" aria-live="polite"></div>
+      <button id="models-list-retry" class="library-page-button hidden" type="button">Retry</button>
+
       <!-- Models list -->
-      <div id="models-list" class="models-list"></div>
+      <div id="models-list" class="models-list" tabindex="-1" aria-label="Model results"></div>
 
       <!-- Empty state -->
       <div id="models-empty" class="models-empty hidden">
         <div class="empty-icon" data-lf-icon="brain" data-lf-icon-label="Model"></div>
-        <h2>No models yet</h2>
-        <p>Upload a model from a project's Models tab to see it here.</p>
+        <h2 id="models-empty-title">No models yet</h2>
+        <p id="models-empty-copy">Upload a model from a project's Models tab to see it here.</p>
+      </div>
+
+      <div class="library-pagination" aria-label="Models pagination">
+        <button id="models-page-prev" class="library-page-button" type="button" aria-label="Previous models page">Previous</button>
+        <span id="models-page-status" class="library-page-status" role="status" aria-live="polite">No pages</span>
+        <button id="models-page-next" class="library-page-button" type="button" aria-label="Next models page">Next</button>
       </div>
 
     </div>
