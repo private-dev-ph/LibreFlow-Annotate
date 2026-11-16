@@ -970,52 +970,16 @@
     });
   });
 
-  //─── ── BATCH EXPORT MODAL ─────────────────────────────────────────────────
-  let batchExportParams = {};
-
-  function openBatchExportModal({ batchId = null, subBatchId = null, label = '' } = {}) {
-    batchExportParams = { batchId, subBatchId };
-    const scopeEl = document.getElementById('batch-export-scope-label');
-    if (scopeEl) scopeEl.textContent = label ? `Scope: ${label}` : 'Scope: All batches in project';
-    document.getElementById('modal-batch-export').classList.remove('hidden');
+  // Batch exports start with a scoped dataset version.
+  function openBatchVersions({ batchIds = [], subBatchIds = [] } = {}) {
+    document.dispatchEvent(new CustomEvent('libreflow:version-source', {
+      detail: { scope: { mode: 'batches', batchIds, subBatchIds, includeUnbatched: false } },
+    }));
+    document.querySelector('[data-tab="versions"]').click();
   }
 
   document.getElementById('btn-export-all-batches')?.addEventListener('click', () => {
-    openBatchExportModal({ label: 'All batches' });
-  });
-
-  document.getElementById('btn-batch-export-cancel')?.addEventListener('click', () => {
-    document.getElementById('modal-batch-export').classList.add('hidden');
-  });
-
-  document.getElementById('batch-export-include-images')?.addEventListener('change', function () {
-    const nullLabel = document.getElementById('batch-export-null-label');
-    const nullChk   = document.getElementById('batch-export-include-null');
-    if (this.checked) {
-      nullLabel.style.opacity = '1';
-      nullLabel.style.pointerEvents = 'auto';
-      nullChk.disabled = false;
-    } else {
-      nullLabel.style.opacity = '.45';
-      nullLabel.style.pointerEvents = 'none';
-      nullChk.disabled = true;
-      nullChk.checked  = false;
-    }
-  });
-
-  document.getElementById('btn-batch-export-confirm')?.addEventListener('click', () => {
-    const fmt         = document.getElementById('batch-export-format').value;
-    const withImgs    = document.getElementById('batch-export-include-images').checked;
-    const includeNull = document.getElementById('batch-export-include-null').checked;
-    let url = `/api/annotations/export-zip/${projectId}?format=${fmt}&images=${withImgs}`;
-    if (includeNull) url += '&includeNull=true';
-    if (batchExportParams.batchId)    url += `&batchId=${encodeURIComponent(batchExportParams.batchId)}`;
-    if (batchExportParams.subBatchId) url += `&subBatchId=${encodeURIComponent(batchExportParams.subBatchId)}`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '';
-    a.click();
-    document.getElementById('modal-batch-export').classList.add('hidden');
+    openBatchVersions({ batchIds: allBatches.map(batch => batch.id) });
   });
 
   //─── ── Jobs badge ─────────────────────────────────────────────────────────
@@ -1225,7 +1189,7 @@
     list.querySelectorAll('.btn-export-batch').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation();
-        openBatchExportModal({ batchId: btn.dataset.batchId, label: `Batch: ${btn.dataset.batchName}` });
+        openBatchVersions({ batchIds: [btn.dataset.batchId] });
       });
     });
 
@@ -1233,7 +1197,7 @@
     list.querySelectorAll('.btn-export-subbatch').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation();
-        openBatchExportModal({ batchId: btn.dataset.batchId, subBatchId: btn.dataset.subId, label: `Sub-batch: ${btn.dataset.subName}` });
+        openBatchVersions({ subBatchIds: [btn.dataset.subId] });
       });
     });
 

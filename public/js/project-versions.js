@@ -7,6 +7,7 @@
   const base = `/api/dataset-lifecycle/project/${encodeURIComponent(projectId)}`;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   let initialized = false, loading = false, creating = false, sourceReady = false, sourceUI = null, previewUI = null, splits = { train: 70, valid: 20, test: 10 }, sourceCount = 0, previewSequence = 0;
+  let pendingSourceScope = null, focusSourceOnReady = false;
   const $ = id => document.getElementById(id);
   async function request(url, options = {}) {
     const response = await fetch(url, { credentials: 'include', ...options });
@@ -35,11 +36,42 @@
     preview.disabled = creating || !sourceReady || !valid;
     create.disabled = creating || !sourceReady || !valid || !sourceCount;
   }
+  function focusSource() {
+    if (!focusSourceOnReady || !$('panel-versions').classList.contains('active')) return;
+    focusSourceOnReady = false;
+    const controls = $('version-source-controls');
+    const input = controls.querySelector('[data-source-batch]:checked, [data-source-sub]:checked')
+      || controls.querySelector('input[name="version-source-mode"]:checked');
+    input?.focus({ preventScroll: true });
+    controls.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+  }
+  document.addEventListener('libreflow:version-source', event => {
+    const scope = event.detail?.scope;
+    if (!scope || scope.mode !== 'batches' || !Array.isArray(scope.batchIds) || !Array.isArray(scope.subBatchIds)) return;
+    if (creating) { error('Wait for the current version to finish before changing its source.'); return; }
+    pendingSourceScope = { mode: 'batches', batchIds: [...scope.batchIds], subBatchIds: [...scope.subBatchIds], includeUnbatched: false };
+    focusSourceOnReady = true;
+    if (sourceUI) {
+      sourceReady = false;
+      sourceCount = 0;
+      previewSequence += 1;
+      previewUI?.invalidate?.();
+      updateSourceActions(false);
+      sourceUI.setScope(pendingSourceScope, { reload: true });
+      pendingSourceScope = null;
+    }
+  });
   function sourceChanged(detail) {
     previewSequence += 1;
     previewUI?.invalidate?.();
     sourceReady = Boolean(sourceUI?.isReady?.());
     sourceCount = 0;
+    if (!sourceReady) {
+      $('version-source-count').textContent = 'Loading selected source options…';
+      drawSplits();
+      updateSourceActions(false);
+      return;
+    }
     if (!detail.valid) {
       $('version-source-count').textContent = 'No images selected. Choose at least one batch, sub-batch, or images without a batch.';
       $('version-status').textContent = '';
@@ -135,7 +167,8 @@
       mount.innerHTML = `<div class="versions-heading"><div><h2>Dataset versions</h2><p>Prepare reproducible training data from your finished annotations.</p></div><a class="version-button" href="/dataset-lifecycle?sourceType=project&sourceId=${encodeURIComponent(projectId)}#health">Dataset health</a></div><div id="version-error" class="version-error" role="alert" tabindex="-1" hidden></div><form id="version-form"><section class="version-stage"><h3>1. Choose your source</h3><p>Includes annotated, completed and explicitly marked background images. Original images and annotations are preserved. Unfinished uploads are excluded unless selected below.</p><label class="version-check"><input type="checkbox" id="version-include-unfinished">Include unfinished uploads as null images</label><div id="version-source-controls"></div><div id="version-source-count" class="version-ready-count" aria-live="polite"></div><div class="version-fields"><label class="version-field">Version name (optional)<input id="version-name" type="text" maxlength="120" placeholder="Generated automatically when blank"><span class="version-note">Leave blank for a name such as Version 1.</span></label><label class="version-field">Description<input id="version-description" type="text" maxlength="500" placeholder="What is different in this version?"></label></div></section><section class="version-stage"><h3>2. Training / validation / test split</h3><p>Drag either handle or type percentages. The three values always add up to 100%.</p><div class="version-split-track" id="version-split-track"><input id="version-train-boundary" type="range" min="0" max="100" value="70" aria-label="Training boundary" aria-describedby="version-split-help"><input id="version-valid-boundary" type="range" min="0" max="100" value="90" aria-label="Validation to test boundary" aria-describedby="version-split-help"></div><div class="version-split-values">${[['train', 'Train'], ['valid', 'Valid'], ['test', 'Test']].map(([key, label]) => `<label class="version-field">${label} (%)<input id="version-${key}" type="number" min="0" max="100" step="1" value="${splits[key]}"><output id="version-${key}-count"></output></label>`).join('')}</div><p class="version-note" id="version-split-help">Arrow keys adjust each handle. Duplicate source images stay together, so actual image counts may differ slightly from the requested percentages.</p><label class="version-field">Split seed<input id="version-seed" type="text" maxlength="120" value="libreflow"></label></section><div id="version-processing"></div><div class="version-actions"><button type="button" id="version-preview">Check image counts</button><button type="submit" id="version-create" class="version-primary">Create version</button></div><p id="version-status" class="version-status" role="status"></p><p class="version-note">Export offers YOLO, Roboflow YOLO, COCO, Pascal VOC and CSV, with optional image files and null images from this version. Isolated objects also include classification folders. Validation and test images are never augmented.</p></form><section class="version-history"><div class="version-history-heading"><h3>Version history</h3><button type="button" id="version-refresh">Refresh</button></div><div id="version-history-list"></div></section>`;
       VersionProcessingFields.mount($('version-processing'), project.labelClasses || [], initial.tags);
       previewUI = VersionPreviewUI.mount($('version-processing'), { endpoint: `${base}/versions/sample-preview`, readProcessing: () => VersionProcessingFields.read($('version-processing')), readContext: () => ({ sourceScope: sourceUI?.getScope?.() || { mode: 'all', batchIds: [], subBatchIds: [], includeUnbatched: false } }) });
-      sourceUI = VersionSourceUI.mount($('version-source-controls'), { endpoint: `${base}/versions/source-options`, onChange: sourceChanged, onReady: () => { sourceReady = true; updateSourceActions(true); }, onError: err => { sourceReady = false; sourceCount = 0; previewSequence += 1; error(err.message); updateSourceActions(false); } });
+      sourceUI = VersionSourceUI.mount($('version-source-controls'), { endpoint: `${base}/versions/source-options`, initialScope: pendingSourceScope || undefined, onChange: sourceChanged, onReady: () => { sourceReady = true; updateSourceActions(true); focusSource(); }, onError: err => { sourceReady = false; sourceCount = 0; previewSequence += 1; error(err.message); updateSourceActions(false); } });
+      pendingSourceScope = null;
       VersionExportUI.mount(mount, base);
       if (window.VersionDeleteUI) VersionDeleteUI.mount(mount, base, { onDeleted: async target => { await loadHistory(); $('version-status').textContent = `Version v${target.sequence} deleted. Source images and annotations are unchanged.`; } });
       $('version-include-unfinished').addEventListener('change', preview);

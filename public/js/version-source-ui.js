@@ -3,9 +3,14 @@
   const allScope = () => ({ mode: 'all', batchIds: [], subBatchIds: [], includeUnbatched: false });
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const number = value => Number(value || 0);
-  function mount(container, { endpoint, onChange, onReady, onError } = {}) {
-    if (!container || !endpoint) return { getScope: allScope, isReady: () => false, whenReady: async () => false, setDisabled: () => {} };
-    let options = null, scope = allScope(), disabled = false, resolveReady;
+  function copyScope(value) {
+    if (!value || value.mode === 'all') return allScope();
+    const ids = values => [...new Set((Array.isArray(values) ? values : []).filter(id => typeof id === 'string' && id.trim()))];
+    return { mode: 'batches', batchIds: ids(value.batchIds), subBatchIds: ids(value.subBatchIds), includeUnbatched: value.includeUnbatched === true };
+  }
+  function mount(container, { endpoint, initialScope, onChange, onReady, onError } = {}) {
+    if (!container || !endpoint) return { getScope: allScope, isReady: () => false, whenReady: async () => false, setDisabled: () => {}, setScope: () => false };
+    let options = null, scope = copyScope(initialScope), disabled = false, resolveReady, loadSequence = 0;
     const ready = new Promise(resolve => { resolveReady = resolve; });
     function selectedSummary() {
       if (!options) return { imageCount: 0, eligibleCount: 0, label: 'Loading source options…' };
@@ -37,20 +42,37 @@
       onReady?.(options); resolveReady(true);
     }
     async function load() {
+      const sequence = ++loadSequence;
       options = null;
       container.hidden = false; container.innerHTML = '<div class="version-source-loading" role="status">Loading image source options…</div>';
+      notify();
       try {
         const response = await fetch(endpoint, { credentials: 'include' });
         const data = await response.json().catch(() => ({ error: `Request failed (${response.status}).` }));
+        if (sequence !== loadSequence) return;
         if (!response.ok) throw new Error(data.error || `Request failed (${response.status}).`);
         if (!data || typeof data !== 'object' || Array.isArray(data) || typeof data.supportsBatches !== 'boolean' || !Number.isFinite(Number(data.total)) || !Number.isFinite(Number(data.eligible)) || !data.unbatched || !Array.isArray(data.batches)) throw new Error('Source options response was invalid.');
         options = { ...data, batches: data.batches.map(batch => ({ ...batch, id: String(batch.id), name: String(batch.name || batch.id), subBatches: Array.isArray(batch.subBatches) ? batch.subBatches.map(sub => ({ ...sub, id: String(sub.id), name: String(sub.name || sub.id) })) : [] })) };
+        if (scope.mode === 'batches') {
+          const batches = new Set(options.batches.map(batch => batch.id));
+          const subs = new Set(options.batches.flatMap(batch => batch.subBatches.map(sub => sub.id)));
+          scope.batchIds = scope.batchIds.filter(id => batches.has(id));
+          scope.subBatchIds = scope.subBatchIds.filter(id => subs.has(id));
+        }
         render(); notify();
-      } catch (error) { container.innerHTML = `<div class="version-source-error" role="alert"><p>Source options could not be loaded. Version creation is blocked until they are available.</p><p>${esc(error.message)}</p><button type="button" data-source-retry>Retry source options</button></div>`; container.querySelector('[data-source-retry]').addEventListener('click', load); onError?.(error); resolveReady(false); }
+      } catch (error) { if (sequence !== loadSequence) return; container.innerHTML = `<div class="version-source-error" role="alert"><p>Source options could not be loaded. Version creation is blocked until they are available.</p><p>${esc(error.message)}</p><button type="button" data-source-retry>Retry source options</button></div>`; container.querySelector('[data-source-retry]').addEventListener('click', load); onError?.(error); resolveReady(false); }
+    }
+    function setScope(next, { reload = false } = {}) {
+      if (disabled) return false;
+      scope = copyScope(next);
+      if (reload) return load();
+      if (options) render();
+      notify();
+      return true;
     }
     function setDisabled(value) { disabled = Boolean(value); const fieldset = container.querySelector('fieldset'); if (fieldset) fieldset.disabled = disabled; const retry = container.querySelector('[data-source-retry]'); if (retry) retry.disabled = disabled; }
     load();
-    return { getScope: () => ({ ...scope, batchIds: [...scope.batchIds], subBatchIds: [...scope.subBatchIds] }), isReady: () => Boolean(options), hasSelection: valid, whenReady: () => ready, setDisabled, retry: load };
+    return { getScope: () => ({ ...scope, batchIds: [...scope.batchIds], subBatchIds: [...scope.subBatchIds] }), isReady: () => Boolean(options), hasSelection: valid, whenReady: () => ready, setDisabled, setScope, retry: load };
   }
   window.VersionSourceUI = { mount, allScope };
 })();
