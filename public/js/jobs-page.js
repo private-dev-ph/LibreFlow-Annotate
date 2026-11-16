@@ -1,4 +1,5 @@
 // Persistent automation jobs and integration management.
+window.__libreFlowAutomationShell = true;
 (async () => {
   const me = await API.getMe();
   if (!me) { window.location.href = '/login'; return; }
@@ -250,10 +251,15 @@
       item.setAttribute('aria-pressed', String(isActive));
     });
     document.querySelectorAll('.automation-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab.dataset.tab));
+    const headerActions = document.querySelector('.header-actions');
+    if (headerActions) headerActions.hidden = tab.dataset.tab === 'mcp';
     if (updateHash && window.location.hash !== `#${tab.dataset.tab}`) window.history.replaceState(null, '', `#${tab.dataset.tab}`);
   }
   function selectAutomationHash() {
-    selectAutomationTab(window.location.hash.slice(1) || 'jobs');
+    const hash = window.location.hash.slice(1);
+    const panelName = hash.split('?')[0];
+    const tabName = hash.startsWith('request=') ? 'mcp' : panelName || 'jobs';
+    selectAutomationTab(tabName);
   }
   automationTabs.forEach(tab => tab.addEventListener('click', () => selectAutomationTab(tab.dataset.tab, true)));
   window.addEventListener('hashchange', selectAutomationHash);

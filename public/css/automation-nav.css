@@ -57,6 +57,10 @@
   outline-offset: 2px;
 }
 
+.header-actions[hidden] {
+  display: none;
+}
+
 @media (max-width: 420px) {
   .automation-tab {
     flex-basis: calc(50% - 4px);

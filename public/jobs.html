@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/css/nav.css" />
   <link rel="stylesheet" href="/css/automation-nav.css" />
   <link rel="stylesheet" href="/css/jobs.css" />
+  <link rel="stylesheet" href="/css/ai-connections.css" />
   <link rel="stylesheet" href="/css/theme.css" />
   <link rel="stylesheet" href="/css/icons.css" />
 </head>
@@ -76,14 +77,14 @@
       </div>
 
       <nav class="automation-tabs" aria-label="Automation sections">
-        <button class="automation-tab active" data-tab="jobs" type="button" aria-pressed="true">Jobs</button>
-        <button class="automation-tab" data-tab="run" type="button" aria-pressed="false">Run automation</button>
-        <button class="automation-tab" data-tab="integrations" type="button" aria-pressed="false">Integrations</button>
-        <button class="automation-tab" data-tab="api-keys" type="button" aria-pressed="false">API keys</button>
-        <a class="automation-tab" href="/ai-connections" data-automation-link="mcp">
+        <button class="automation-tab active" data-tab="jobs" type="button" aria-pressed="true"><span data-lf-icon="briefcase" aria-hidden="true"></span>Jobs</button>
+        <button class="automation-tab" data-tab="run" type="button" aria-pressed="false"><span data-lf-icon="play" aria-hidden="true"></span>Run automation</button>
+        <button class="automation-tab" data-tab="integrations" type="button" aria-pressed="false"><span data-lf-icon="link" aria-hidden="true"></span>Integrations</button>
+        <button class="automation-tab" data-tab="api-keys" type="button" aria-pressed="false"><span data-lf-icon="key" aria-hidden="true"></span>API keys</button>
+        <button class="automation-tab" data-tab="mcp" type="button" aria-pressed="false">
           <span data-lf-icon="link" aria-hidden="true"></span>
           Instance-level MCP
-        </a>
+        </button>
       </nav>
 
       <section class="automation-panel active" data-panel="jobs">
@@ -202,6 +203,451 @@
           </div>
         </div>
       </section>
+      <section class="automation-panel mcp-panel connections-container" data-panel="mcp">
+<header class="connections-header">
+        <div>
+          <p class="eyebrow">MCP client access</p>
+          <h2>Instance-level MCP</h2>
+          <p class="lede">
+            Connect a trusted AI client to selected LibreFlow projects with
+            the smallest access it needs.
+          </p>
+        </div>
+        <a class="docs-link" href="/docs/mcp-local-setup.md"
+          >Read the setup guide</a
+        >
+        </header>
+        <div
+        id="page-status"
+        class="page-status"
+        role="status"
+        aria-live="polite"
+        ></div>
+        <section
+        id="disabled-notice"
+        class="notice-card is-disabled"
+        hidden
+        aria-labelledby="disabled-title"
+        >
+        <div class="notice-icon" data-lf-icon="info" aria-hidden="true"></div>
+        <div>
+          <h2 id="disabled-title">Local MCP is disabled on this server</h2>
+          <p>
+            Existing connections remain visible and can be revoked. Ask an
+            administrator to enable local MCP before creating a client
+            connection.
+          </p>
+        </div>
+        </section>
+        <section
+        class="connection-card status-card"
+        aria-labelledby="status-title"
+        >
+        <div class="status-card-copy">
+          <div class="status-line">
+            <span
+              id="mcp-status-dot"
+              class="status-dot"
+              aria-hidden="true"
+            ></span
+            ><span id="mcp-status-badge" class="status-badge neutral"
+              >Checking availability</span
+            >
+          </div>
+          <h2 id="status-title">Connection setup</h2>
+          <p id="mcp-status-copy">
+            Checking whether LibreFlow can accept a local or remote client.
+          </p>
+          <div class="endpoint-note">
+            <span data-lf-icon="link" aria-hidden="true"></span
+            ><span
+              >Local bridge endpoint
+              <code id="local-server-url">http://127.0.0.1:6769</code></span
+            >
+          </div>
+        </div>
+        <button
+          id="connect-client"
+          class="primary-action status-cta"
+          type="button"
+        >
+          Connect a client
+        </button>
+        </section>
+        <section
+        class="connection-card access-card"
+        aria-labelledby="access-title"
+        >
+        <div class="card-heading">
+          <div>
+            <h2 id="access-title">Access in plain language</h2>
+            <p>Review the boundaries before you connect an AI client.</p>
+          </div>
+          <span class="feature-chip">Least privilege</span>
+        </div>
+        <div class="access-grid">
+          <div>
+            <span
+              class="access-icon"
+              data-lf-icon="checkCircle"
+              aria-hidden="true"
+            ></span>
+            <div>
+              <strong>Project-scoped</strong>
+              <p>Only projects you select are visible to this client.</p>
+            </div>
+          </div>
+          <div>
+            <span
+              class="access-icon"
+              data-lf-icon="eye"
+              aria-hidden="true"
+            ></span>
+            <div>
+              <strong>Permission-scoped</strong>
+              <p>Each read or write capability is chosen separately.</p>
+            </div>
+          </div>
+          <div>
+            <span
+              class="access-icon"
+              data-lf-icon="clock"
+              aria-hidden="true"
+            ></span>
+            <div>
+              <strong>Time-limited</strong>
+              <p>Connections expire automatically and can be revoked here.</p>
+            </div>
+          </div>
+        </div>
+        <p class="access-footnote">
+          New permissions start unchecked. Selecting a permission that depends
+          on another never expands access silently; LibreFlow will explain the
+          dependency and ask you to choose it explicitly. Changes to an
+          existing connection require in-app approval.
+        </p>
+        </section>
+        <section
+        class="connection-card requests-card"
+        aria-labelledby="requests-title"
+        >
+        <div class="card-heading list-heading">
+          <div>
+            <h2 id="requests-title">Pending AI actions</h2>
+            <p>
+              Review exactly what an AI client wants to start before anything
+              is applied.
+            </p>
+          </div>
+          <button
+            id="refresh-requests"
+            class="secondary-action"
+            type="button"
+          >
+            Refresh
+          </button>
+        </div>
+        <p class="requests-note">
+          Approval permits the AI client to start that exact action. Inference
+          produces drafts; saving drafts needs separate approval.
+        </p>
+        <div class="list-toolbar">
+          <span
+            id="request-count"
+            class="list-count"
+            aria-live="polite"
+          ></span>
+        </div>
+        <div id="requests-list" class="requests-list">
+          <p class="muted">Loading pending requests…</p>
+        </div>
+        </section>
+        <section
+        class="connection-card list-card"
+        aria-labelledby="connections-title"
+        >
+        <div class="card-heading list-heading">
+          <div>
+            <h2 id="connections-title">Connected clients</h2>
+            <p>
+              Review permissions, recent activity, expiry, and revocation for
+              every client.
+            </p>
+          </div>
+          <button
+            id="refresh-connections"
+            class="secondary-action"
+            type="button"
+          >
+            Refresh
+          </button>
+        </div>
+        <div class="list-toolbar">
+          <label class="search-control" for="client-search"
+            ><span data-lf-icon="search" aria-hidden="true"></span
+            ><span class="sr-only">Search connected clients</span
+            ><input
+              id="client-search"
+              type="search"
+              placeholder="Search by client name"
+              autocomplete="off" /></label
+          ><span
+            id="connection-count"
+            class="list-count"
+            aria-live="polite"
+          ></span>
+        </div>
+        <div id="connections-list" class="connections-list">
+          <p class="muted">Loading connections…</p>
+        </div>
+        </section>
+  <dialog
+    id="client-dialog"
+    class="client-dialog"
+    aria-labelledby="dialog-title"
+  >
+    <div class="dialog-shell">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">New client connection</p>
+          <h2 id="dialog-title">Connect an AI client</h2>
+          <p id="dialog-subtitle">
+            Choose a transport, then review exactly what it can access.
+          </p>
+        </div>
+        <button
+          id="close-dialog"
+          class="icon-action"
+          type="button"
+          aria-label="Close connection setup"
+        >
+          <span data-lf-icon="close" aria-hidden="true"></span>
+        </button>
+      </div>
+      <div class="stepper" aria-label="Connection setup progress">
+        <div class="step is-current" data-step-indicator="1">
+          <span>1</span><strong>Transport</strong>
+        </div>
+        <div class="step" data-step-indicator="2">
+          <span>2</span><strong>Access</strong>
+        </div>
+        <div class="step" data-step-indicator="3">
+          <span>3</span><strong>Review</strong>
+        </div>
+      </div>
+      <div
+        id="dialog-error"
+        class="form-error dialog-error"
+        role="alert"
+        tabindex="-1"
+      ></div>
+      <form id="connection-form" novalidate>
+        <section
+          class="dialog-step is-active"
+          data-step="1"
+          aria-labelledby="transport-title"
+        >
+          <h3 id="transport-title">Choose how your client connects</h3>
+          <p class="step-intro">
+            Local is the recommended setup for this LibreFlow installation.
+            Remote access appears only when an administrator has configured
+            it.
+          </p>
+          <div id="transport-options" class="transport-options"></div>
+          <div id="remote-prerequisite" class="inline-note" hidden></div>
+        </section>
+        <section
+          class="dialog-step"
+          data-step="2"
+          aria-labelledby="access-step-title"
+          hidden
+        >
+          <h3 id="access-step-title">Choose projects and permissions</h3>
+          <p class="step-intro">
+            Start with one project and the minimum permissions your client
+            needs.
+          </p>
+          <label class="field-label" for="connection-name"
+            >Connection name</label
+          ><input
+            id="connection-name"
+            name="name"
+            type="text"
+            maxlength="80"
+            autocomplete="off"
+            required
+            placeholder="e.g. Research assistant"
+          />
+          <p class="field-help">
+            Use a name you will recognize in the connected client list.
+          </p>
+          <fieldset class="project-fieldset">
+            <legend>
+              Projects <span class="required-label">Required</span>
+            </legend>
+            <p class="field-help">
+              Choose at least one project. Nothing is selected by default.
+            </p>
+            <label class="search-control" for="project-search"
+              ><span data-lf-icon="search" aria-hidden="true"></span
+              ><span class="sr-only">Search projects</span
+              ><input
+                id="project-search"
+                class="project-search"
+                type="search"
+                placeholder="Search projects"
+                autocomplete="off"
+            /></label>
+            <div
+              id="project-list"
+              class="project-list"
+              role="group"
+              aria-describedby="project-help"
+            ></div>
+            <p id="project-help" class="field-help project-help"></p>
+          </fieldset>
+          <fieldset class="scope-fieldset">
+            <legend>
+              Permissions
+              <span class="required-label">Choose explicitly</span>
+            </legend>
+            <p class="field-help">
+              New permissions are unchecked. Dependencies are explained below
+              and must be selected explicitly.
+            </p>
+            <div id="scope-list" class="scope-list"></div>
+            <p id="scope-help" class="field-help scope-help"></p>
+          </fieldset>
+          <fieldset class="expiry-fieldset">
+            <legend>Expires after</legend>
+            <div id="expiry-options" class="expiry-options"></div>
+          </fieldset>
+        </section>
+        <section
+          class="dialog-step"
+          data-step="3"
+          aria-labelledby="review-title"
+          hidden
+        >
+          <h3 id="review-title">Review before creating</h3>
+          <p class="step-intro">
+            This client will receive one credential. Save it immediately; it
+            will not be shown again.
+          </p>
+          <div id="review-summary" class="review-summary"></div>
+          <p class="approval-note">
+            <span data-lf-icon="info" aria-hidden="true"></span>Changing
+            permissions later requires explicit in-app approval. This setup
+            does not create or approve write access automatically.
+          </p>
+        </section>
+        <div class="dialog-actions">
+          <button
+            id="dialog-back"
+            class="secondary-action"
+            type="button"
+            hidden
+          >
+            Back</button
+          ><span class="dialog-actions-spacer"></span
+          ><button id="dialog-cancel" class="secondary-action" type="button">
+            Cancel</button
+          ><button id="dialog-next" class="primary-action" type="button">
+            Continue</button
+          ><button
+            id="create-connection"
+            class="primary-action"
+            type="submit"
+            hidden
+          >
+            Create connection
+          </button>
+        </div>
+      </form>
+      <div
+        id="token-panel"
+        class="token-panel"
+        hidden
+        aria-labelledby="token-title"
+      >
+        <div class="token-heading">
+          <div>
+            <h3 id="token-title">Save this token now</h3>
+            <p>
+              This token is shown once and never stored in this browser, URL,
+              or console.
+            </p>
+          </div>
+          <span data-lf-icon="key" aria-hidden="true"></span>
+        </div>
+        <label for="connection-token">One-time MCP token</label>
+        <div class="token-row">
+          <input
+            id="connection-token"
+            type="text"
+            readonly
+            aria-describedby="token-help"
+          /><button id="copy-token" class="secondary-action" type="button">
+            Copy
+          </button>
+        </div>
+        <p id="token-help" class="field-help">
+          Store it in your client’s protected secret or environment settings.
+          Dismissing this panel clears it permanently from this page.
+        </p>
+        <div id="setup-instructions" class="setup-instructions"></div>
+        <button id="dismiss-token" class="secondary-action" type="button">
+          I saved it — close setup
+        </button>
+      </div>
+    </div>
+  </dialog>
+  <dialog
+    id="request-dialog"
+    class="client-dialog request-dialog"
+    aria-labelledby="request-dialog-title"
+  >
+    <div class="dialog-shell">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">AI action review</p>
+          <h2 id="request-dialog-title">Review this requested action</h2>
+          <p>
+            Approve or reject this exact request. The payload cannot be edited
+            here.
+          </p>
+        </div>
+        <button
+          id="close-request-dialog"
+          class="icon-action"
+          type="button"
+          aria-label="Close action review"
+        >
+          <span data-lf-icon="close" aria-hidden="true"></span>
+        </button>
+      </div>
+      <div
+        id="request-dialog-error"
+        class="form-error dialog-error"
+        role="alert"
+        tabindex="-1"
+      ></div>
+      <div id="request-detail" class="request-detail"></div>
+      <div class="request-dialog-actions">
+        <button
+          id="reject-request"
+          class="secondary-action danger-action"
+          type="button"
+        >
+          Reject request
+        </button>
+        <button id="approve-request" class="primary-action" type="button">
+          Approve exact action
+        </button>
+      </div>
+    </div>
+  </dialog>
+      </section>
     </div>
   </div>
 
@@ -225,5 +671,6 @@
   <script src="/js/nav-inbox.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/jobs-page.js"></script>
+  <script src="/js/ai-connections.js"></script>
 </body>
 </html>

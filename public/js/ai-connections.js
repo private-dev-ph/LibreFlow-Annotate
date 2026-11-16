@@ -1,5 +1,6 @@
 /* MCP client access management. Credentials intentionally stay in memory only. */
 (async () => {
+  if (!document.getElementById("client-dialog")) return;
   const me = await API.getMe();
   if (!me) {
     window.location.href = "/login";
@@ -83,14 +84,16 @@
     .slice(0, 2)
     .toUpperCase();
   els.username.textContent = me.username || "Signed in";
-  els.logout.addEventListener("click", async () => {
-    els.logout.disabled = true;
-    try {
-      await API.logout();
-    } finally {
-      window.location.href = "/login";
-    }
-  });
+  if (!window.__libreFlowAutomationShell) {
+    els.logout.addEventListener("click", async () => {
+      els.logout.disabled = true;
+      try {
+        await API.logout();
+      } finally {
+        window.location.href = "/login";
+      }
+    });
+  }
 
   function node(tag, className, text) {
     const el = document.createElement(tag);
@@ -815,7 +818,8 @@
 
   function getRequestHashId() {
     const hash = window.location.hash.replace(/^#/, "");
-    return new URLSearchParams(hash).get("request");
+    const query = hash.startsWith("mcp?") ? hash.slice(4) : hash;
+    return new URLSearchParams(query).get("request");
   }
 
   function requestStatus(request) {

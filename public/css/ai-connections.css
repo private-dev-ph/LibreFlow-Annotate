@@ -1,4 +1,5 @@
 /* AI client access page. Theme and navigation tokens come from theme.css/nav.css. */
+@scope (.mcp-panel) {
 .connections-body {
   min-height: 100vh;
   padding-top: var(--nav-h);
@@ -9,6 +10,11 @@
   width: min(1080px, 100%);
   margin: 0 auto;
   padding: 28px 24px 72px;
+}
+.mcp-panel.connections-container {
+  width: auto;
+  margin: 0;
+  padding: 0;
 }
 .back-link,
 .docs-link {
@@ -43,7 +49,7 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-.connections-header h1 {
+.connections-header h2 {
   margin: 0;
   color: var(--text);
   font-size: clamp(27px, 4vw, 36px);
@@ -1254,3 +1260,4 @@ summary:focus-visible,
 }
 
 .annotation-review-viewport:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+}
