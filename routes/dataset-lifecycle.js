@@ -34,6 +34,7 @@ const { dataDir, dataPath, uploadsDir } = require('../lib/data-store');
 const { ensureLegacyBaseline, createRevision } = require('../lib/annotation-history');
 const { touchAfterAnnotation } = require('../lib/review-state');
 const { appendAuditEvent } = require('../lib/audit-log');
+const { VersionBrowserQueryError, parseBrowseQuery, browseVersions } = require('../lib/version-browser');
 
 const router = express.Router();
 const ROOT = path.join(__dirname, '..');
@@ -583,6 +584,19 @@ function exportOptions(req, manifest) {
 function exportFilename(manifest, format) {
   return `${manifest.source.name || manifest.source.type}-${manifest.name}-${format}`.replace(/[^a-z0-9_.-]+/gi, '_') + '.zip';
 }
+
+router.get('/:sourceType/:sourceId/versions/browse', requireScopes('versions:read'), (req, res) => {
+  const { resolved, actor } = resolveRequestSource(req, { includeData: false });
+  if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+  try {
+    const query = parseBrowseQuery(req.query);
+    const versions = listVersions(VERSION_INDEX_FILE, req.params.sourceType, req.params.sourceId);
+    res.json(browseVersions({ ...query, versions, canDelete: canDeleteVersionSource(req, resolved.source, actor) }));
+  } catch (error) {
+    if (error instanceof VersionBrowserQueryError) return res.status(400).json({ error: error.message });
+    throw error;
+  }
+});
 
 function versionError(res, error) {
   if (res.destroyed) return;

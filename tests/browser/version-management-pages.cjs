@@ -18,6 +18,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    else if(p==='/api/projects/test')body={id:'test',userId:'tester',name:'Version fixture',labelClasses:[],collaborators:[],modelIds:[]};
    else if(p.endsWith('/versions/source-options'))body={supportsBatches:true,total:28,eligible:28,unbatched:{imageCount:0,eligibleCount:0},batches:[]};
    else if(p.endsWith('/versions/preview'))body={selection:{selected:28,annotated:28,background:0,excludedUnfinished:0,excludedByFilters:0},splits:{counts:{train:20,valid:6,test:2}},tags:[],message:'Ready'};
+   else if(p.endsWith('/versions/browse'))body={items:versions,total:versions.length,page:1,pageSize:12,totalPages:1};
    else if(p.endsWith('/versions'))body=versions;
    else if(req.method()==='DELETE'&&p.endsWith('/versions/v6')){deletes++;versions=versions.filter(v=>v.id!=='v6');body={deleted:true,id:'v6'};}
    return route.fulfill({json:body});
