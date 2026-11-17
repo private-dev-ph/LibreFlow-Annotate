@@ -5,6 +5,15 @@ const path    = require('path');
 const { v4: uuidv4 } = require('uuid');
 
 const { pushNotification } = require('./notifications');
+const {
+  BatchBrowserQueryError,
+  parseBatchBrowseQuery,
+  parseSubBatchBrowseQuery,
+  parseCatalogQuery,
+  browseBatches,
+  browseSubBatches,
+  buildBatchCatalog,
+} = require('../lib/batch-browser');
 
 const router       = express.Router();
 const BATCHES_FILE = path.join(__dirname, '..', 'data', 'batches.json');
@@ -31,6 +40,47 @@ function isOwner(projectId, userId) {
   } catch { return false; }
 }
 
+function queryError(res, error) {
+  if (error instanceof BatchBrowserQueryError) {
+    return res.status(400).json({ error: error.message });
+  }
+  throw error;
+}
+
+// ── GET /api/batches/browse?projectId=xxx ────────────────────────────────────
+router.get('/browse', (req, res, next) => {
+  let query;
+  try { query = parseBatchBrowseQuery(req.query); }
+  catch (error) { return queryError(res, error); }
+  if (!canAccess(query.projectId, req.session.userId)) {
+    return res.status(403).json({ error: 'No access to this project.' });
+  }
+  try {
+    return res.json(browseBatches({
+      batches: readBatches(),
+      images: readImages(),
+      ...query,
+    }));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ── GET /api/batches/catalog?projectId=xxx ───────────────────────────────────
+router.get('/catalog', (req, res, next) => {
+  let query;
+  try { query = parseCatalogQuery(req.query); }
+  catch (error) { return queryError(res, error); }
+  if (!canAccess(query.projectId, req.session.userId)) {
+    return res.status(403).json({ error: 'No access to this project.' });
+  }
+  try {
+    return res.json({ items: buildBatchCatalog(readBatches(), query.projectId) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 // ── GET /api/batches?projectId=xxx ────────────────────────────────────────────
 router.get('/', (req, res) => {
   const { projectId } = req.query;
@@ -56,6 +106,26 @@ router.get('/', (req, res) => {
   }));
 
   res.json(enriched);
+});
+
+// ── GET /api/batches/:id/subbatches/browse ───────────────────────────────────
+router.get('/:id/subbatches/browse', (req, res, next) => {
+  if (!req.params.id || req.params.id.length > 200) {
+    return res.status(400).json({ error: 'id must be non-empty and at most 200 characters.' });
+  }
+  const batch = readBatches().find(item => item.id === req.params.id);
+  if (!batch) return res.status(404).json({ error: 'Batch not found.' });
+  if (!canAccess(batch.projectId, req.session.userId)) {
+    return res.status(403).json({ error: 'No access.' });
+  }
+  let query;
+  try { query = parseSubBatchBrowseQuery(req.query); }
+  catch (error) { return queryError(res, error); }
+  try {
+    return res.json(browseSubBatches({ batch, images: readImages(), ...query }));
+  } catch (error) {
+    return next(error);
+  }
 });
 
 // ── GET /api/batches/:id ──────────────────────────────────────────────────────

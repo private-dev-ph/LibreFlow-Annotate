@@ -246,6 +246,19 @@ const API = {
   },
 
   // ── Batches ───────────────────────────────────────────────────────────────
+  browseBatches(projectId, parameters = {}) {
+    return fetchLibraryPage('batches', { ...parameters, projectId });
+  },
+  browseSubBatches(batchId, parameters = {}) {
+    return fetchLibraryPage(`batches/${encodeURIComponent(batchId)}/subbatches`, parameters);
+  },
+  async getBatchCatalog(projectId) {
+    const response = await fetch(`/api/batches/catalog?${new URLSearchParams({ projectId })}`, { credentials: 'include' });
+    const data = await response.json().catch(() => { throw new Error('The batch catalog could not be read. Please retry.'); });
+    if (!response.ok) throw new Error(data.error || 'Could not load batch choices.');
+    if (!Array.isArray(data.items)) throw new Error('The batch catalog was invalid. Please retry.');
+    return data.items;
+  },
   async getBatches(projectId) {
     const r = await fetch(`/api/batches?projectId=${projectId}`, { credentials: 'include' });
     return r.json();

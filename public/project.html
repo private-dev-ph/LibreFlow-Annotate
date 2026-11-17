@@ -310,19 +310,40 @@
 
       <!-- ── BATCHES panel ── -->
       <div class="tab-panel" id="panel-batches">
-        <div class="section-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div class="section-card batch-browser-heading">
           <div>
             <h2>Upload Batches</h2>
-            <p class="section-description">Images uploaded to this project are grouped into batches. You can split a batch into sub-batches and assign them to collaborators.</p>
+            <p class="section-description">Find upload batches, manage sub-batches, and assign work to collaborators.</p>
           </div>
-          <button id="btn-export-all-batches" class="btn-primary-sm" style="white-space:nowrap;flex-shrink:0"><span data-lf-icon="download" aria-hidden="true"></span> Export All Batches</button>
+          <div class="batch-export-all">
+            <button id="btn-export-all-batches" class="btn-primary-sm" type="button" disabled><span data-lf-icon="download" aria-hidden="true"></span> Export All Batches</button>
+            <p class="batch-browser-hint">Includes every batch, across all pages and search results.</p>
+            <p id="batch-catalog-status" class="library-list-status" role="status" hidden></p>
+            <button id="batch-catalog-retry" class="library-page-button" type="button" hidden>Retry batch choices</button>
+          </div>
         </div>
-        <div id="batches-list" class="batches-list"></div>
-        <div id="batches-empty" class="batches-empty" style="display:none">
-          <div class="batches-empty-icon" data-lf-icon="package" data-lf-icon-label="Batches"></div>
-          <h3>No batches yet</h3>
-          <p>Upload images on the Images tab to create batches.</p>
-        </div>
+        <section class="section-card batch-browser" aria-label="Project batches">
+          <div class="library-query-controls">
+            <label class="batch-search-label" for="batch-search">Search batches and sub-batches
+              <input id="batch-search" type="search" maxlength="200" placeholder="Search names, assignees, or notes" aria-describedby="batch-search-hint" />
+            </label>
+          </div>
+          <p id="batch-search-hint" class="batch-browser-hint">Matching sub-batches appear under their parent. Export always includes the complete selected batch or sub-batch.</p>
+          <p id="batch-browse-status" class="library-list-status" role="status" aria-live="polite"></p>
+          <button id="batch-browse-retry" class="library-page-button" type="button" hidden>Retry</button>
+          <div class="project-batch-scroll" role="region" aria-label="Batch results" tabindex="0">
+            <div id="batches-list" class="batches-list" aria-busy="false"></div>
+            <div id="batches-empty" class="batches-empty" style="display:none">No batches yet. Upload images on the Images tab to create batches.</div>
+          </div>
+          <nav class="library-pagination" aria-label="Batch pages">
+            <span id="batch-page-status" class="library-page-status" role="status" aria-live="polite">0 batches</span>
+            <button id="batch-page-prev" class="library-page-button" type="button">Previous</button>
+            <label class="batch-page-size-label" for="batch-page-size">Batches per page
+              <select id="batch-page-size"><option value="12">12</option><option value="24">24</option><option value="48">48</option></select>
+            </label>
+            <button id="batch-page-next" class="library-page-button" type="button">Next</button>
+          </nav>
+        </section>
 
         <!-- Split dialog (hidden) -->
         <div id="split-dialog" class="split-dialog hidden">
@@ -405,6 +426,7 @@
   <script src="/js/nav-inbox.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/resource-picker.js"></script>
+  <script src="/js/project-batches.js"></script>
   <script src="/js/project.js"></script>
   <script src="/js/project-review.js"></script>
   <script src="/js/version-splits.js"></script>

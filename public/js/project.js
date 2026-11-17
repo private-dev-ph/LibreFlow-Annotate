@@ -1104,6 +1104,7 @@
   }
 
   document.getElementById('btn-export-all-batches')?.addEventListener('click', () => {
+    if (!batchCatalogReady || !allBatches.length) return;
     openBatchVersions({ batchIds: allBatches.map(batch => batch.id) });
   });
 
@@ -1130,293 +1131,44 @@
     return (b / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
   }
 
-  //─── ── BATCHES ─────────────────────────────────────────────────────────────
+  // Lightweight scope choices are separate from the paged batch browser.
   let allBatches = [];
-  const expandedBatchIds = new Set();
+  let batchCatalogReady = false;
+  let batchCatalogRequest = 0;
+  const exportAllBatchesButton = document.getElementById('btn-export-all-batches');
+  const batchCatalogStatus = document.getElementById('batch-catalog-status');
+  const batchCatalogRetry = document.getElementById('batch-catalog-retry');
+  batchCatalogRetry.addEventListener('click', () => loadBatches());
+  let batchBrowser = null;
 
   async function loadBatches() {
+    const request = ++batchCatalogRequest;
+    const pageRefresh = batchBrowser.refresh();
+    batchCatalogReady = false;
+    batchCatalogStatus.hidden = true;
+    batchCatalogRetry.hidden = true;
+    if (exportAllBatchesButton) exportAllBatchesButton.disabled = true;
+    let scopeChanged = false;
     try {
-      const batches = await API.getBatches(projectId);
-      if (!Array.isArray(batches)) throw new Error(batches?.error || 'Unable to load batches.');
-      allBatches = batches;
-      const scopeChanged = populateImageBatchFilter();
-      renderBatches();
-      return scopeChanged;
-    } catch(e) {
-      renderImageBatchFilterError();
-      Notify.error('Failed to load batches', e.message);
-      return false;
+      const catalog = await API.getBatchCatalog(projectId);
+      if (request !== batchCatalogRequest) return false;
+      allBatches = catalog;
+      batchCatalogReady = true;
+      scopeChanged = populateImageBatchFilter();
+      if (exportAllBatchesButton) exportAllBatchesButton.disabled = !allBatches.length;
+      if (scopeChanged) await loadImages();
+    } catch (error) {
+      if (request === batchCatalogRequest) {
+        renderImageBatchFilterError();
+        batchCatalogStatus.textContent = 'Batch choices could not be loaded. Retry to enable Export All and the image batch filter.';
+        batchCatalogStatus.hidden = false;
+        batchCatalogRetry.hidden = false;
+      }
+    } finally {
+      await pageRefresh;
     }
+    return scopeChanged;
   }
-
-  function buildAssignSelect(currentId, batchId, subId) {
-    const collabs = project.collaborators || [];
-    const ownerName = (me.id === project.userId)
-      ? `${me.username} (You)` : (project.ownerUsername || 'Owner');
-    const members = [
-      { userId: project.userId, username: ownerName },
-      ...collabs,
-    ];
-    const opts = [
-      `<option value="">Unassigned</option>`,
-      ...members.map(c =>
-        `<option value="${escHtml(c.userId)}" ${c.userId === currentId ? 'selected' : ''}>${escHtml(c.username)}</option>`
-      )
-    ].join('');
-    const cls  = subId ? 'subbatch-select' : 'batch-assign-select';
-    const attr = subId
-      ? `data-batch-id="${batchId}" data-sub-id="${subId}"`
-      : `data-batch-id="${batchId}"`;
-    return `<select class="${cls}" ${attr}>${opts}</select>`;
-  }
-
-  function getProjectMembers() {
-    const ownerName = (me.id === project.userId)
-      ? `${me.username} (You)` : (project.ownerUsername || 'Owner');
-    return [{ userId: project.userId, username: ownerName }, ...(project.collaborators || [])];
-  }
-
-  function renderBatches() {
-    const list  = document.getElementById('batches-list');
-    const empty = document.getElementById('batches-empty');
-    if (!allBatches.length) { list.innerHTML = ''; empty.style.display = 'block'; return; }
-    empty.style.display = 'none';
-    list.innerHTML = allBatches.map(b => {
-      const members  = getProjectMembers();
-      const assigned = b.assignedTo
-        ? (members.find(c => c.userId === b.assignedTo)?.username || b.assignedUsername || 'Unknown')
-        : null;
-      const subs = (b.subBatches || []);
-      return `
-        <div class="batch-card" id="bc-${escHtml(b.id)}">
-          <div class="batch-header" data-batch-id="${escHtml(b.id)}">
-            <span class="batch-chevron">${LibreFlowIcons.icon('chevronRight')}</span>
-            <span class="batch-name">${escHtml(b.name)}</span>
-            <span class="batch-meta">
-              <span>${b.imageCount} images</span>
-              ${assigned ? `<span class="batch-assigned-chip">${LibreFlowIcons.icon('users')} ${escHtml(assigned)}</span>` : ''}
-            </span>
-            <div class="batch-assign-wrap" onclick="event.stopPropagation()">
-              <label>Assign:</label>
-              ${buildAssignSelect(b.assignedTo, b.id, null)}
-            </div>
-            <div class="batch-actions" onclick="event.stopPropagation()">
-              <button class="btn-batch-action btn-export-batch" data-batch-id="${escHtml(b.id)}" data-batch-name="${escHtml(b.name)}">Export</button>
-              <button class="btn-batch-action btn-split-batch" data-batch-id="${escHtml(b.id)}" data-count="${b.imageCount}">Split</button>
-              <button class="btn-batch-action danger btn-del-batch" data-batch-id="${escHtml(b.id)}">Delete</button>
-            </div>
-          </div>
-          <div class="batch-body">
-            <div class="batch-note-wrap" onclick="event.stopPropagation()">
-              <label class="batch-note-label">Note for assignee</label>
-              <div class="batch-note-row">
-                <textarea class="batch-note-input" data-batch-id="${escHtml(b.id)}" rows="2"
-                  placeholder="Add a message or instructions for the collaborator\u2026">${escHtml(b.note || '')}</textarea>
-                <button class="btn-save-note" data-batch-id="${escHtml(b.id)}">Save</button>
-              </div>
-            </div>
-            ${subs.length === 0
-              ? '<p class="subbatches-empty">No sub-batches \u2014 click Split to divide this batch.</p>'
-              : `<div class="subbatches-list">${subs.map(sb => `
-                  <div class="subbatch-row">
-                    <span class="subbatch-name">${escHtml(sb.name)}</span>
-                    <span class="subbatch-count">${sb.imageIds ? sb.imageIds.length : 0} images</span>
-                    <button class="btn-batch-action btn-export-subbatch btn-export-subbatch--push"
-                      data-batch-id="${escHtml(b.id)}" data-sub-id="${escHtml(sb.id)}" data-sub-name="${escHtml(sb.name)}">Export</button>
-                    <div class="subbatch-assign">
-                      <label>Assign:</label>
-                      ${buildAssignSelect(sb.assignedTo, b.id, sb.id)}
-                    </div>
-                    <div class="subbatch-note-row" onclick="event.stopPropagation()">
-                      <textarea class="subbatch-note-input" data-batch-id="${escHtml(b.id)}" data-sub-id="${escHtml(sb.id)}" rows="1"
-                        placeholder="Note\u2026">${escHtml(sb.note || '')}</textarea>
-                      <button class="btn-save-sub-note" data-batch-id="${escHtml(b.id)}" data-sub-id="${escHtml(sb.id)}">Save</button>
-                    </div>
-                  </div>`).join('')}
-                </div>`}
-          </div>
-        </div>`;
-    }).join('');
-
-    // Restore expanded state from previous render
-    expandedBatchIds.forEach(id => {
-      const card = document.getElementById(`bc-${id}`);
-      if (card) card.classList.add('expanded');
-    });
-
-    // Expand/collapse – track which cards are open
-    list.querySelectorAll('.batch-header').forEach(hdr => {
-      hdr.addEventListener('click', () => {
-        const card    = hdr.closest('.batch-card');
-        const batchId = hdr.dataset.batchId;
-        card.classList.toggle('expanded');
-        if (card.classList.contains('expanded')) expandedBatchIds.add(batchId);
-        else expandedBatchIds.delete(batchId);
-      });
-    });
-
-    // Batch assign select – update in-memory, re-render without full reload
-    list.querySelectorAll('.batch-assign-select').forEach(sel => {
-      sel.addEventListener('change', async () => {
-        const member  = getProjectMembers().find(c => c.userId === sel.value);
-        const updated = await API.patchBatch(sel.dataset.batchId, {
-          assignedTo: sel.value || null,
-          assignedUsername: member?.username || null,
-        });
-        const b = allBatches.find(x => x.id === sel.dataset.batchId);
-        if (b) { b.assignedTo = updated.assignedTo; b.assignedUsername = updated.assignedUsername; }
-        Notify.success('Batch assigned');
-        renderBatches();
-      });
-    });
-
-    // Sub-batch assign select – update in-memory, re-render without full reload
-    list.querySelectorAll('.subbatch-select').forEach(sel => {
-      sel.addEventListener('change', async () => {
-        const member  = getProjectMembers().find(c => c.userId === sel.value);
-        const updated = await API.patchSubBatch(sel.dataset.batchId, sel.dataset.subId, {
-          assignedTo: sel.value || null,
-          assignedUsername: member?.username || null,
-        });
-        const b = allBatches.find(x => x.id === sel.dataset.batchId);
-        if (b) {
-          const sb = (b.subBatches || []).find(s => s.id === sel.dataset.subId);
-          if (sb) { sb.assignedTo = updated.assignedTo; sb.assignedUsername = updated.assignedUsername; }
-        }
-        Notify.success('Sub-batch assigned');
-        renderBatches();
-      });
-    });
-
-    // Batch note save
-    list.querySelectorAll('.btn-save-note').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const textarea = btn.closest('.batch-note-row').querySelector('.batch-note-input');
-        const note = textarea.value.trim();
-        try {
-          await API.patchBatch(btn.dataset.batchId, { note });
-          const b = allBatches.find(x => x.id === btn.dataset.batchId);
-          if (b) b.note = note;
-          btn.textContent = 'Saved';
-          setTimeout(() => { btn.textContent = 'Save'; }, 1500);
-        } catch(err) { Notify.error('Failed to save note', err.message); }
-      });
-    });
-
-    // Sub-batch note save
-    list.querySelectorAll('.btn-save-sub-note').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const textarea = btn.closest('.subbatch-note-row').querySelector('.subbatch-note-input');
-        const note = textarea.value.trim();
-        try {
-          await API.patchSubBatch(btn.dataset.batchId, btn.dataset.subId, { note });
-          btn.textContent = 'Saved';
-          setTimeout(() => { btn.textContent = 'Save'; }, 1500);
-        } catch(err) { Notify.error('Failed to save note', err.message); }
-      });
-    });
-
-    // Export batch buttons
-    list.querySelectorAll('.btn-export-batch').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        openBatchVersions({ batchIds: [btn.dataset.batchId] });
-      });
-    });
-
-    // Export sub-batch buttons
-    list.querySelectorAll('.btn-export-subbatch').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        openBatchVersions({ subBatchIds: [btn.dataset.subId] });
-      });
-    });
-
-    // Split buttons
-    list.querySelectorAll('.btn-split-batch').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openSplitDialog(btn.dataset.batchId, parseInt(btn.dataset.count));
-      });
-    });
-
-    // Delete batch
-    list.querySelectorAll('.btn-del-batch').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const deletedBatchId = btn.dataset.batchId;
-        const selectedScope = imageBatchFilter?.value || '';
-        const deletedScopeSelected = selectedScope === `batch:${deletedBatchId}`
-          || (selectedScope.startsWith('sub:') && (allBatches.find(batch => batch.id === deletedBatchId)?.subBatches || [])
-            .some(sub => `sub:${sub.id}` === selectedScope));
-        try {
-          const result = await API.deleteBatch(deletedBatchId);
-          if (result?.error) throw new Error(result.error);
-          Notify.success('Batch deleted');
-          await loadBatches();
-          if (deletedScopeSelected && imageBatchFilter) {
-            imageBatchFilter.value = '';
-            refreshResourcePicker(imageBatchFilter);
-            imagePage.page = 1;
-            if (imageScroll) imageScroll.scrollTop = 0;
-          }
-          await loadImages({ preserveScroll: true });
-        } catch(err) { Notify.error('Delete failed', err.message); }
-      });
-    });
-  }
-
-  // Split dialog
-  let splitTargetBatchId = null;
-  let splitMaxImages     = 1;
-
-  function openSplitDialog(batchId, imageCount) {
-    splitTargetBatchId = batchId;
-    splitMaxImages     = imageCount || 1;
-    const titleEl = document.getElementById('split-dialog-title');
-    const subEl   = document.getElementById('split-dialog-sub');
-    if (titleEl) titleEl.textContent = 'Split Batch';
-    if (subEl)   subEl.textContent   = `${imageCount} images in this batch.`;
-
-    // Update max attributes and clamp current values
-    const sizeEl  = document.getElementById('split-size');
-    const countEl = document.getElementById('split-count');
-    if (sizeEl)  { sizeEl.max  = imageCount; if (parseInt(sizeEl.value)  > imageCount) sizeEl.value  = imageCount; }
-    if (countEl) { countEl.max = imageCount; if (parseInt(countEl.value) > imageCount) countEl.value = Math.min(parseInt(countEl.value), imageCount); }
-
-    document.getElementById('split-dialog').classList.remove('hidden');
-  }
-
-  // Snap inputs to max while typing
-  document.getElementById('split-size')?.addEventListener('input', function() {
-    if (parseInt(this.value) > splitMaxImages) this.value = splitMaxImages;
-    if (parseInt(this.value) < 1 || isNaN(parseInt(this.value))) this.value = 1;
-  });
-  document.getElementById('split-count')?.addEventListener('input', function() {
-    if (parseInt(this.value) > splitMaxImages) this.value = splitMaxImages;
-    if (parseInt(this.value) < 2 || isNaN(parseInt(this.value))) this.value = 2;
-  });
-
-  document.getElementById('btn-split-cancel')?.addEventListener('click', () => {
-    document.getElementById('split-dialog').classList.add('hidden');
-  });
-
-  document.getElementById('btn-split-confirm')?.addEventListener('click', async () => {
-    const modeEl = document.querySelector('input[name="split-mode"]:checked');
-    const mode   = modeEl ? modeEl.value : 'size';
-    const body   = mode === 'size'
-      ? { subBatchSize:  parseInt(document.getElementById('split-size').value)  }
-      : { subBatchCount: parseInt(document.getElementById('split-count').value) };
-    try {
-      await API.splitBatch(splitTargetBatchId, body);
-      document.getElementById('split-dialog').classList.add('hidden');
-      Notify.success('Batch split');
-      await loadBatches();
-      await loadImages({ preserveScroll: true });
-    } catch(err) { Notify.error('Split failed', err.message); }
-  });
 
   //─── ── COLLABORATORS ────────────────────────────────────────────────────────
   async function loadCollaborators() {
@@ -1449,7 +1201,7 @@
           if (r.error) throw new Error(r.error);
           project.collaborators = r.collaborators;
           renderCollaborators();
-          renderBatches();
+          batchBrowser.refresh();
           Notify.success('Collaborator removed');
         } catch(e) { Notify.error('Remove failed', e.message); }
       });
@@ -1502,5 +1254,16 @@
 
   //─── Init ──────────────────────────────────────────────────────────────────
   await loadProject();
+  if (!project || project.error) return;
+  batchBrowser = LibreFlowBatchBrowser.create({
+    projectId,
+    isOwner: me.id === project.userId,
+    getMembers: () => [{ userId: project.userId, username: project.ownerUsername || (me.id === project.userId ? me.username : 'Owner') }, ...(project.collaborators || [])],
+    onExport: openBatchVersions,
+    onChanged: async ({ imagesChanged = false } = {}) => {
+      const scopeChanged = await loadBatches();
+      if (imagesChanged && !scopeChanged) await loadImages({ preserveScroll: true });
+    },
+  });
   await Promise.all([loadImages(), loadModels(), loadBatches(), loadCollaborators()]);
 })();
