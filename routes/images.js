@@ -10,6 +10,11 @@ const { appendAuditEvent } = require('../lib/audit-log');
 const { dataPath, uploadsDir, readJson: readDataJson } = require('../lib/data-store');
 const { validateArchiveEntries } = require('../lib/archive-safety');
 const { transactionalJson } = require('../lib/transactional-json');
+const {
+  browseProjectImages,
+  ProjectImageQueryError,
+  parseProjectImageQuery,
+} = require('../lib/project-image-browser');
 
 const router = express.Router();
 const DATA_FILE    = dataPath('images.json');
@@ -64,6 +69,39 @@ function canAccessProject(projectId, userId) {
     return p.userId === userId || (p.collaborators || []).some(c => c.userId === userId);
   } catch { return false; }
 }
+
+// ── GET /api/images/browse ───────────────────────────────────────────────────
+// Project-scoped, bounded gallery reads; the legacy endpoint remains available
+// to annotator and export clients that need the complete image list.
+router.get('/browse', (req, res) => {
+  let query;
+  try {
+    // Validate query shape before authorization, but do not read project data
+    // until access has been established.
+    query = parseProjectImageQuery(req.query);
+  } catch (error) {
+    if (error instanceof ProjectImageQueryError) return res.status(400).json({ error: error.message });
+    throw error;
+  }
+
+  if (!canAccessProject(query.projectId, req.session.userId)) {
+    return res.status(403).json({ error: 'No access to this project.' });
+  }
+
+  try {
+    const result = browseProjectImages({
+      query: req.query,
+      images: readImages(),
+      batches: readBatches(),
+    });
+    return res.json(result);
+  } catch (error) {
+    if (error instanceof ProjectImageQueryError || error?.code === 'INVALID_SOURCE_SCOPE') {
+      return res.status(400).json({ error: error.message });
+    }
+    throw error;
+  }
+});
 
 function clampCompressionQuality(raw) {
   const q = Number(raw);

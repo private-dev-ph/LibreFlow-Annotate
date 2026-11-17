@@ -69,6 +69,21 @@ const API = {
   },
 
   // ── Images ────────────────────────────────────────────────────────────────
+  async browseProjectImages(projectId, parameters = {}) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries({ ...parameters, projectId })) {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    }
+    const response = await fetch(`/api/images/browse?${query}`, { credentials: 'include' });
+    const data = await response.json().catch(() => { throw new Error('The image response could not be read. Please retry.'); });
+    if (!response.ok) throw new Error(data.error || `Could not load project images (${response.status}).`);
+    if (!Array.isArray(data.groups) || !data.groups.every(group => Array.isArray(group.items))
+        || !Number.isInteger(data.page) || !Number.isInteger(data.totalPages) || !Number.isInteger(data.total)
+        || !Number.isInteger(data.projectTotal) || !Number.isInteger(data.scopeTotal)) {
+      throw new Error('The image response was invalid. Please retry.');
+    }
+    return data;
+  },
   async getImages(projectId) {
     const r = await fetch(`/api/images?projectId=${projectId}`, { credentials: 'include' });
     return r.json();

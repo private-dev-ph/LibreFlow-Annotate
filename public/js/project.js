@@ -320,100 +320,184 @@
   }
 
   //─── ── IMAGES ─────────────────────────────────────────────────────────────
-  let allImages = [];
+  let imageGroups = [];
   let imageSearchQuery = '';
   let imageSortBy = 'uploadedAt_desc';
   let imageGroupBy = 'none';
+  let imageBrowseLoading = false;
+  let imageBrowseError = '';
+  let imageBrowseRequestSeq = 0;
+  let imageBrowseDebounce = null;
+  let imageBatchFilterLoadFailed = false;
+  const imagePage = { page: 1, pageSize: 24, total: 0, totalPages: 1, projectTotal: 0, scopeTotal: 0 };
 
-  async function loadImages() {
-    try {
-      allImages = await API.getImages(projectId);
-      renderImagesV2();
-    } catch(e) {
-      Notify.error('Failed to load images', e.message);
+  const imageGrid = document.getElementById('images-grid');
+  const imageEmpty = document.getElementById('images-empty');
+  const imageCount = document.getElementById('img-count');
+  const imageSearch = document.getElementById('image-search');
+  const imageSort = document.getElementById('image-sort-by');
+  const imageGroup = document.getElementById('image-group-by');
+  const imageBatchFilter = document.getElementById('image-batch-filter');
+  const imageScroll = document.querySelector('.project-image-scroll');
+  const imageBrowseStatus = document.getElementById('image-browse-status');
+  const imageBrowseRetry = document.getElementById('image-browse-retry');
+  const imagePagePrev = document.getElementById('image-page-prev');
+  const imagePageNext = document.getElementById('image-page-next');
+  const imagePageSize = document.getElementById('image-page-size');
+  const imagePageStatus = document.getElementById('image-page-status');
+
+  function refreshResourcePicker(select) {
+    window.LibreFlowPicker?.refresh?.(select);
+  }
+
+  function imageScopeParams() {
+    const scope = imageBatchFilter?.value || '';
+    const params = {
+      page: imagePage.page,
+      pageSize: imagePage.pageSize,
+      q: imageSearchQuery.trim(),
+      sort: imageSortBy,
+      group: imageGroupBy,
+    };
+    if (scope === 'unbatched') params.unbatched = 'true';
+    else if (scope.startsWith('batch:')) params.batchId = scope.slice(6);
+    else if (scope.startsWith('sub:')) params.subBatchId = scope.slice(4);
+    return params;
+  }
+
+  function hasImageScope() {
+    return Boolean(imageBatchFilter?.value);
+  }
+
+  function setImageBrowseStatus(message = '', { retry = false } = {}) {
+    if (!message && imageBatchFilterLoadFailed) {
+      message = 'Unable to load batches. Retry to refresh this filter.';
+      retry = true;
     }
+    if (imageBrowseStatus) {
+      imageBrowseStatus.textContent = message;
+      imageBrowseStatus.classList.toggle('hidden', !message);
+    }
+    if (imageBrowseRetry) {
+      imageBrowseRetry.hidden = !retry;
+      imageBrowseRetry.disabled = imageBrowseLoading;
+    }
+  }
+
+  function updateImagePagination() {
+    const total = Math.max(0, Number(imagePage.total) || 0);
+    const totalPages = Math.max(1, Number(imagePage.totalPages) || 1);
+    const page = Math.max(1, Number(imagePage.page) || 1);
+    const start = total ? ((page - 1) * imagePage.pageSize) + 1 : 0;
+    const end = total ? Math.min(total, page * imagePage.pageSize) : 0;
+    if (imagePageStatus) {
+      imagePageStatus.textContent = total
+        ? `${start}–${end} of ${total} · Page ${page} of ${totalPages}`
+        : '0 images';
+    }
+    if (imagePagePrev) imagePagePrev.disabled = imageBrowseLoading || page <= 1;
+    if (imagePageNext) imagePageNext.disabled = imageBrowseLoading || page >= totalPages;
+    if (imagePageSize) imagePageSize.disabled = imageBrowseLoading;
+  }
+
+  function renderImageCount() {
+    if (!imageCount) return;
+    const projectTotal = Math.max(0, Number(imagePage.projectTotal) || 0);
+    const scopeTotal = Math.max(0, Number(imagePage.scopeTotal) || 0);
+    const filteredTotal = Math.max(0, Number(imagePage.total) || 0);
+    if (!projectTotal) { imageCount.textContent = ''; return; }
+    const filtered = Boolean(imageSearchQuery.trim());
+    const scoped = hasImageScope();
+    imageCount.textContent = filtered || scoped ? `(${filteredTotal}/${projectTotal})` : `(${projectTotal})`;
+  }
+
+  function imageDateUTC(value) {
+    if (!value) return 'Unknown date';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 'Unknown date' : date.toISOString().slice(0, 10);
+  }
+
+  function imageSummary() {
+    const total = Math.max(0, Number(imagePage.total) || 0);
+    const scopeTotal = Math.max(0, Number(imagePage.scopeTotal) || 0);
+    const projectTotal = Math.max(0, Number(imagePage.projectTotal) || 0);
+    const scopeLabel = imageBatchFilter?.selectedOptions?.[0]?.textContent?.trim() || 'selected scope';
+    if (hasImageScope()) {
+      return imageSearchQuery.trim()
+        ? `${total} matches · ${scopeTotal} images in ${scopeLabel} · ${projectTotal} in project.`
+        : `${scopeTotal} images in ${scopeLabel} · ${projectTotal} in project.`;
+    }
+    if (imageSearchQuery.trim()) return `${total} matches · ${projectTotal} in project.`;
+    return `${projectTotal} ${projectTotal === 1 ? 'image' : 'images'} in project.`;
   }
 
   function renderImages() {
-    const grid  = document.getElementById('images-grid');
-    const empty = document.getElementById('images-empty');
-    const count = document.getElementById('img-count');
-    count.textContent = allImages.length ? `(${allImages.length})` : '';
+    if (!imageGrid || !imageEmpty) return;
+    imageGrid.setAttribute('aria-busy', imageBrowseLoading ? 'true' : 'false');
+    renderImageCount();
+    updateImagePagination();
 
-    if (!allImages.length) {
-      grid.innerHTML = '';
-      empty.style.display = 'block';
+    if (imageBrowseLoading) {
+      imageGrid.innerHTML = '';
+      imageEmpty.style.display = 'none';
       return;
     }
-    empty.style.display = 'none';
-    grid.innerHTML = allImages.map(img => `
-      <div class="img-thumb">
-        <img src="/uploads/${escHtml(img.filename)}" alt="${escHtml(img.originalName)}" loading="lazy" />
-        <button class="img-del" data-id="${escHtml(img.id)}" title="Delete" aria-label="Delete image">${LibreFlowIcons.icon('trash')}</button>
-        <div class="img-name">${escHtml(img.originalName)}</div>
-      </div>
-    `).join('');
-    grid.querySelectorAll('.img-del').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        try {
-          await API.deleteImage(btn.dataset.id);
-          Notify.success('Image deleted');
-          loadImages();
-        } catch(e) {
-          Notify.error('Delete failed', e.message);
-        }
-      });
-    });
-  }
-
-  function renderImagesV2() {
-    const grid  = document.getElementById('images-grid');
-    const empty = document.getElementById('images-empty');
-    const count = document.getElementById('img-count');
-    const filtered = filterImages(allImages, imageSearchQuery);
-    const sorted = sortImages(filtered, imageSortBy);
-    const groups = groupImages(sorted, imageGroupBy);
-    count.textContent = allImages.length ? `(${filtered.length}/${allImages.length})` : '';
-
-    if (!sorted.length) {
-      grid.innerHTML = '';
-      empty.style.display = 'block';
+    const hasItems = imageGroups.some(group => Array.isArray(group.items) && group.items.length);
+    if (!hasItems) {
+      imageGrid.innerHTML = '';
+      imageEmpty.textContent = imageBrowseError
+        ? 'Unable to load images.'
+        : imageSearchQuery.trim()
+          ? 'No images match this search.'
+          : hasImageScope()
+            ? 'No images in this batch scope.'
+            : 'No images yet.';
+      imageEmpty.style.display = imageBrowseError ? 'none' : 'block';
       return;
     }
-    empty.style.display = 'none';
-    grid.innerHTML = groups.map(group => {
-      const cards = group.items.map(img => `
+    imageEmpty.style.display = 'none';
+    imageGrid.innerHTML = imageGroups.map(group => {
+      const items = Array.isArray(group.items) ? group.items : [];
+      const cards = items.map(img => `
         <div class="img-thumb">
-          <div class="img-tag-edit">
-            <input class="img-tag-input" data-id="${escHtml(img.id)}" type="text" value="${escHtml((img.tags && img.tags[0]) || '')}" placeholder="tag" />
-            <button class="img-tag-save" data-id="${escHtml(img.id)}">Save</button>
-          </div>
           <img src="/uploads/${escHtml(img.filename)}" alt="${escHtml(img.originalName)}" loading="lazy" />
           <button class="img-del" data-id="${escHtml(img.id)}" title="Delete" aria-label="Delete image">${LibreFlowIcons.icon('trash')}</button>
-          <div class="img-tags">${(img.tags || []).map(t => `<span class="img-tag-chip">${escHtml(t)}</span>`).join('')}</div>
-          <div class="img-meta">${new Date(img.uploadedAt).toLocaleDateString()} · ${formatBytes(img.size)}</div>
           <div class="img-name">${escHtml(img.originalName)}</div>
+          <div class="img-meta">${imageDateUTC(img.uploadedAt)} · ${formatBytes(img.size)}</div>
+          <div class="img-tags">${(img.tags || []).map(t => `<span class="img-tag-chip">${escHtml(t)}</span>`).join('')}</div>
+          <div class="img-tag-edit">
+            <input class="img-tag-input" data-id="${escHtml(img.id)}" type="text" value="${escHtml((img.tags && img.tags[0]) || '')}" placeholder="tag" aria-label="Tag for ${escHtml(img.originalName)}" />
+            <button class="img-tag-save" data-id="${escHtml(img.id)}">Save</button>
+          </div>
         </div>
       `).join('');
       if (imageGroupBy === 'none') return cards;
-      return `<div class="images-group"><div class="images-group-title">${escHtml(group.label)}</div><div class="images-grid">${cards}</div></div>`;
+      const total = Math.max(0, Number(group.total) || items.length);
+      const offset = Math.max(0, Number(group.offset) || 0);
+      const position = total && items.length
+        ? `<span class="group-position">${offset + 1}–${offset + items.length} of ${total}</span>`
+        : '';
+      return `<div class="images-group"><div class="images-group-title"><span>${escHtml(group.label || group.key || 'Ungrouped')}</span>${position}</div><div class="images-grid">${cards}</div></div>`;
     }).join('');
 
-    grid.querySelectorAll('.img-del').forEach(btn => {
+    imageGrid.querySelectorAll('.img-del').forEach(btn => {
       btn.addEventListener('click', async () => {
         try {
-          await API.deleteImage(btn.dataset.id);
+          await deleteProjectImage(btn.dataset.id);
           Notify.success('Image deleted');
-          loadImages();
+          await Promise.all([
+            loadImages({ preserveScroll: true }),
+            loadBatches(),
+          ]);
         } catch(e) {
           Notify.error('Delete failed', e.message);
         }
       });
     });
-    grid.querySelectorAll('.img-tag-save').forEach(btn => {
+    imageGrid.querySelectorAll('.img-tag-save').forEach(btn => {
       btn.addEventListener('click', async () => saveImageTag(btn.dataset.id));
     });
-    grid.querySelectorAll('.img-tag-input').forEach(inp => {
+    imageGrid.querySelectorAll('.img-tag-input').forEach(inp => {
       inp.addEventListener('keydown', async (e) => {
         if (e.key !== 'Enter') return;
         e.preventDefault();
@@ -422,108 +506,138 @@
     });
   }
 
+  async function deleteProjectImage(imageId) {
+    const response = await fetch(`/api/images/${encodeURIComponent(imageId)}`, {
+      method: 'DELETE', credentials: 'include',
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Failed to delete image.');
+    return data;
+  }
+
+  async function loadImages({ preserveScroll = false } = {}) {
+    const requestSeq = ++imageBrowseRequestSeq;
+    const previousScrollTop = imageScroll?.scrollTop || 0;
+    imageBrowseLoading = true;
+    imageBrowseError = '';
+    imageGroups = [];
+    imagePage.total = 0;
+    imagePage.totalPages = 1;
+    imagePage.projectTotal = 0;
+    imagePage.scopeTotal = 0;
+    renderImages();
+    setImageBrowseStatus('Loading images…');
+    try {
+      const result = await API.browseProjectImages(projectId, imageScopeParams());
+      if (requestSeq !== imageBrowseRequestSeq) return;
+      imageGroups = Array.isArray(result.groups) ? result.groups : [];
+      imagePage.page = Math.max(1, Number(result.page) || 1);
+      imagePage.pageSize = Math.max(1, Number(result.pageSize) || imagePage.pageSize);
+      imagePage.total = Math.max(0, Number(result.total) || 0);
+      imagePage.totalPages = Math.max(1, Number(result.totalPages) || 1);
+      imagePage.projectTotal = Math.max(0, Number(result.projectTotal) || 0);
+      imagePage.scopeTotal = Math.max(0, Number(result.scopeTotal) || 0);
+      renderImages();
+      setImageBrowseStatus(imageBatchFilterLoadFailed ? '' : imageSummary());
+    } catch (e) {
+      if (requestSeq !== imageBrowseRequestSeq) return;
+      imageBrowseError = e?.message || 'Unable to load images.';
+      imageGroups = [];
+      imagePage.total = 0;
+      imagePage.totalPages = 1;
+      renderImages();
+      setImageBrowseStatus(`Unable to load images: ${imageBrowseError}`, { retry: true });
+    } finally {
+      if (requestSeq !== imageBrowseRequestSeq) return;
+      imageBrowseLoading = false;
+      renderImages();
+      if (imageBrowseError) setImageBrowseStatus(`Unable to load images: ${imageBrowseError}`, { retry: true });
+      else {
+        setImageBrowseStatus(imageBatchFilterLoadFailed ? '' : imageSummary());
+        if (preserveScroll && imageScroll) imageScroll.scrollTop = previousScrollTop;
+      }
+    }
+  }
+
+  function scheduleImageBrowse() {
+    if (imageBrowseDebounce) clearTimeout(imageBrowseDebounce);
+    imageBrowseDebounce = null;
+    imagePage.page = 1;
+    if (imageScroll) imageScroll.scrollTop = 0;
+    imageBrowseRequestSeq += 1;
+    imageBrowseLoading = true;
+    imageBrowseError = '';
+    imageGroups = [];
+    renderImages();
+    setImageBrowseStatus('Loading images…');
+    imageBrowseDebounce = setTimeout(() => {
+      imageBrowseDebounce = null;
+      loadImages();
+    }, 250);
+  }
+
+  function requestImageBrowse({ resetPage = false } = {}) {
+    if (imageBrowseDebounce) {
+      clearTimeout(imageBrowseDebounce);
+      imageBrowseDebounce = null;
+    }
+    if (resetPage) {
+      imagePage.page = 1;
+      if (imageScroll) imageScroll.scrollTop = 0;
+    }
+    loadImages();
+  }
+
+  function populateImageBatchFilter() {
+    if (!imageBatchFilter) return false;
+    imageBatchFilterLoadFailed = false;
+    const previous = imageBatchFilter.value;
+    const allLabel = imageBatchFilter.querySelector('option[value=""]')?.textContent || 'All images';
+    const options = [
+      { value: '', label: allLabel },
+      { value: 'unbatched', label: 'Unbatched images' },
+    ];
+    allBatches.forEach(batch => {
+      options.push({ value: `batch:${batch.id}`, label: `Batch: ${batch.name || batch.id}` });
+      (batch.subBatches || []).forEach(sub => {
+        options.push({ value: `sub:${sub.id}`, label: `Sub-batch: ${batch.name || batch.id} / ${sub.name || sub.id}` });
+      });
+    });
+    imageBatchFilter.innerHTML = options.map(option =>
+      `<option value="${escHtml(option.value)}">${escHtml(option.label)}</option>`
+    ).join('');
+    const stillAvailable = options.some(option => option.value === previous);
+    imageBatchFilter.value = stillAvailable ? previous : '';
+    imageBatchFilter.disabled = false;
+    imageBatchFilter.removeAttribute('title');
+    refreshResourcePicker(imageBatchFilter);
+    if (!stillAvailable && previous) {
+      imagePage.page = 1;
+      if (imageScroll) imageScroll.scrollTop = 0;
+    }
+    return !stillAvailable && Boolean(previous);
+  }
+
+  function renderImageBatchFilterError() {
+    if (!imageBatchFilter) return;
+    imageBatchFilterLoadFailed = true;
+    imageBatchFilter.disabled = true;
+    imageBatchFilter.title = 'Unable to load batches. Retry to refresh this filter.';
+    refreshResourcePicker(imageBatchFilter);
+    setImageBrowseStatus('', { retry: true });
+  }
+
   async function saveImageTag(imageId) {
     const input = document.querySelector(`.img-tag-input[data-id="${escHtml(imageId)}"]`);
     if (!input) return;
     const tag = input.value.trim();
     try {
-      const updated = await API.updateImage(imageId, { tags: tag ? [tag] : [] });
-      const target = allImages.find(i => i.id === imageId);
-      if (target) target.tags = updated.tags || (tag ? [tag] : []);
+      await API.updateImage(imageId, { tags: tag ? [tag] : [] });
       Notify.success(tag ? `Tag saved: ${tag}` : 'Tag cleared');
-      renderImagesV2();
+      await loadImages({ preserveScroll: true });
     } catch (e) {
       Notify.error('Failed to save tag', e.message);
     }
-  }
-
-  function tokenizeQuery(query) {
-    const tokens = [];
-    const re = /([a-zA-Z]+):"([^"]*)"|([a-zA-Z]+):(\S+)|"([^"]*)"|(\S+)/g;
-    let match;
-    while ((match = re.exec(query || '')) !== null) {
-      if (match[1]) tokens.push({ field: match[1].toLowerCase(), value: match[2] });
-      else if (match[3]) tokens.push({ field: match[3].toLowerCase(), value: match[4] });
-      else if (match[5]) tokens.push({ field: null, value: match[5] });
-      else if (match[6]) tokens.push({ field: null, value: match[6] });
-    }
-    return tokens;
-  }
-
-  function parseSizeToBytes(raw) {
-    const m = String(raw || '').trim().toLowerCase().match(/^([<>]=?|=)?\s*([\d.]+)\s*(b|kb|mb|gb)?$/);
-    if (!m) return null;
-    const n = Number(m[2]);
-    if (!Number.isFinite(n)) return null;
-    const op = m[1] || '=';
-    const unit = m[3] || 'b';
-    const mult = unit === 'gb' ? 1024 * 1024 * 1024 : unit === 'mb' ? 1024 * 1024 : unit === 'kb' ? 1024 : 1;
-    return { op, bytes: n * mult };
-  }
-
-  function matchesField(img, field, value) {
-    const q = String(value || '').toLowerCase();
-    const name = String(img.originalName || '').toLowerCase();
-    const tags = (img.tags || []).map(t => String(t).toLowerCase());
-    const dateISO = img.uploadedAt ? new Date(img.uploadedAt).toISOString().slice(0, 10) : '';
-    if (!field) {
-      return name.includes(q)
-        || tags.some(t => t.includes(q))
-        || dateISO.includes(q)
-        || formatBytes(img.size).toLowerCase().includes(q);
-    }
-    if (field === 'tag' || field === 'tags') return tags.some(t => t.includes(q));
-    if (field === 'name' || field === 'filename') return name.includes(q);
-    if (field === 'date' || field === 'uploaded' || field === 'uploadedat') return dateISO.includes(q);
-    if (field === 'size') {
-      const parsed = parseSizeToBytes(value);
-      if (!parsed) return formatBytes(img.size).toLowerCase().includes(q);
-      if (parsed.op === '>') return img.size > parsed.bytes;
-      if (parsed.op === '>=') return img.size >= parsed.bytes;
-      if (parsed.op === '<') return img.size < parsed.bytes;
-      if (parsed.op === '<=') return img.size <= parsed.bytes;
-      return Math.abs(img.size - parsed.bytes) < 1024;
-    }
-    return false;
-  }
-
-  function filterImages(images, query) {
-    const tokens = tokenizeQuery(query);
-    if (!tokens.length) return [...images];
-    return images.filter(img => tokens.every(t => matchesField(img, t.field, t.value)));
-  }
-
-  function sortImages(images, mode) {
-    const arr = [...images];
-    const byName = (a, b) => String(a.originalName || '').localeCompare(String(b.originalName || ''), undefined, { sensitivity: 'base' });
-    const byDate = (a, b) => new Date(a.uploadedAt || 0).getTime() - new Date(b.uploadedAt || 0).getTime();
-    const bySize = (a, b) => (a.size || 0) - (b.size || 0);
-    if (mode === 'uploadedAt_asc') arr.sort(byDate);
-    else if (mode === 'uploadedAt_desc') arr.sort((a, b) => byDate(b, a));
-    else if (mode === 'name_asc') arr.sort(byName);
-    else if (mode === 'name_desc') arr.sort((a, b) => byName(b, a));
-    else if (mode === 'size_asc') arr.sort(bySize);
-    else if (mode === 'size_desc') arr.sort((a, b) => bySize(b, a));
-    return arr;
-  }
-
-  function groupImages(images, mode) {
-    if (mode === 'none') return [{ label: '', items: images }];
-    const map = new Map();
-    images.forEach(img => {
-      let key = 'Ungrouped';
-      if (mode === 'tag') key = (img.tags && img.tags[0]) ? img.tags[0] : 'No Tag';
-      if (mode === 'date') key = img.uploadedAt ? new Date(img.uploadedAt).toLocaleDateString() : 'Unknown Date';
-      if (mode === 'size') {
-        if ((img.size || 0) < 500 * 1024) key = '< 500 KB';
-        else if (img.size < 2 * 1024 * 1024) key = '500 KB - 2 MB';
-        else if (img.size < 10 * 1024 * 1024) key = '2 MB - 10 MB';
-        else key = '>= 10 MB';
-      }
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(img);
-    });
-    return [...map.entries()].map(([label, items]) => ({ label, items }));
   }
 
   // Drag-and-drop + click upload
@@ -557,17 +671,41 @@
     handleFiles([...e.dataTransfer.files]);
   });
   fileInput.addEventListener('change', () => handleFiles([...fileInput.files]));
-  document.getElementById('image-search')?.addEventListener('input', e => {
+  imageSearch?.addEventListener('input', e => {
     imageSearchQuery = e.target.value || '';
-    renderImagesV2();
+    scheduleImageBrowse();
   });
-  document.getElementById('image-sort-by')?.addEventListener('change', e => {
+  imageSort?.addEventListener('change', e => {
     imageSortBy = e.target.value || 'uploadedAt_desc';
-    renderImagesV2();
+    requestImageBrowse({ resetPage: true });
   });
-  document.getElementById('image-group-by')?.addEventListener('change', e => {
+  imageGroup?.addEventListener('change', e => {
     imageGroupBy = e.target.value || 'none';
-    renderImagesV2();
+    requestImageBrowse({ resetPage: true });
+  });
+  imageBatchFilter?.addEventListener('change', () => requestImageBrowse({ resetPage: true }));
+  imagePagePrev?.addEventListener('click', () => {
+    if (imagePage.page <= 1 || imageBrowseLoading) return;
+    imagePage.page -= 1;
+    if (imageScroll) imageScroll.scrollTop = 0;
+    loadImages();
+  });
+  imagePageNext?.addEventListener('click', () => {
+    if (imagePage.page >= imagePage.totalPages || imageBrowseLoading) return;
+    imagePage.page += 1;
+    if (imageScroll) imageScroll.scrollTop = 0;
+    loadImages();
+  });
+  imagePageSize?.addEventListener('change', e => {
+    const nextSize = Number(e.target.value);
+    imagePage.pageSize = [24, 48, 96].includes(nextSize) ? nextSize : 24;
+    imagePage.page = 1;
+    if (imageScroll) imageScroll.scrollTop = 0;
+    loadImages();
+  });
+  imageBrowseRetry?.addEventListener('click', async () => {
+    if (imageBatchFilterLoadFailed) await loadBatches();
+    await loadImages();
   });
 
   const btnExportDataset = document.getElementById('btn-export-dataset');
@@ -695,19 +833,6 @@
       syncDatasetImportState();
     }
   });
-  document.getElementById('image-search')?.addEventListener('input', e => {
-    imageSearchQuery = e.target.value || '';
-    renderImagesV2();
-  });
-  document.getElementById('image-sort-by')?.addEventListener('change', e => {
-    imageSortBy = e.target.value || 'uploadedAt_desc';
-    renderImagesV2();
-  });
-  document.getElementById('image-group-by')?.addEventListener('change', e => {
-    imageGroupBy = e.target.value || 'none';
-    renderImagesV2();
-  });
-
   function handleFiles(files) {
     const validFiles = files.filter(f =>
       f.type.startsWith('image/') || /\.zip$/i.test(f.name)
@@ -1011,9 +1136,17 @@
 
   async function loadBatches() {
     try {
-      allBatches = await API.getBatches(projectId);
+      const batches = await API.getBatches(projectId);
+      if (!Array.isArray(batches)) throw new Error(batches?.error || 'Unable to load batches.');
+      allBatches = batches;
+      const scopeChanged = populateImageBatchFilter();
       renderBatches();
-    } catch(e) { Notify.error('Failed to load batches', e.message); }
+      return scopeChanged;
+    } catch(e) {
+      renderImageBatchFilterError();
+      Notify.error('Failed to load batches', e.message);
+      return false;
+    }
   }
 
   function buildAssignSelect(currentId, batchId, subId) {
@@ -1213,10 +1346,23 @@
     list.querySelectorAll('.btn-del-batch').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        const deletedBatchId = btn.dataset.batchId;
+        const selectedScope = imageBatchFilter?.value || '';
+        const deletedScopeSelected = selectedScope === `batch:${deletedBatchId}`
+          || (selectedScope.startsWith('sub:') && (allBatches.find(batch => batch.id === deletedBatchId)?.subBatches || [])
+            .some(sub => `sub:${sub.id}` === selectedScope));
         try {
-          await API.deleteBatch(btn.dataset.batchId);
+          const result = await API.deleteBatch(deletedBatchId);
+          if (result?.error) throw new Error(result.error);
           Notify.success('Batch deleted');
-          loadBatches();
+          await loadBatches();
+          if (deletedScopeSelected && imageBatchFilter) {
+            imageBatchFilter.value = '';
+            refreshResourcePicker(imageBatchFilter);
+            imagePage.page = 1;
+            if (imageScroll) imageScroll.scrollTop = 0;
+          }
+          await loadImages({ preserveScroll: true });
         } catch(err) { Notify.error('Delete failed', err.message); }
       });
     });
@@ -1267,7 +1413,8 @@
       await API.splitBatch(splitTargetBatchId, body);
       document.getElementById('split-dialog').classList.add('hidden');
       Notify.success('Batch split');
-      loadBatches();
+      await loadBatches();
+      await loadImages({ preserveScroll: true });
     } catch(err) { Notify.error('Split failed', err.message); }
   });
 

@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/css/project-versions.css" />
   <link rel="stylesheet" href="/css/version-source.css" />
   <link rel="stylesheet" href="/css/resource-picker.css" />
+  <link rel="stylesheet" href="/css/library-pagination.css" />
 </head>
 <body>
 
@@ -197,25 +198,54 @@
         </div>
         <div class="section-card">
           <h2>Images <span id="img-count" class="section-count"></span></h2>
-          <div class="images-controls">
-            <input type="text" id="image-search" placeholder='Search (e.g. name:panel tag:"component A" size:>1mb date:2026-04-30)' />
-            <select id="image-sort-by">
-              <option value="uploadedAt_desc">Newest Upload</option>
-              <option value="uploadedAt_asc">Oldest Upload</option>
-              <option value="name_asc">Name A-Z</option>
-              <option value="name_desc">Name Z-A</option>
-              <option value="size_desc">Size High-Low</option>
-              <option value="size_asc">Size Low-High</option>
-            </select>
-            <select id="image-group-by">
-              <option value="none">Group: None</option>
-              <option value="tag">Group: Tag</option>
-              <option value="date">Group: Upload Date</option>
-              <option value="size">Group: Size Range</option>
-            </select>
+          <div class="images-controls project-image-controls">
+            <label for="image-search">Search images
+              <input type="search" id="image-search" maxlength="200" placeholder="Search filenames or tags" aria-describedby="image-search-hint" />
+            </label>
+            <label for="image-batch-filter">Batch
+              <select id="image-batch-filter" data-resource-picker="batch" data-picker-label="Batch or sub-batch">
+                <option value="">All images</option>
+                <option value="unbatched">Unbatched images</option>
+              </select>
+            </label>
+            <label for="image-sort-by">Sort images
+              <select id="image-sort-by">
+                <option value="uploadedAt_desc">Newest upload</option>
+                <option value="uploadedAt_asc">Oldest upload</option>
+                <option value="name_asc">Name A–Z</option>
+                <option value="name_desc">Name Z–A</option>
+                <option value="size_desc">Size high–low</option>
+                <option value="size_asc">Size low–high</option>
+              </select>
+            </label>
+            <label for="image-group-by">Group images
+              <select id="image-group-by">
+                <option value="none">No grouping</option>
+                <option value="tag">Tag</option>
+                <option value="date">Upload date (UTC)</option>
+                <option value="size">Size range</option>
+              </select>
+            </label>
           </div>
-          <div id="images-grid" class="images-grid"></div>
-          <div id="images-empty" class="images-empty" style="display:none">No images yet.</div>
+          <p id="image-search-hint" class="project-image-hint">Refine with name:panel, tag:"component A", size:&gt;1mb or date:2026-04-30 (UTC).</p>
+          <p id="image-browse-status" class="library-list-status" role="status" aria-live="polite"></p>
+          <button id="image-browse-retry" class="library-page-button" type="button" hidden>Retry</button>
+          <div class="project-image-scroll" role="region" aria-label="Project images" tabindex="0">
+            <div id="images-grid" class="images-grid" aria-busy="false"></div>
+            <div id="images-empty" class="images-empty" style="display:none">No images yet.</div>
+          </div>
+          <nav class="library-pagination project-image-pagination" aria-label="Project image pages">
+            <button id="image-page-prev" class="library-page-button" type="button">Previous</button>
+            <span id="image-page-status" class="library-page-status" role="status" aria-live="polite">0 images</span>
+            <label for="image-page-size">Images per page
+              <select id="image-page-size">
+                <option value="24">24</option>
+                <option value="48">48</option>
+                <option value="96">96</option>
+              </select>
+            </label>
+            <button id="image-page-next" class="library-page-button" type="button">Next</button>
+          </nav>
         </div>
       </div>
 
