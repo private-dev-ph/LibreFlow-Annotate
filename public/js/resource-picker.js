@@ -24,8 +24,14 @@
   }
 
   function usesRemoteOptions(select) {
-    return providers.has(select) || (['project', 'dataset', 'model'].includes(resourceName(select))
-      && select.getAttribute('data-picker-remote') !== 'false');
+    if (providers.has(select)) return true;
+    const explicit = select.getAttribute('data-picker-remote');
+    if (explicit === 'true') return true;
+    if (explicit === 'false') return false;
+    // Model choices are frequently scoped to a selected project (inference and
+    // annotation flows). Keep those consumer-provided IDs authoritative unless
+    // a page explicitly opts into the global browse endpoint.
+    return ['project', 'dataset'].includes(resourceName(select));
   }
 
   function titleFor(select) {
@@ -255,8 +261,9 @@
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       if (event.target === pickerParts.search) {
-        const first = activeState.page * PAGE_SIZE;
-        const last = Math.min(activeState.filtered.length - 1, first + PAGE_SIZE - 1);
+        const first = activeState.remote ? 0 : activeState.page * PAGE_SIZE;
+        const pageSize = activeState.remote ? REMOTE_PAGE_SIZE : PAGE_SIZE;
+        const last = Math.min(activeState.filtered.length - 1, first + pageSize - 1);
         activeState.activeIndex = event.key === 'ArrowDown' ? first : last;
         renderDialog(activeState);
         const visibleItem = pickerParts.list.querySelector(`[data-lf-resource-index="${activeState.activeIndex}"]`);
@@ -297,7 +304,7 @@
     if (!activeState || !activeState.filtered.length) return;
     const total = activeState.filtered.length;
     activeState.activeIndex = (activeState.activeIndex + delta + total) % total;
-    activeState.page = Math.floor(activeState.activeIndex / PAGE_SIZE);
+    activeState.page = activeState.remote ? 0 : Math.floor(activeState.activeIndex / PAGE_SIZE);
     renderDialog(activeState);
     const item = pickerParts.list.querySelector(`[data-lf-resource-index="${activeState.activeIndex}"]`);
     if (item) item.focus();
@@ -355,13 +362,22 @@
       const value = String(item.value ?? item.id ?? '');
       const text = cleanLabel(item.text || item.name || item.originalName || item.id || 'Untitled');
       const description = cleanLabel(item.description || item.type || '');
-      const meta = resource === 'model'
-        ? cleanLabel([item.projectName, item.status].filter(Boolean).join(' · '))
+      const meta = cleanLabel(item.meta || (resource === 'model'
+        ? [item.projectName, item.status].filter(Boolean).join(' · ')
         : resource === 'dataset'
-          ? cleanLabel([item.imageCount != null ? `${item.imageCount} images` : '', item.sharedWithCollaborators ? 'Shared' : ''].filter(Boolean).join(' · '))
-          : '';
-      return { value, text, description, meta, disabled: false, hidden: false, selected: value === state.select.value };
-    }).filter(item => item.value);
+          ? [item.imageCount != null ? `${item.imageCount} images` : '', item.sharedWithCollaborators ? 'Shared' : ''].filter(Boolean).join(' · ')
+          : ''));
+      return {
+        value,
+        text,
+        description,
+        meta,
+        sentinel: item.sentinel === true,
+        disabled: false,
+        hidden: false,
+        selected: value === state.select.value,
+      };
+    }).filter(item => item.value || item.sentinel);
     if (!Array.isArray(data)) return mapped;
     const filtered = query ? mapped.filter(item => [item.text, item.description, item.meta].join(' ').toLocaleLowerCase().includes(query)) : mapped;
     return filtered.slice(state.page * REMOTE_PAGE_SIZE, (state.page + 1) * REMOTE_PAGE_SIZE);
