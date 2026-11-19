@@ -6,7 +6,7 @@ window.__libreFlowAutomationShell = true;
 
   const state = {
     projects: [], serverJobs: [], connectors: [], webhooks: [], deliveries: [], apiKeys: [],
-    webhookEvents: [], scopes: [], reviewItems: [], reviewPage: 1, reviewPageSize: 25, reviewQuery: '', reviewRequestSequence: 0, lastWebhookSecret: '', lastApiToken: '',
+    webhookEvents: [], scopes: [], reviewItems: [], reviewPage: 1, reviewPageSize: 25, reviewQuery: '', reviewStatus: 'submitted', reviewReviewerId: '', reviewRequestSequence: 0, lastWebhookSecret: '', lastApiToken: '',
     jobsPage: 1, jobsPageSize: 25, jobsQuery: '', jobsStatus: '', jobsType: '', jobsProjectId: '', jobsFrom: '', jobsTo: '', jobsTotal: 0, jobsTotalPages: 1, jobsRunningCount: 0, jobsRequestSequence: 0, jobDetails: null, jobDetailsPage: 1,
   };
   const projectRestrictionState = {
@@ -234,8 +234,30 @@ window.__libreFlowAutomationShell = true;
     renderJobs();
   }
 
+  function registerInferenceModelProvider() {
+    const select = document.getElementById('inference-model');
+    if (!select || !window.LibreFlowPicker?.registerProvider || select.dataset.remoteProvider === 'true') return;
+    window.LibreFlowPicker.registerProvider(select, async ({ query, page, pageSize }) => {
+      const projectId = select.dataset.projectId;
+      if (!projectId) return { items: [], total: 0, page: 1, pageSize, totalPages: 1 };
+      const result = await API.browseProjectModels(projectId, { q: query, page, pageSize, sort: 'name_asc' });
+      return {
+        ...result,
+        items: result.items.map(model => ({
+          id: model.id,
+          text: `${model.name} (${model.format || 'model'})`,
+          description: model.description || '',
+          meta: [model.type, model.format, projectName(projectId)].filter(Boolean).join(' · '),
+        })),
+      };
+    });
+    select.dataset.remoteProvider = 'true';
+  }
+
   async function loadModels(projectId) {
     const select = document.getElementById('inference-model');
+    registerInferenceModelProvider();
+    select.dataset.projectId = projectId || '';
     if (!projectId) {
       select.innerHTML = '<option value="" disabled>Select a project first</option>';
       select.options[0].defaultSelected = true;
@@ -243,19 +265,10 @@ window.__libreFlowAutomationShell = true;
       refreshPicker(select);
       return;
     }
-    const models = await API.getModels(projectId);
-    if (!Array.isArray(models)) throw new Error(models?.error || 'Models response was invalid.');
-    select.innerHTML = '';
     const placeholder = new Option('Select model', '');
     placeholder.disabled = select.required;
     placeholder.defaultSelected = select.required;
-    select.appendChild(placeholder);
-    models.forEach(model => {
-      const option = new Option(`${model.name} (${model.format})`, model.id);
-      if (model.description) option.dataset.description = model.description;
-      option.dataset.meta = [model.type, model.format, projectName(projectId)].filter(Boolean).join(' · ');
-      select.appendChild(option);
-    });
+    select.replaceChildren(placeholder);
     select.value = '';
     refreshPicker(select);
   }
@@ -428,13 +441,20 @@ window.__libreFlowAutomationShell = true;
     const requestSequence = ++state.reviewRequestSequence;
     state.reviewPage = Math.max(1, Number(nextPage) || 1);
     list.setAttribute('aria-busy', 'true');
-    const params = new URLSearchParams({ projectId, status: 'submitted', page: state.reviewPage, pageSize: state.reviewPageSize });
+    const params = new URLSearchParams({ projectId, status: state.reviewStatus, page: state.reviewPage, pageSize: state.reviewPageSize });
     if (state.reviewQuery) params.set('q', state.reviewQuery);
+    if (state.reviewReviewerId) params.set('reviewerId', state.reviewReviewerId);
     const data = await request(`/api/automation/review-queue?${params}`);
     if (requestSequence !== state.reviewRequestSequence) return;
     const page = Array.isArray(data) ? { items: data, total: data.length, page: 1, totalPages: 1 } : data;
     state.reviewItems = page.items || [];
     state.reviewPage = Number(page.page) || state.reviewPage;
+    const reviewerFilter = document.getElementById('review-reviewer');
+    if (reviewerFilter && data.members) {
+      const selected = state.reviewReviewerId;
+      reviewerFilter.replaceChildren(new Option('All reviewers', ''), new Option('Unassigned', 'unassigned'), ...data.members.map(member => new Option(member.username || member.userId, member.userId)));
+      reviewerFilter.value = selected;
+    }
     list.innerHTML = state.reviewItems.length ? state.reviewItems.map(image => `<div class="compact-row"><div class="compact-row-main"><div class="compact-row-title">${esc(image.originalName)}</div><div class="compact-row-meta">${image.autoAnnotation?.annotationCount ?? 0} generated annotation(s) · threshold ${image.autoAnnotation?.confidenceThreshold ?? 'n/a'}</div></div><div class="compact-row-actions"><a class="mini-action secondary" href="/annotator?projectId=${encodeURIComponent(projectId)}&imageId=${encodeURIComponent(image.id)}">Open</a><button class="mini-action" data-review="approved" data-image-id="${esc(image.id)}" type="button">Approve</button><button class="mini-action danger" data-review="changes_requested" data-image-id="${esc(image.id)}" type="button">Request changes</button></div></div>`).join('') : '<p class="muted">Review queue is clear.</p>';
     const pageStatus = document.getElementById('review-page-status');
     if (pageStatus) pageStatus.textContent = page.total ? `Showing ${(state.reviewPage - 1) * state.reviewPageSize + 1}–${Math.min(page.total, state.reviewPage * state.reviewPageSize)} of ${page.total} · Page ${state.reviewPage} of ${page.totalPages}` : 'No review items.';
@@ -478,6 +498,8 @@ window.__libreFlowAutomationShell = true;
   document.getElementById('inference-project').addEventListener('change', event => loadModels(event.target.value).catch(error => toast('error', 'Could not load models', error.message)));
   document.getElementById('review-project').addEventListener('change', () => loadReviewQueue().catch(error => toast('error', 'Review queue failed', error.message)));
   document.getElementById('review-search')?.addEventListener('input', event => { state.reviewQuery = event.target.value.trim(); state.reviewPage = 1; state.reviewRequestSequence += 1; document.getElementById('review-list').innerHTML = '<p class="muted">Loading review queue…</p>'; clearTimeout(window.__automationReviewSearchTimer); window.__automationReviewSearchTimer = setTimeout(() => loadReviewQueue(), 250); });
+  document.getElementById('review-status')?.addEventListener('change', event => { state.reviewStatus = event.target.value; state.reviewPage = 1; loadReviewQueue().catch(error => toast('error', 'Review queue failed', error.message)); });
+  document.getElementById('review-reviewer')?.addEventListener('change', event => { state.reviewReviewerId = event.target.value; state.reviewPage = 1; loadReviewQueue().catch(error => toast('error', 'Review queue failed', error.message)); });
   document.getElementById('review-page-size')?.addEventListener('change', event => { state.reviewPageSize = Number(event.target.value) || 25; state.reviewPage = 1; loadReviewQueue().catch(error => toast('error', 'Review queue failed', error.message)); });
   document.getElementById('review-page-prev')?.addEventListener('click', () => loadReviewQueue(state.reviewPage - 1).catch(error => toast('error', 'Review queue failed', error.message)));
   document.getElementById('review-page-next')?.addEventListener('click', () => loadReviewQueue(state.reviewPage + 1).catch(error => toast('error', 'Review queue failed', error.message)));

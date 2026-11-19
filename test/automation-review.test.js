@@ -100,6 +100,28 @@ test('automation queue reads canonical reviews and preserves image-compatible fi
   assert.equal(readJson(dataFile('images.json'))[0].reviewStatus, 'submitted');
 });
 
+test('automation queue supports optional status and stable reviewer filters', async () => {
+  const assigned = await request('/api/automation/review-queue/review-image', ownerKey, {
+    method: 'PATCH', body: { reviewerId: 'reviewer', status: 'submitted' },
+  });
+  assert.equal(assigned.status, 200);
+
+  const reviewer = await request('/api/automation/review-queue?projectId=review-project&status=&reviewerId=reviewer&page=1&pageSize=25', ownerKey);
+  assert.equal(reviewer.status, 200);
+  assert.equal(reviewer.body.items.length, 1);
+  assert.equal(reviewer.body.items[0].reviewerId, 'reviewer');
+  assert.deepEqual(reviewer.body.statuses, ['unannotated', 'in_progress', 'submitted', 'changes_requested', 'approved']);
+  assert.equal(reviewer.body.members.some(member => member.userId === 'reviewer'), true);
+
+  const unassigned = await request('/api/automation/review-queue?projectId=review-project&status=&reviewerId=unassigned&page=1&pageSize=25', ownerKey);
+  assert.equal(unassigned.status, 200);
+  assert.equal(unassigned.body.items.length, 0);
+
+  const approved = await request('/api/automation/review-queue?projectId=review-project&status=approved&page=1&pageSize=25', ownerKey);
+  assert.equal(approved.status, 200);
+  assert.equal(approved.body.items.length, 0);
+});
+
 test('automation queue applies canonical decisions, assignment, audits, and rejection reasons', async () => {
   const directApproval = await request('/api/automation/review-queue/review-image', ownerKey, {
     method: 'PATCH', body: { status: 'approved' },

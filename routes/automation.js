@@ -122,6 +122,16 @@ function automationReviewRow(image, review) {
   };
 }
 
+function automationReviewMembers(project) {
+  const owner = projectMember(project, project?.userId);
+  const collaborators = (project?.collaborators || []).map(member => ({
+    userId: member.userId,
+    username: member.username || member.userId,
+    role: 'collaborator',
+  }));
+  return [owner, ...collaborators].filter(Boolean);
+}
+
 function authorizeProject(req, res, projectId) {
   if (!projectId) {
     res.status(400).json({ error: 'projectId is required.' });
@@ -361,19 +371,24 @@ router.post('/ingest/folder', requireScopes('jobs:write', 'ingest:write'), (req,
 router.get('/review-queue', requireScopes('projects:read'), (req, res) => {
   const projectId = req.query.projectId;
   if (!authorizeProject(req, res, projectId)) return;
-  const status = req.query.status || 'submitted';
+  const hasStatusFilter = Object.prototype.hasOwnProperty.call(req.query, 'status');
+  const requestedStatus = hasStatusFilter ? req.query.status : 'submitted';
+  const status = requestedStatus === '' || requestedStatus === 'all' ? '' : requestedStatus;
   if (status && !REVIEW_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid review status.' });
   let browseQuery;
   try { browseQuery = parseReviewBrowseQuery(req.query); } catch (error) {
     if (error instanceof ReviewBrowserQueryError) return res.status(400).json({ error: error.message });
     throw error;
   }
-  const rows = projectReviewRows(projectId)
+  const allRows = projectReviewRows(projectId);
+  const counts = Object.fromEntries(REVIEW_STATUSES.map(value => [value, 0]));
+  allRows.forEach(({ review }) => { counts[review.status] += 1; });
+  const rows = allRows
     .filter(({ review }) => !status || review.status === status)
     .map(({ image, review }) => automationReviewRow(image, review));
   const page = browseReviewRows(rows, browseQuery);
   const paged = Object.prototype.hasOwnProperty.call(req.query, 'page') || Object.prototype.hasOwnProperty.call(req.query, 'pageSize') || Object.prototype.hasOwnProperty.call(req.query, 'q') || Object.prototype.hasOwnProperty.call(req.query, 'reviewerId');
-  res.json(paged ? page : rows);
+  res.json(paged ? { ...page, statuses: REVIEW_STATUSES, counts, members: automationReviewMembers(getProject(projectId)) } : rows);
 });
 
 router.patch('/review-queue/:imageId', requireScopes('annotations:write'), (req, res) => {
