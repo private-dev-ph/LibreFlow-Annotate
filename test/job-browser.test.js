@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { browseJobs, parseJobBrowseQuery } = require('../lib/job-browser');
+const { publicJob } = require('../lib/job-runner');
 
 function jobs(count) {
   return Array.from({ length: count }, (_, index) => ({ id: `job-${String(index).padStart(3, '0')}`, name: index % 2 ? 'Image import' : 'Batch inference', projectId: index % 3 ? 'project-a' : 'project-b', type: index % 2 ? 'url_ingestion' : 'batch_inference', status: index % 5 === 0 ? 'running' : 'completed', createdAt: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString() }));
@@ -20,4 +21,9 @@ test('job browse filters fields and keeps stable date ordering', () => {
 test('job browse query clamps page size and validates dates', () => {
   assert.equal(parseJobBrowseQuery({ page: '2', pageSize: '500' }).pageSize, 100);
   assert.throws(() => parseJobBrowseQuery({ from: 'not-a-date' }), /Invalid from date/);
+});
+
+test('job list summaries do not include full item arrays', () => {
+  const summary = publicJob({ id: 'job-1', type: 'batch_inference', name: 'Batch', projectId: 'project-a', status: 'running', items: [{ id: 'item-1', status: 'pending' }] }, { includeItems: false });
+  assert.equal(Object.hasOwn(summary, 'items'), false);
 });

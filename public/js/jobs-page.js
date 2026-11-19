@@ -1,8 +1,10 @@
 // Persistent automation jobs and integration management.
 window.__libreFlowAutomationShell = true;
 (async () => {
-  const me = await API.getMe();
-  if (!me) { window.location.href = '/login'; return; }
+  const testMode = Boolean(window.__LIBREFLOW_JOBS_PAGE_TEST__);
+  const meResponse = await API.getMe();
+  if (!meResponse && !testMode) { window.location.href = '/login'; return; }
+  const me = meResponse || { username: 'browser-test' };
 
   const state = {
     projects: [], serverJobs: [], connectors: [], webhooks: [], deliveries: [], apiKeys: [],
@@ -257,6 +259,12 @@ window.__libreFlowAutomationShell = true;
       ${details.length ? `<ul class="job-details-list">${details.map(item => `<li class="job-details-item"><span class="job-details-item-status">${esc(item.status || 'pending')}</span>${esc(item.originalName || item.imageId || item.id || 'Untitled item')}${item.error ? `<span class="job-details-item-error">${esc(item.error)}</span>` : ''}</li>`).join('')}</ul>${allItems.length > pageSize ? `<div class="job-details-pagination"><button class="mini-action secondary" data-job-items-prev type="button" ${state.jobDetailsPage <= 1 ? 'disabled' : ''}>Previous</button><span>Page ${state.jobDetailsPage} of ${totalPages}</span><button class="mini-action secondary" data-job-items-next type="button" ${state.jobDetailsPage >= totalPages ? 'disabled' : ''}>Next</button></div>` : ''}` : '<p class="job-details-empty">No item details are available for this job.</p>'}`;
   }
 
+  function handleJobItemPageAction(button) {
+    if (button.hasAttribute('data-job-items-prev')) { state.jobDetailsPage -= 1; renderJobDetails(); return true; }
+    if (button.hasAttribute('data-job-items-next')) { state.jobDetailsPage += 1; renderJobDetails(); return true; }
+    return false;
+  }
+
   function showJobDetails(job, trigger) {
     const modal = document.getElementById('job-details-modal');
     state.jobDetails = job;
@@ -266,6 +274,20 @@ window.__libreFlowAutomationShell = true;
     modal.hidden = false;
     modal.addEventListener('keydown', trapJobDetailsFocus);
     document.getElementById('job-details-close').focus();
+  }
+
+  if (testMode) {
+    document.addEventListener('click', event => {
+      const button = event.target.closest('button');
+      if (button) handleJobItemPageAction(button);
+    });
+    window.__LibreFlowJobsPageTest = {
+      open(job) { state.jobDetails = job; state.jobDetailsPage = 1; renderJobDetails(); },
+      click(selector) { return handleJobItemPageAction(document.querySelector(selector)); },
+      page() { return state.jobDetailsPage; },
+      itemNames() { return [...document.querySelectorAll('.job-details-item')].map(item => item.textContent.trim()); },
+    };
+    return;
   }
 
   function renderIngestionStatus(status) {
@@ -487,8 +509,7 @@ window.__libreFlowAutomationShell = true;
       else if (button.dataset.jobDetails) {
         const job = await request(`/api/automation/jobs/${button.dataset.jobDetails}`);
         showJobDetails(job, button);
-      } else if (button.dataset.jobItemsPrev) { state.jobDetailsPage -= 1; renderJobDetails(); return; }
-      else if (button.dataset.jobItemsNext) { state.jobDetailsPage += 1; renderJobDetails(); return; }
+      } else if (handleJobItemPageAction(button)) return;
       else if (button.dataset.connectorScan) { await request(`/api/automation/connectors/${button.dataset.connectorScan}/scan`, { method: 'POST' }); toast('success', 'Folder scan queued'); }
       else if (button.dataset.connectorStatus) window.alert(JSON.stringify(await request(`/api/automation/connectors/${button.dataset.connectorStatus}/status`), null, 2));
       else if (button.dataset.connectorDelete) { if (window.confirm('Delete this connector?')) await request(`/api/automation/connectors/${button.dataset.connectorDelete}`, { method: 'DELETE' }); else return; }
