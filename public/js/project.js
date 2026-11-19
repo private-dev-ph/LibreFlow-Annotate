@@ -1255,14 +1255,6 @@
   }
 
   //─── ── COLLABORATORS ────────────────────────────────────────────────────────
-  async function loadCollaborators() {
-    try {
-      const projects = await API.getProjects();
-      const p = projects.find(pr => pr.id === projectId);
-      if (p) { project = p; renderCollaborators(); }
-    } catch(e) { Notify.error('Failed to load collaborators', e.message); }
-  }
-
   function renderCollaborators() {
     const list  = document.getElementById('collab-list');
     const empty = document.getElementById('collab-empty');
@@ -1350,5 +1342,6 @@
       if (imagesChanged && !scopeChanged) await loadImages({ preserveScroll: true });
     },
   });
-  await Promise.all([loadImages(), loadModels(), loadBatches(), loadCollaborators()]);
+  if (project) renderCollaborators();
+  await Promise.all([loadImages(), loadModels(), loadBatches()]);
 })();

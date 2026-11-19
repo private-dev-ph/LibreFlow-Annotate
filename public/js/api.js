@@ -334,12 +334,14 @@ const API = {
     const r = await fetch(`/api/notifications/${id}/read`, {
       method: 'PATCH', credentials: 'include',
     });
+    if (!r.ok) throw new Error('Could not mark notifications as read.');
     return r.json();
   },
   async markAllNotificationsRead() {
     const r = await fetch('/api/notifications/read-all', {
       method: 'POST', credentials: 'include',
     });
+    if (!r.ok) throw new Error('Could not mark notifications as read.');
     return r.json();
   },
 
