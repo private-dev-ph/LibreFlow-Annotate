@@ -1140,7 +1140,7 @@
 
       function updateSliders() {
         lastModelId = sel.value;   // remember across navigation
-        const type = modelTypeMap[sel.value] || '';
+        const type = selectedProjectModel()?.type || modelTypeMap[sel.value] || '';
         const rowDet  = document.getElementById('slider-row-detection');
         const rowBias = document.getElementById('slider-row-bias');
         if (rowDet)  rowDet.style.display  = (type === 'detection')      ? '' : 'none';
