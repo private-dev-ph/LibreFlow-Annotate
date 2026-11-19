@@ -18,11 +18,11 @@ The companion and browser checks use a separate pinned test environment:
 python -m pip install -r py_scripts/requirements-test.txt
 python -m pip install pip-audit==2.9.0
 pip-audit -r py_scripts/requirements-companion.txt -r py_scripts/requirements-test.txt
-python -m unittest discover -s py_scripts -p 'test_companion*.py' -v
+python -m unittest discover -s scripts/tests/python -p 'test_companion*.py' -v
 python -m playwright install chromium
-python scripts/test_web_browser.py
+python scripts/tests/test_web_browser.py
 bash scripts/build-companion-worker.sh
-python scripts/test_companion_browser.py
+python scripts/tests/test_companion_browser.py
 ```
 
 The browser test uses `CHROMIUM_EXECUTABLE` when set and otherwise uses `/usr/bin/chromium` if present, falling back to the Playwright-managed Chromium installation. CI installs Playwright's Chromium and required system libraries before running it. Python syntax validation covers repository Python files while excluding virtual environments, generated output, and dependency directories.

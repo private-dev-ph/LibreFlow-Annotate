@@ -37,7 +37,7 @@ npm run check:web
 
 `build:web` only creates the standalone static artifact in `dist/web`; it does not build or restart Docker. The hosted workspace includes the same local icon assets.
 
-The Windows baseline before this UI change had 107 passing tests and two failures: a POSIX file-mode assertion in `test/secret-migration.test.js` and a symlink-privilege failure in `test/web-migration.test.mjs`. Keep those platform limitations distinct from UI regressions.
+The Windows baseline before this UI change had 107 passing tests and two failures: a POSIX file-mode assertion in `scripts/tests/secret-migration.test.js` and a symlink-privilege failure in `scripts/tests/web-migration.test.mjs`. Keep those platform limitations distinct from UI regressions.
 
 ## Verification on November 4, 2026
 

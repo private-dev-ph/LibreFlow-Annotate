@@ -71,24 +71,24 @@ jobs:
           PY
 
       - name: Test inference companion
-        run: python -m unittest discover -s py_scripts -p 'test_companion*.py' -v
+        run: python -m unittest discover -s scripts/tests/python -p 'test_companion*.py' -v
 
       - name: Install Playwright Chromium
         run: python -m playwright install --with-deps chromium
 
       - name: Test static web app in Chromium
-        run: python scripts/test_web_browser.py
+        run: python scripts/tests/test_web_browser.py
 
       - name: Verify read-only static container
         run: |
           docker build -f Dockerfile.web -t libreflow-web:development .
-          bash scripts/test-static-container.sh
+          bash scripts/tests/test-static-container.sh
 
       - name: Build isolated companion worker
         run: bash scripts/build-companion-worker.sh
 
       - name: Verify HTTPS companion inference and privacy
-        run: python scripts/test_companion_browser.py
+        run: python scripts/tests/test_companion_browser.py
 
       - name: Scan for secrets with Gitleaks
         run: bash scripts/run-secret-scan.sh

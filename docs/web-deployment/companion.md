@@ -40,5 +40,5 @@ Run the offline companion and worker tests with the checkout's Python environmen
 
 ```sh
 cd py_scripts
-.venv/bin/python -m unittest discover -p 'test_companion*.py'
+.venv/bin/python -m unittest discover -s ../scripts/tests/python -p 'test_companion*.py'
 ```

@@ -12,9 +12,9 @@
     "dev": "node --watch server.js",
     "cli": "node bin/libreflow.js",
     "db:migrate": "node db/migrate.js",
-    "test": "node --test",
+    "test": "node --test \"scripts/tests/**/*.test.*\"",
     "build:web": "node scripts/build-web.js",
-    "test:web": "node --test test/web-*.test.*",
+    "test:web": "node --test \"scripts/tests/web-*.test.*\"",
     "check:web": "node scripts/check-web-security.js"
   },
   "keywords": [
