@@ -1,11 +1,11 @@
 // api.js – thin wrapper around fetch for the REST API
 
-async function fetchLibraryPage(resource, parameters = {}) {
+async function fetchLibraryPage(resource, parameters = {}, route = resource + '/browse') {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(parameters)) {
     if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
   }
-  const response = await fetch(`/api/${resource}/browse?${query}`, { credentials: 'include' });
+  const response = await fetch(`/api/${route}?${query}`, { credentials: 'include' });
   const data = await response.json().catch(() => { throw new Error('The library response could not be read. Please retry.'); });
   if (!response.ok) throw new Error(data.error || `Could not load ${resource} (${response.status}).`);
   if (!Array.isArray(data.items) || !Number.isInteger(data.page) || !Number.isInteger(data.totalPages) || !Number.isInteger(data.total)) {
@@ -362,7 +362,7 @@ const API = {
   },
   browseModels(parameters = {}) { return fetchLibraryPage('models', parameters); },
   browseProjectModels(projectId, parameters = {}) {
-    return fetchLibraryPage('models/project-browse', { ...parameters, projectId });
+    return fetchLibraryPage('models', { ...parameters, projectId }, 'models/project-browse');
   },
 
   // ── Datasets ─────────────────────────────────────────────────────────────
