@@ -93,6 +93,7 @@ router.get('/browse', (req, res) => {
       query: req.query,
       images: readImages(),
       batches: readBatches(),
+      assignedUserId: query.assigned === 'me' ? req.session.userId : undefined,
     });
     return res.json(result);
   } catch (error) {

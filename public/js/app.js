@@ -34,6 +34,9 @@
   let imageSearchQuery = '';
   let imageRenderLimit = 120;
   let imageLoadGeneration = 0;
+  let imageBrowseState = { page: 1, pageSize: 100, total: 0, totalPages: 1 };
+  let imageWindowOffset = 0;
+  let imageAssignedIds = new Set();
   let autoSaveEnabled = localStorage.getItem('annotator_autosave') === 'true';
   let tilingUI = null;
   let inferenceRunning = false;
@@ -207,35 +210,67 @@
   });
 
   // -- Image list -------------------------------------------------------------
-  async function loadImages() {
-    const generation = ++imageLoadGeneration;
-    const batches = await API.getBatches(projectId);
-    const allProjectImages = [];
-    if (typeof API.browseProjectImages === 'function') {
-      const firstPage = await API.browseProjectImages(projectId, { page: 1, pageSize: 100, sort: 'uploadedAt_asc', group: 'none' });
-      allProjectImages.push(...firstPage.groups.flatMap(group => group.items));
-      for (let page = 2; page <= firstPage.totalPages; page += 1) {
-        const next = await API.browseProjectImages(projectId, { page, pageSize: 100, sort: 'uploadedAt_asc', group: 'none' });
-        if (generation !== imageLoadGeneration) return;
-        allProjectImages.push(...next.groups.flatMap(group => group.items));
-      }
-    } else {
-      allProjectImages.push(...await API.getImages(projectId));
-    }
-    const assignedIds = new Set();
-    batches.forEach(batch => {
-      const mySubs = (batch.subBatches || []).filter(sb => sb.assignedTo === me.id);
-      if (mySubs.length > 0) mySubs.forEach(sb => (sb.imageIds||[]).forEach(id => assignedIds.add(id)));
-      else if (batch.assignedTo === me.id) (batch.imageIds||[]).forEach(id => assignedIds.add(id));
-    });
-    images = assignedIds.size > 0
-      ? allProjectImages.filter(img => assignedIds.has(img.id))
-      : allProjectImages;
-    imageCountEl.textContent = images.filter(i => i.annotated).length + '/' + images.length;
+  function imageBrowseParams(extra = {}) {
+    return {
+      pageSize: 100,
+      sort: 'uploadedAt_asc',
+      group: 'none',
+      q: imageSearchQuery,
+      status: imageStatusFilter,
+      assigned: 'me',
+      ...extra,
+    };
+  }
+
+  function applyImageBrowseResult(result, generation = imageLoadGeneration) {
+    if (generation !== imageLoadGeneration) return false;
+    const pageImages = result.groups.flatMap(group => group.items);
+    images = imageAssignedIds.size > 0
+      ? pageImages.filter(img => imageAssignedIds.has(img.id))
+      : pageImages;
+    imageBrowseState = {
+      ...result,
+      page: result.page,
+      pageSize: result.pageSize,
+      total: result.total,
+      totalPages: result.totalPages,
+    };
+    imageWindowOffset = (result.page - 1) * result.pageSize;
     renderImageList();
+    return true;
+  }
+
+  async function loadImagePage(page, generation = imageLoadGeneration) {
+    if (typeof API.browseProjectImages !== 'function') return false;
+    const result = await API.browseProjectImages(projectId, imageBrowseParams({ page }));
+    return applyImageBrowseResult(result, generation);
+  }
+
+  async function loadImages({ preserveImageId } = {}) {
+    const generation = ++imageLoadGeneration;
+    imageAssignedIds = new Set();
+    if (typeof API.browseProjectImages === 'function') {
+      const requestedImageId = preserveImageId || new URLSearchParams(location.search).get('imageId') || undefined;
+      const result = await API.browseProjectImages(projectId, imageBrowseParams({ page: 1, ...(requestedImageId ? { imageId: requestedImageId } : {}) }));
+      if (!applyImageBrowseResult(result, generation)) return;
+    } else {
+      const batches = await API.getBatches(projectId);
+      batches.forEach(batch => {
+        const mySubs = (batch.subBatches || []).filter(sb => sb.assignedTo === me.id);
+        if (mySubs.length > 0) mySubs.forEach(sb => (sb.imageIds||[]).forEach(id => imageAssignedIds.add(id)));
+        else if (batch.assignedTo === me.id) (batch.imageIds||[]).forEach(id => imageAssignedIds.add(id));
+      });
+      const allProjectImages = await API.getImages(projectId);
+      if (generation !== imageLoadGeneration) return;
+      images = imageAssignedIds.size > 0 ? allProjectImages.filter(img => imageAssignedIds.has(img.id)) : allProjectImages;
+      imageBrowseState = { page: 1, pageSize: images.length || 1, total: images.length, totalPages: 1 };
+      imageWindowOffset = 0;
+      renderImageList();
+    }
     if (images.length > 0) {
       const requestedImageId = new URLSearchParams(location.search).get('imageId');
-      const requestedIndex = images.findIndex(image => image.id === requestedImageId);
+      const targetId = preserveImageId || requestedImageId;
+      const requestedIndex = targetId ? images.findIndex(image => image.id === targetId) : -1;
       await loadImage(requestedIndex >= 0 ? requestedIndex : 0);
     }
     else { canvasEmpty.classList.remove('hidden'); imageNavLabel.textContent = '-- / --'; }
@@ -250,7 +285,10 @@
 
   function renderImageList() {
     imagesList.innerHTML = '';
-    imageCountEl.textContent = images.filter(i => i.annotated).length + '/' + images.length;
+    const annotatedTotal = Number.isInteger(imageBrowseState.scopeAnnotatedTotal)
+      ? imageBrowseState.scopeAnnotatedTotal : images.filter(i => i.annotated && !i.isNull).length;
+    const scopeTotal = Number.isInteger(imageBrowseState.scopeTotal) ? imageBrowseState.scopeTotal : images.length;
+    imageCountEl.textContent = annotatedTotal + '/' + scopeTotal;
     imagesList.className = 'images-list-' + viewMode;
 
     const visibleImages = images.map((img, idx) => ({ img, idx })).filter(({ img }) => {
@@ -309,12 +347,14 @@
     imageStatusSelect.addEventListener('change', () => {
       imageStatusFilter = imageStatusSelect.value;
       localStorage.setItem('annotator_status_filter', imageStatusFilter);
-      renderImageList();
+      return loadImages({ preserveImageId: images[currentIndex]?.id });
     });
   }
+  let imageSearchTimer;
   document.getElementById('annotator-image-search')?.addEventListener('input', e => {
     imageSearchQuery = e.target.value || '';
-    renderImageList();
+    clearTimeout(imageSearchTimer);
+    imageSearchTimer = setTimeout(() => void loadImages({ preserveImageId: images[currentIndex]?.id }), 180);
   });
 
   function esc(s) { return String(s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -370,12 +410,15 @@
     });
     unsaved = false;
     saveIndicator.classList.remove('show');
-    imageNavLabel.textContent = `${idx + 1} / ${images.length}`;
+    const globalIndex = imageWindowOffset + idx;
+    imageNavLabel.textContent = `${globalIndex + 1} / ${imageBrowseState.total || images.length}`;
     const mobileImageName = document.getElementById('mobile-image-name');
     mobileImageName.textContent = img.originalName;
     mobileImageName.title = img.originalName;
-    document.getElementById('btn-prev-img').disabled = idx === 0;
-    document.getElementById('btn-next-img').disabled = idx === images.length - 1;
+    document.getElementById('btn-prev-img').disabled = imageWindowOffset === 0 && idx === 0;
+    document.getElementById('btn-next-img').disabled = imageBrowseState.total
+      ? globalIndex >= imageBrowseState.total - 1
+      : idx === images.length - 1;
     updateNullButton(img);
     if (imageTagInput) imageTagInput.value = (img.tags && img.tags[0]) ? img.tags[0] : '';
     updateImageListSelection();
@@ -587,7 +630,9 @@
   }
 
   async function navigateTo(idx) {
-    if (idx < 0 || idx >= images.length || idx === currentIndex) return;
+    const crossingPreviousPage = idx < 0 && imageBrowseState.page > 1 && typeof API.browseProjectImages === 'function';
+    const crossingNextPage = idx >= images.length && imageBrowseState.page < imageBrowseState.totalPages && typeof API.browseProjectImages === 'function';
+    if ((!crossingPreviousPage && !crossingNextPage && (idx < 0 || idx >= images.length || idx === currentIndex))) return;
     if (currentIndex >= 0 && pendingNullMutations.has(images[currentIndex].id)) {
       showToast('Finish the null-image update before navigating.', 'warn');
       return;
@@ -599,6 +644,16 @@
       }
       catch (e) { showToast(e.message || 'Auto-save failed.', 'warn'); return; }
     } else if (unsaved && !confirm('Unsaved changes - leave anyway?')) return;
+    if (crossingPreviousPage) {
+      await loadImagePage(imageBrowseState.page - 1);
+      if (images.length > 0) await loadImage(images.length - 1);
+      return;
+    }
+    if (crossingNextPage) {
+      await loadImagePage(imageBrowseState.page + 1);
+      if (images.length > 0) await loadImage(0);
+      return;
+    }
     await loadImage(idx);
   }
 
@@ -646,7 +701,8 @@
     try {
       const saved = await saveAnnotations();
       if (!saved) return;
-      if (currentIndex < images.length - 1) await loadImage(currentIndex + 1);
+      if (currentIndex < images.length - 1) await navigateTo(currentIndex + 1);
+      else if (imageBrowseState.page < imageBrowseState.totalPages) await navigateTo(currentIndex + 1);
     } catch (e) { showToast(e.message || 'Save failed.', 'warn'); }
   });
 
@@ -1075,11 +1131,9 @@
 
   // -- Image navigation -------------------------------------------------------
   document.getElementById('btn-prev-img').addEventListener('click', async () => {
-    if (currentIndex <= 0) return;
     await navigateTo(currentIndex - 1);
   });
   document.getElementById('btn-next-img').addEventListener('click', async () => {
-    if (currentIndex >= images.length - 1) return;
     await navigateTo(currentIndex + 1);
   });
 

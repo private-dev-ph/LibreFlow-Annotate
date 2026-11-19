@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const express = require('express');
+const { browseProjectImages } = require('../lib/project-image-browser');
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'libreflow-project-image-browser-'));
 const dataDir = path.join(tempRoot, 'data');
@@ -94,4 +95,44 @@ test('project browse rejects strict query errors, foreign scopes, and non-member
   const legacy = await fetch(`${base}/api/images?projectId=project-a`, { headers: { 'x-test-user': 'owner' } });
   assert.equal(legacy.status, 200);
   assert.ok(Array.isArray(await legacy.json()));
+});
+
+test('project browse keeps assigned pagination bounded and resolves off-page status/deeplinks', () => {
+  const images = Array.from({ length: 205 }, (_, index) => ({
+    id: `image-${index}`,
+    projectId: 'large-project',
+    filename: `image-${index}.jpg`,
+    originalName: `Image ${index}`,
+    uploadedAt: `2026-01-${String((index % 28) + 1).padStart(2, '0')}T00:00:00Z`,
+    annotated: index % 3 === 0,
+    isNull: index % 17 === 0,
+  }));
+  const batches = [{
+    id: 'assigned-batch', projectId: 'large-project', assignedTo: 'reviewer', imageIds: ['image-150', 'image-151'], subBatches: [],
+  }];
+  const page = browseProjectImages({
+    query: { projectId: 'large-project', page: '1', pageSize: '100', sort: 'uploadedAt_asc', group: 'none', assigned: 'me' },
+    images,
+    batches,
+    assignedUserId: 'reviewer',
+  });
+  assert.equal(page.total, 2);
+  assert.deepEqual(page.groups.flatMap(group => group.items.map(item => item.id)), ['image-150', 'image-151']);
+
+  const deeplink = browseProjectImages({
+    query: { projectId: 'large-project', imageId: 'image-150', pageSize: '100', sort: 'uploadedAt_asc', group: 'none', assigned: 'me' },
+    images,
+    batches,
+    assignedUserId: 'reviewer',
+  });
+  assert.equal(deeplink.page, 1);
+  assert.equal(deeplink.requestedIndex, 0);
+
+  const nulls = browseProjectImages({
+    query: { projectId: 'large-project', page: '1', pageSize: '100', sort: 'uploadedAt_asc', group: 'none', status: 'null' },
+    images,
+    batches: [],
+  });
+  assert.equal(nulls.total, 13);
+  assert.equal(nulls.scopeNullTotal, 13);
 });
