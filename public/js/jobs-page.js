@@ -1,15 +1,16 @@
 // Persistent automation jobs and integration management.
 window.__libreFlowAutomationShell = true;
 (async () => {
-  const testMode = Boolean(window.__LIBREFLOW_JOBS_PAGE_TEST__);
-  const meResponse = await API.getMe();
-  if (!meResponse && !testMode) { window.location.href = '/login'; return; }
-  const me = meResponse || { username: 'browser-test' };
+  const me = await API.getMe();
+  if (!me) { window.location.href = '/login'; return; }
 
   const state = {
     projects: [], serverJobs: [], connectors: [], webhooks: [], deliveries: [], apiKeys: [],
     webhookEvents: [], scopes: [], reviewItems: [], reviewPage: 1, reviewPageSize: 25, reviewQuery: '', reviewRequestSequence: 0, lastWebhookSecret: '', lastApiToken: '',
     jobsPage: 1, jobsPageSize: 25, jobsQuery: '', jobsStatus: '', jobsType: '', jobsProjectId: '', jobsFrom: '', jobsTo: '', jobsTotal: 0, jobsTotalPages: 1, jobsRunningCount: 0, jobsRequestSequence: 0, jobDetails: null, jobDetailsPage: 1,
+  };
+  const projectRestrictionState = {
+    page: 1, pageSize: 12, total: 0, totalPages: 1, query: '', items: [], selected: new Set(), requestSequence: 0, loading: false,
   };
 
   document.getElementById('nav-avatar').textContent = (me.username || '?').slice(0, 2).toUpperCase();
@@ -27,7 +28,6 @@ window.__libreFlowAutomationShell = true;
   function toast(type, title, message = '') {
     if (typeof Notify !== 'undefined' && typeof Notify[type] === 'function') Notify[type](title, message);
   }
-
   async function copyText(value) {
     if (!value) throw new Error('Nothing is available to copy.');
     if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -62,7 +62,8 @@ window.__libreFlowAutomationShell = true;
   }
 
   function projectName(id) {
-    return state.projects.find(project => project.id === id)?.name || id || 'No project';
+    const option = [...document.querySelectorAll('.project-select option')].find(item => item.value === id);
+    return option?.textContent?.trim() || id || 'No project';
   }
 
   function fillProjectSelects() {
@@ -74,22 +75,83 @@ window.__libreFlowAutomationShell = true;
       placeholder.disabled = select.required;
       placeholder.defaultSelected = select.required;
       select.appendChild(placeholder);
-      state.projects.forEach(project => {
-        const option = new Option(project.name, project.id);
-        if (project.description) option.dataset.description = project.description;
-        option.dataset.meta = project.id;
+      if (previous) {
+        const option = new Option('Selected project', previous);
+        option.selected = true;
         select.appendChild(option);
-      });
-      if ([...select.options].some(option => option.value === previous)) select.value = previous;
-      else if (!includeAll && state.projects[0]) select.value = state.projects[0].id;
-      else select.value = '';
+      }
+      select.value = previous || '';
       refreshPicker(select);
     });
-    document.getElementById('api-key-projects').innerHTML = state.projects.map(project => `
-      <label class="project-restriction">
-        <input class="project-restriction-toggle" type="checkbox" value="${esc(project.id)}" aria-label="Restrict key to ${esc(project.name)}" />
-        <span class="project-restriction-name">${esc(project.name)}</span>
-      </label>`).join('') || '<p class="muted">Create a project before restricting a key.</p>';
+  }
+
+  async function loadProjectRestrictions() {
+    const target = document.getElementById('api-key-projects');
+    if (!target || projectRestrictionState.loading) return;
+    const requestSequence = ++projectRestrictionState.requestSequence;
+    projectRestrictionState.loading = true;
+    target.innerHTML = '<p class="muted">Loading projects…</p>';
+    try {
+      const params = new URLSearchParams({ page: projectRestrictionState.page, pageSize: projectRestrictionState.pageSize });
+      if (projectRestrictionState.query) params.set('q', projectRestrictionState.query);
+      const result = await request(`/api/projects/browse?${params}`);
+      if (requestSequence !== projectRestrictionState.requestSequence) return;
+      projectRestrictionState.items = Array.isArray(result?.items) ? result.items : [];
+      projectRestrictionState.page = Math.max(1, Number(result?.page) || projectRestrictionState.page);
+      projectRestrictionState.total = Math.max(0, Number(result?.total) || 0);
+      projectRestrictionState.totalPages = Math.max(1, Number(result?.totalPages) || 1);
+      renderProjectRestrictions();
+    } catch (error) {
+      if (requestSequence === projectRestrictionState.requestSequence) target.innerHTML = `<p class="muted">${esc(error.message || 'Projects could not be loaded.')}</p>`;
+    } finally {
+      if (requestSequence === projectRestrictionState.requestSequence) projectRestrictionState.loading = false;
+    }
+  }
+
+  function renderProjectRestrictions() {
+    const target = document.getElementById('api-key-projects');
+    if (!target) return;
+    const start = projectRestrictionState.total ? ((projectRestrictionState.page - 1) * projectRestrictionState.pageSize) + 1 : 0;
+    const end = projectRestrictionState.total ? Math.min(projectRestrictionState.total, projectRestrictionState.page * projectRestrictionState.pageSize) : 0;
+    target.innerHTML = `
+      <div class="project-restriction-toolbar">
+        <input type="search" data-project-restriction-search placeholder="Search projects…" aria-label="Search projects to restrict" />
+        <span class="muted" data-project-restriction-count></span>
+      </div>
+      <div class="project-restriction-list">
+        ${projectRestrictionState.items.map(project => `
+          <label class="project-restriction">
+            <input class="project-restriction-toggle" type="checkbox" value="${esc(project.id)}" aria-label="Restrict key to ${esc(project.name)}" ${projectRestrictionState.selected.has(String(project.id)) ? 'checked' : ''} />
+            <span class="project-restriction-name">${esc(project.name)}</span>
+          </label>`).join('') || '<p class="muted">No matching projects.</p>'}
+      </div>
+      <nav class="jobs-pagination project-restriction-pagination" aria-label="Project restriction pages">
+        <button type="button" class="mini-action secondary" data-project-restriction-prev ${projectRestrictionState.page <= 1 ? 'disabled' : ''}>Previous</button>
+        <span>${projectRestrictionState.total ? `Showing ${start}–${end} of ${projectRestrictionState.total} · Page ${projectRestrictionState.page} of ${projectRestrictionState.totalPages}` : 'No projects found.'}</span>
+        <button type="button" class="mini-action secondary" data-project-restriction-next ${projectRestrictionState.page >= projectRestrictionState.totalPages ? 'disabled' : ''}>Next</button>
+      </nav>`;
+    const search = target.querySelector('[data-project-restriction-search]');
+    search.value = projectRestrictionState.query;
+    target.querySelector('[data-project-restriction-count]').textContent = projectRestrictionState.selected.size
+      ? `${projectRestrictionState.selected.size} project${projectRestrictionState.selected.size === 1 ? '' : 's'} selected across all pages`
+      : 'No project restrictions selected';
+    search.addEventListener('input', () => {
+      projectRestrictionState.query = search.value.trim();
+      projectRestrictionState.page = 1;
+      clearTimeout(projectRestrictionState.searchTimer);
+      projectRestrictionState.searchTimer = setTimeout(() => loadProjectRestrictions(), 220);
+    });
+    target.querySelectorAll('.project-restriction-toggle').forEach(input => input.addEventListener('change', () => {
+      if (input.checked) projectRestrictionState.selected.add(input.value);
+      else projectRestrictionState.selected.delete(input.value);
+      renderProjectRestrictions();
+    }));
+    target.querySelector('[data-project-restriction-prev]')?.addEventListener('click', () => {
+      if (projectRestrictionState.page > 1) { projectRestrictionState.page -= 1; loadProjectRestrictions(); }
+    });
+    target.querySelector('[data-project-restriction-next]')?.addEventListener('click', () => {
+      if (projectRestrictionState.page < projectRestrictionState.totalPages) { projectRestrictionState.page += 1; loadProjectRestrictions(); }
+    });
   }
 
   function statusPresentation(status) {
@@ -276,20 +338,6 @@ window.__libreFlowAutomationShell = true;
     document.getElementById('job-details-close').focus();
   }
 
-  if (testMode) {
-    document.addEventListener('click', event => {
-      const button = event.target.closest('button');
-      if (button) handleJobItemPageAction(button);
-    });
-    window.__LibreFlowJobsPageTest = {
-      open(job) { state.jobDetails = job; state.jobDetailsPage = 1; renderJobDetails(); },
-      click(selector) { return handleJobItemPageAction(document.querySelector(selector)); },
-      page() { return state.jobDetailsPage; },
-      itemNames() { return [...document.querySelectorAll('.job-details-item')].map(item => item.textContent.trim()); },
-    };
-    return;
-  }
-
   function renderIngestionStatus(status) {
     const roots = status.allowedRoots?.length ? status.allowedRoots.map(esc).join(', ') : 'None configured';
     document.getElementById('ingestion-status').innerHTML = `<strong>Local folder policy:</strong> ${status.localFolderIngestionEnabled ? 'enabled' : 'disabled'} · <strong>Allowed roots:</strong> ${roots}<br><strong>Remote URL limit:</strong> ${Math.round(status.maxRemoteBytes / 1024 / 1024)} MB · Private network URLs ${status.allowPrivateImageUrls ? 'allowed' : 'blocked'}.`;
@@ -420,7 +468,10 @@ window.__libreFlowAutomationShell = true;
     const tabName = hash.startsWith('request=') ? 'mcp' : panelName || 'jobs';
     selectAutomationTab(tabName);
   }
-  automationTabs.forEach(tab => tab.addEventListener('click', () => selectAutomationTab(tab.dataset.tab, true)));
+  automationTabs.forEach(tab => tab.addEventListener('click', () => {
+    selectAutomationTab(tab.dataset.tab, true);
+    if (tab.dataset.tab === 'api-keys') loadProjectRestrictions();
+  }));
   window.addEventListener('hashchange', selectAutomationHash);
   selectAutomationHash();
 
@@ -492,12 +543,18 @@ window.__libreFlowAutomationShell = true;
     event.preventDefault();
     try {
       const scopes = [...document.querySelectorAll('input[name="api-scope"]:checked')].map(input => input.value);
-      const projectIds = [...document.querySelectorAll('#api-key-projects .project-restriction-toggle:checked')].map(input => input.value);
+      const projectIds = [...projectRestrictionState.selected];
       const created = await request('/api/automation/api-keys', { method: 'POST', body: JSON.stringify({ name: document.getElementById('api-key-name').value, scopes, projectIds }) });
       state.lastApiToken = created.token;
       const tokenBox = document.getElementById('api-key-token'); tokenBox.classList.remove('hidden'); tokenBox.innerHTML = `Copy once: ${esc(created.token)} <button type="button" class="mini-action" data-copy="api-key">Copy</button>`;
       toast('success', 'API key created'); await loadIntegrations();
     } catch (error) { toast('error', 'Could not create API key', error.message); }
+  });
+  document.getElementById('api-key-form').addEventListener('reset', () => {
+    projectRestrictionState.selected.clear();
+    projectRestrictionState.query = '';
+    projectRestrictionState.page = 1;
+    if (document.getElementById('api-key-projects')) loadProjectRestrictions();
   });
 
   document.addEventListener('click', async event => {
@@ -542,7 +599,8 @@ window.__libreFlowAutomationShell = true;
   document.addEventListener('jobs:updated', renderJobs);
 
   try {
-    state.projects = await API.getProjects(); fillProjectSelects();
+    fillProjectSelects();
+    if (window.location.hash === '#api-keys') loadProjectRestrictions();
     await loadModels(document.getElementById('inference-project').value); await fullRefresh();
   } catch (error) { toast('error', 'Automation page could not load', error.message); }
   setInterval(() => loadJobs().catch(() => {}), 3000);
