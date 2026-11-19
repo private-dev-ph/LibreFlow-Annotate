@@ -222,22 +222,29 @@ test('recovery rejects corrupt and traversal journals', () => {
   fs.unlinkSync(journalPath);
 });
 
-test('recovery rejects a symlink journal', t => {
+test('recovery rejects a linked journal', t => {
   const journalPath = path.join(process.env.LIBREFLOW_DATA_DIR, JOURNAL_NAME);
-  const targetPath = path.join(testRoot, 'symlink-target');
-  fs.writeFileSync(targetPath, 'corrupt');
+  let sentinel = path.join(testRoot, 'journal-target');
+  fs.writeFileSync(sentinel, 'fixture');
   try {
-    fs.symlinkSync(targetPath, journalPath, 'file');
+    fs.symlinkSync(sentinel, journalPath, 'file');
   } catch (error) {
-    if (error.code === 'EPERM' || error.code === 'EACCES') {
-      t.skip(`symlink creation unavailable: ${error.code}`);
-      return;
-    }
-    throw error;
+    if (process.platform !== 'win32' || !['EPERM', 'EACCES'].includes(error.code)) throw error;
+    const directory = path.join(testRoot, 'journal-junction-target');
+    fs.mkdirSync(directory);
+    sentinel = path.join(directory, 'sentinel');
+    fs.writeFileSync(sentinel, 'fixture');
+    fs.symlinkSync(directory, journalPath, 'junction');
   }
-  const result = runChild("const { recoverDataCommands } = require('./lib/data-command'); try { recoverDataCommands(); process.exitCode = 1; } catch {}");
+  t.after(() => fs.unlinkSync(journalPath));
+  assert.ok(fs.lstatSync(journalPath).isSymbolicLink());
+  const result = runChild(`
+    const assert = require('node:assert/strict');
+    const { recoverDataCommands } = require('./lib/data-command');
+    assert.throws(recoverDataCommands, { message: 'Data command journal is unsafe.' });
+  `);
   assert.equal(result.status, 0, result.stderr);
-  fs.unlinkSync(journalPath);
+  assert.equal(fs.readFileSync(sentinel, 'utf8'), 'fixture');
 });
 
 test('a competing proper-lockfile lease is rejected inside the data directory', async t => {

@@ -231,7 +231,7 @@ test('copy rejects missing source files, inaccessible sources, and repeated copi
   assert.equal(inaccessible.status, 404);
 });
 
-test('copy rejects missing, path-escaped, and symlink-escaped source files without leftovers', async t => {
+test('copy rejects missing, traversing, and out-of-directory model files without leftovers', async t => {
   const before = fs.readdirSync(modelsDir).sort();
   const models = read('models.json');
   models.find(model => model.id === 'model-source').filename = 'missing.onnx';
@@ -251,23 +251,30 @@ test('copy rejects missing, path-escaped, and symlink-escaped source files witho
   assert.deepEqual(fs.readdirSync(modelsDir).sort(), before);
 
   const outside = path.join(tempRoot, 'outside.onnx');
-  fs.writeFileSync(outside, Buffer.from('outside'));
+  const candidate = path.join(fs.realpathSync(modelsDir), 'escape.onnx');
+  fs.writeFileSync(outside, 'outside');
+  let expectedResolution = null;
   try {
-    fs.symlinkSync(outside, path.join(modelsDir, 'escape.onnx'));
+    fs.symlinkSync(outside, candidate, 'file');
   } catch (error) {
-    if (['EPERM', 'EACCES', 'UNKNOWN'].includes(error.code)) {
-      t.skip(`symlink creation unavailable: ${error.code}`);
-      return;
-    }
-    throw error;
+    if (process.platform !== 'win32' || !['EPERM', 'EACCES'].includes(error.code)) throw error;
+    // Only stand in for the file link's resolution. The target is a real regular file.
+    fs.writeFileSync(candidate, 'candidate');
+    const realpath = fs.promises.realpath;
+    expectedResolution = t.mock.fn(() => Promise.resolve(outside));
+    t.mock.method(fs.promises, 'realpath', (target, ...args) =>
+      target === candidate ? expectedResolution() : realpath(target, ...args));
   }
   models.find(model => model.id === 'model-source').filename = 'escape.onnx';
   write('models.json', models);
-  const symlink = await request('/api/models/model-source/copy', users.owner, {
+  const response = await request('/api/models/model-source/copy', users.owner, {
     method: 'POST', body: { projectId: 'p-target' },
   });
-  assert.equal(symlink.status, 404);
+  if (expectedResolution) assert.ok(expectedResolution.mock.callCount() > 0);
+  assert.equal(response.status, 404);
   assert.deepEqual(fs.readdirSync(modelsDir).sort(), [...before, 'escape.onnx'].sort());
+  assert.deepEqual(read('models.json'), models);
+  assert.equal(fs.readFileSync(outside, 'utf8'), 'outside');
 });
 
 test('copy without YAML preserves a null YAML reference and creates one independent file', async () => {
