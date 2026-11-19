@@ -208,7 +208,18 @@
             <div class="project-restriction-field">
               <span id="api-key-projects-label" class="field-label">Restrict to projects <span class="label-help">optional</span></span>
               <p id="api-key-projects-help" class="project-restrictions-help">Leave every switch off to allow this key to access all of your projects.</p>
-              <div id="api-key-projects" class="project-restrictions" role="group" aria-labelledby="api-key-projects-label" aria-describedby="api-key-projects-help"></div>
+              <div id="api-key-projects" class="project-restrictions" role="group" aria-labelledby="api-key-projects-label" aria-describedby="api-key-projects-help">
+                <div class="project-restriction-toolbar">
+                  <input type="search" maxlength="200" data-project-restriction-search placeholder="Search projects…" aria-label="Search projects to restrict">
+                  <span class="muted" data-project-restriction-count></span>
+                </div>
+                <div class="project-restriction-list"></div>
+                <nav class="jobs-pagination project-restriction-pagination" aria-label="Project restriction pages">
+                  <button type="button" class="mini-action secondary" data-project-restriction-prev disabled>Previous</button>
+                  <span role="status"></span>
+                  <button type="button" class="mini-action secondary" data-project-restriction-next disabled>Next</button>
+                </nav>
+              </div>
             </div>
             <div><span class="field-label">Scopes</span><div id="api-key-scopes" class="checkbox-grid"></div></div>
             <button class="primary-action" type="submit">Create API key</button>

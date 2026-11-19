@@ -10,7 +10,7 @@ window.__libreFlowAutomationShell = true;
     jobsPage: 1, jobsPageSize: 25, jobsQuery: '', jobsStatus: '', jobsType: '', jobsProjectId: '', jobsFrom: '', jobsTo: '', jobsTotal: 0, jobsTotalPages: 1, jobsRunningCount: 0, jobsRequestSequence: 0, jobDetails: null, jobDetailsPage: 1,
   };
   const projectRestrictionState = {
-    page: 1, pageSize: 12, total: 0, totalPages: 1, query: '', items: [], selected: new Set(), requestSequence: 0, loading: false,
+    page: 1, pageSize: 12, query: '', selected: new Set(), requestSequence: 0, searchTimer: null,
   };
 
   document.getElementById('nav-avatar').textContent = (me.username || '?').slice(0, 2).toUpperCase();
@@ -85,74 +85,69 @@ window.__libreFlowAutomationShell = true;
     });
   }
 
-  async function loadProjectRestrictions() {
-    const target = document.getElementById('api-key-projects');
-    if (!target) return;
-    const requestSequence = ++projectRestrictionState.requestSequence;
-    projectRestrictionState.loading = true;
-    target.innerHTML = '<p class="muted">Loading projects…</p>';
-    try {
-      const params = new URLSearchParams({ page: projectRestrictionState.page, pageSize: projectRestrictionState.pageSize });
-      if (projectRestrictionState.query) params.set('q', projectRestrictionState.query);
-      const result = await request(`/api/projects/browse?${params}`);
-      if (requestSequence !== projectRestrictionState.requestSequence) return;
-      projectRestrictionState.items = Array.isArray(result?.items) ? result.items : [];
-      projectRestrictionState.page = Math.max(1, Number(result?.page) || projectRestrictionState.page);
-      projectRestrictionState.total = Math.max(0, Number(result?.total) || 0);
-      projectRestrictionState.totalPages = Math.max(1, Number(result?.totalPages) || 1);
-      renderProjectRestrictions();
-    } catch (error) {
-      if (requestSequence === projectRestrictionState.requestSequence) target.innerHTML = `<p class="muted">${esc(error.message || 'Projects could not be loaded.')}</p>`;
-    } finally {
-      if (requestSequence === projectRestrictionState.requestSequence) projectRestrictionState.loading = false;
-    }
+  const restrictions = document.getElementById('api-key-projects');
+  const restrictionSearch = restrictions.querySelector('[data-project-restriction-search]');
+  const restrictionList = restrictions.querySelector('.project-restriction-list');
+  const restrictionStatus = restrictions.querySelector('[role="status"]');
+  const restrictionPrevious = restrictions.querySelector('[data-project-restriction-prev]');
+  const restrictionNext = restrictions.querySelector('[data-project-restriction-next]');
+
+  function renderRestrictionCount() {
+    const count = projectRestrictionState.selected.size;
+    restrictions.querySelector('[data-project-restriction-count]').textContent = count
+      ? count + (count === 1 ? ' project' : ' projects') + ' selected across all pages'
+      : 'No project restrictions selected';
   }
 
-  function renderProjectRestrictions() {
-    const target = document.getElementById('api-key-projects');
-    if (!target) return;
-    const start = projectRestrictionState.total ? ((projectRestrictionState.page - 1) * projectRestrictionState.pageSize) + 1 : 0;
-    const end = projectRestrictionState.total ? Math.min(projectRestrictionState.total, projectRestrictionState.page * projectRestrictionState.pageSize) : 0;
-    target.innerHTML = `
-      <div class="project-restriction-toolbar">
-        <input type="search" data-project-restriction-search placeholder="Search projects…" aria-label="Search projects to restrict" />
-        <span class="muted" data-project-restriction-count></span>
-      </div>
-      <div class="project-restriction-list">
-        ${projectRestrictionState.items.map(project => `
-          <label class="project-restriction">
-            <input class="project-restriction-toggle" type="checkbox" value="${esc(project.id)}" aria-label="Restrict key to ${esc(project.name)}" ${projectRestrictionState.selected.has(String(project.id)) ? 'checked' : ''} />
-            <span class="project-restriction-name">${esc(project.name)}</span>
-          </label>`).join('') || '<p class="muted">No matching projects.</p>'}
-      </div>
-      <nav class="jobs-pagination project-restriction-pagination" aria-label="Project restriction pages">
-        <button type="button" class="mini-action secondary" data-project-restriction-prev ${projectRestrictionState.page <= 1 ? 'disabled' : ''}>Previous</button>
-        <span>${projectRestrictionState.total ? `Showing ${start}–${end} of ${projectRestrictionState.total} · Page ${projectRestrictionState.page} of ${projectRestrictionState.totalPages}` : 'No projects found.'}</span>
-        <button type="button" class="mini-action secondary" data-project-restriction-next ${projectRestrictionState.page >= projectRestrictionState.totalPages ? 'disabled' : ''}>Next</button>
-      </nav>`;
-    const search = target.querySelector('[data-project-restriction-search]');
-    search.value = projectRestrictionState.query;
-    target.querySelector('[data-project-restriction-count]').textContent = projectRestrictionState.selected.size
-      ? `${projectRestrictionState.selected.size} project${projectRestrictionState.selected.size === 1 ? '' : 's'} selected across all pages`
-      : 'No project restrictions selected';
-    search.addEventListener('input', () => {
-      projectRestrictionState.query = search.value.trim();
-      projectRestrictionState.page = 1;
-      clearTimeout(projectRestrictionState.searchTimer);
-      projectRestrictionState.searchTimer = setTimeout(() => loadProjectRestrictions(), 220);
-    });
-    target.querySelectorAll('.project-restriction-toggle').forEach(input => input.addEventListener('change', () => {
-      if (input.checked) projectRestrictionState.selected.add(input.value);
-      else projectRestrictionState.selected.delete(input.value);
-      renderProjectRestrictions();
-    }));
-    target.querySelector('[data-project-restriction-prev]')?.addEventListener('click', () => {
-      if (projectRestrictionState.page > 1) { projectRestrictionState.page -= 1; loadProjectRestrictions(); }
-    });
-    target.querySelector('[data-project-restriction-next]')?.addEventListener('click', () => {
-      if (projectRestrictionState.page < projectRestrictionState.totalPages) { projectRestrictionState.page += 1; loadProjectRestrictions(); }
-    });
+  function pendingRestrictionPage() {
+    restrictionPrevious.disabled = restrictionNext.disabled = true;
+    restrictionList.replaceChildren();
+    restrictionStatus.textContent = 'Loading projects…';
   }
+
+  async function loadProjectRestrictions() {
+    const sequence = ++projectRestrictionState.requestSequence;
+    pendingRestrictionPage();
+    try {
+      const params = new URLSearchParams({ page: projectRestrictionState.page, pageSize: projectRestrictionState.pageSize, q: projectRestrictionState.query });
+      const result = await request('/api/projects/browse?' + params);
+      if (sequence !== projectRestrictionState.requestSequence) return;
+      projectRestrictionState.page = result.page;
+      restrictionList.innerHTML = result.items.map(project =>
+        '<label class="project-restriction"><input class="project-restriction-toggle" type="checkbox" value="' + esc(project.id) +
+        '" aria-label="Restrict key to ' + esc(project.name) + '" ' + (projectRestrictionState.selected.has(project.id) ? 'checked' : '') +
+        '><span class="project-restriction-name">' + esc(project.name) + '</span></label>').join('');
+      restrictionStatus.textContent = result.total ? 'Page ' + result.page + ' of ' + result.totalPages + ' · ' + result.total + ' projects' : 'No matching projects.';
+      restrictionPrevious.disabled = result.page <= 1;
+      restrictionNext.disabled = result.page >= result.totalPages;
+      renderRestrictionCount();
+    } catch (error) {
+      if (sequence !== projectRestrictionState.requestSequence) return;
+      restrictionStatus.textContent = error.message || 'Projects could not be loaded.';
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.textContent = 'Retry';
+      retry.onclick = loadProjectRestrictions;
+      restrictionList.replaceChildren(retry);
+    }
+  }
+  restrictionSearch.oninput = () => {
+    projectRestrictionState.query = restrictionSearch.value.trim();
+    projectRestrictionState.page = 1;
+    projectRestrictionState.requestSequence++;
+    pendingRestrictionPage();
+    clearTimeout(projectRestrictionState.searchTimer);
+    projectRestrictionState.searchTimer = setTimeout(loadProjectRestrictions, 220);
+  };
+  restrictionList.onchange = event => {
+    const choice = event.target;
+    if (!choice.matches('.project-restriction-toggle')) return;
+    if (choice.checked) projectRestrictionState.selected.add(choice.value);
+    else projectRestrictionState.selected.delete(choice.value);
+    renderRestrictionCount();
+  };
+  restrictionPrevious.onclick = () => { projectRestrictionState.page--; loadProjectRestrictions(); };
+  restrictionNext.onclick = () => { projectRestrictionState.page++; loadProjectRestrictions(); };
 
   function statusPresentation(status) {
     if (['completed', 'done'].includes(status)) return { css: 'done', label: 'Completed' };
@@ -478,6 +473,7 @@ window.__libreFlowAutomationShell = true;
       item.setAttribute('aria-pressed', String(isActive));
     });
     document.querySelectorAll('.automation-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab.dataset.tab));
+    if (tab.dataset.tab === 'api-keys') loadProjectRestrictions();
     const headerActions = document.querySelector('.header-actions');
     if (headerActions) headerActions.hidden = tab.dataset.tab === 'mcp';
     if (updateHash && window.location.hash !== `#${tab.dataset.tab}`) window.history.replaceState(null, '', `#${tab.dataset.tab}`);
@@ -490,7 +486,6 @@ window.__libreFlowAutomationShell = true;
   }
   automationTabs.forEach(tab => tab.addEventListener('click', () => {
     selectAutomationTab(tab.dataset.tab, true);
-    if (tab.dataset.tab === 'api-keys') loadProjectRestrictions();
   }));
   window.addEventListener('hashchange', selectAutomationHash);
   selectAutomationHash();
@@ -622,7 +617,6 @@ window.__libreFlowAutomationShell = true;
 
   try {
     fillProjectSelects();
-    if (window.location.hash === '#api-keys') loadProjectRestrictions();
     await loadModels(document.getElementById('inference-project').value); await fullRefresh();
   } catch (error) { toast('error', 'Automation page could not load', error.message); }
   setInterval(() => loadJobs().catch(() => {}), 3000);

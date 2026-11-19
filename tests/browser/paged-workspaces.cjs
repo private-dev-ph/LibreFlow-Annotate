@@ -19,6 +19,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const source = {id:'one',userId:'owner',name:'One',collaborators:items,labelClasses:items,modelIds:[]};
     const images = items.map(v => ({filename:v.name}));
     const health = {summary:{score:100}, classBalance:[], dimensions:{widths:{},heights:{},aspectBuckets:{}}, boundingBoxes:{buckets:{},relativeArea:{}}, spatialHeatmap:{max:0,cells:[]}, geometryIssues:[], exactDuplicates:items.map(v=>({contentHash:v.name,images})),filenameCollisions:[],splitLeakage:[]};
+    let submittedKeyProjects;
     await p.route('**/api/**', async r => {
       const u = new URL(r.request().url()), path = u.pathname;
       const page = Number(u.searchParams.get('page') || 1);
@@ -33,7 +34,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         body={items:found.slice((page-1)*12,page*12).map(row => ({...row,sourceProjectName:'Source '+row.projectId})),page,total:found.length,totalPages:Math.ceil(found.length/12)||1,pageSize:12};
       }
       else if(path.endsWith('/projects/browse')){
-        body={items:items.slice((page-1)*50,page*50).map(row => ({id:row.id,name:row.name,description:'Synthetic project'})),page,total:items.length,totalPages:1,pageSize:50};
+        const size = Number(u.searchParams.get('pageSize') || 50);
+        const found = items.filter(item => item.name.includes(u.searchParams.get('q') || ''));
+        body={items:found.slice((page-1)*size,page*size),page,total:found.length,totalPages:Math.ceil(found.length/size)||1,pageSize:size};
+      } else if(path.endsWith('/automation/api-keys') && r.request().method()==='POST'){
+        submittedKeyProjects=r.request().postDataJSON().projectIds;
+        body={token:'fixture'};
       }
       else if(path.endsWith('/webhook-deliveries')){
         const found=items.filter(row => row.name.toLowerCase().includes((u.searchParams.get('q') || '').toLowerCase()));
@@ -88,6 +94,18 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await deliveryNav.locator('input').fill('Inspection 44');
     await p.locator('[data-delivery-retry="id44"]').waitFor();
     assert.equal(await p.locator('[data-delivery-retry]').count(),1);
+    await p.goto(url+'/jobs#api-keys');
+    await p.getByRole('checkbox',{name:'Restrict key to Inspection 1',exact:true}).check();
+    await p.locator('[data-project-restriction-next]').click();
+    await p.getByRole('checkbox',{name:'Restrict key to Inspection 14',exact:true}).check();
+    const projectSearch=p.getByRole('searchbox',{name:'Search projects to restrict'});
+    await projectSearch.fill('Inspection 44');
+    await p.getByRole('checkbox',{name:'Restrict key to Inspection 44',exact:true}).waitFor();
+    assert.equal(await projectSearch.evaluate(el=>el===document.activeElement),true);
+    assert.match(await p.locator('[data-project-restriction-count]').textContent(),/2 projects selected/);
+    await p.getByRole('button',{name:'Create API key',exact:true}).click();
+    await p.locator('#api-key-token:not(.hidden)').waitFor();
+    assert.deepEqual(submittedKeyProjects,['id1','id14']);
     assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
     assert.deepEqual(errors,[]);
     console.log('PASS: health, source selections, labels, model choices, MCP and deliveries at ' + viewport.width + 'x' + viewport.height);
