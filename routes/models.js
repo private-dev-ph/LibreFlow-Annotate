@@ -172,6 +172,37 @@ router.get('/available/browse', (req, res) => {
   }));
 });
 
+router.get('/project-browse', (req, res) => {
+  const projectId = req.query.projectId;
+  if (typeof projectId !== 'string' || !projectId.trim()) {
+    return res.status(400).json({ error: 'projectId is required.' });
+  }
+  const project = getProject(projectId);
+  if (denyMissingOrForbidden(res, project, isProjectMember(project, req.session.userId), 'Project')) return;
+  let query;
+  try { query = parseLibraryQuery(req.query); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
+  const accessible = readModels().filter(model => model.projectId === projectId && canAccessModel(model, req.session.userId, projectId));
+  return res.json(browseLibrary(accessible, query, {
+    timestampField: model => model.uploadedAt || model.createdAt,
+    summary: model => ({
+      id: model.id ?? null,
+      userId: model.userId ?? null,
+      projectId: model.projectId ?? null,
+      projectName: getProject(model.projectId)?.name ?? null,
+      name: model.name ?? null,
+      description: model.description ?? null,
+      type: model.type ?? null,
+      format: model.format ?? null,
+      size: model.size ?? null,
+      uploadedAt: model.uploadedAt ?? null,
+      createdAt: model.createdAt ?? null,
+      sharedWithCollaborators: model.sharedWithCollaborators === true,
+      yamlOriginalName: model.yamlOriginalName ?? null,
+    }),
+  }));
+});
+
 router.get('/browse', (req, res) => {
   let query;
   try {
@@ -180,14 +211,8 @@ router.get('/browse', (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 
-  if (query.projectId !== undefined) {
-    const project = getProject(query.projectId);
-    if (denyMissingOrForbidden(res, project, isProjectMember(project, req.session.userId), 'Project')) return;
-  }
-  const owned = readModels().filter(model =>
-    (query.projectId === undefined
-      ? model.userId === req.session.userId
-      : model.projectId === query.projectId && canAccessModel(model, req.session.userId, query.projectId)) &&
+  const owned = readModels().filter(model => model.userId === req.session.userId &&
+    (query.projectId === undefined || model.projectId === query.projectId) &&
     (query.type === undefined || model.type === query.type));
   return res.json(browseLibrary(owned, query, {
     timestampField: model => model.uploadedAt || model.createdAt,

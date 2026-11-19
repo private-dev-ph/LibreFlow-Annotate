@@ -39,6 +39,7 @@
   let imageAssignedIds = new Set();
   let imageViewGeneration = 0;
   let imageFilterSequence = 0;
+  let imageBrowseRequestGeneration = 0;
   let autoSaveEnabled = localStorage.getItem('annotator_autosave') === 'true';
   let tilingUI = null;
   let inferenceRunning = false;
@@ -265,8 +266,8 @@
     }
   }
 
-  function applyImageBrowseResult(result, generation = imageLoadGeneration) {
-    if (generation !== imageLoadGeneration) return false;
+  function applyImageBrowseResult(result, generation = imageLoadGeneration, requestGeneration = imageBrowseRequestGeneration) {
+    if (generation !== imageLoadGeneration || requestGeneration !== imageBrowseRequestGeneration) return false;
     const pageImages = result.groups.flatMap(group => group.items);
     images = imageAssignedIds.size > 0
       ? pageImages.filter(img => imageAssignedIds.has(img.id))
@@ -283,10 +284,22 @@
     return true;
   }
 
-  async function loadImagePage(page, generation = imageLoadGeneration) {
+  async function loadImagePage(page) {
     if (typeof API.browseProjectImages !== 'function') return false;
-    const result = await API.browseProjectImages(projectId, imageBrowseParams({ page }));
-    return applyImageBrowseResult(result, generation);
+    const requestGeneration = ++imageBrowseRequestGeneration;
+    const generation = ++imageLoadGeneration;
+    const currentImageId = images[currentIndex]?.id || null;
+    const startEditGeneration = editGeneration;
+    try {
+      const result = await API.browseProjectImages(projectId, imageBrowseParams({ page }));
+      if (requestGeneration !== imageBrowseRequestGeneration
+        || (images[currentIndex]?.id || null) !== currentImageId
+        || editGeneration !== startEditGeneration) return false;
+      return applyImageBrowseResult(result, generation, requestGeneration);
+    } catch (error) {
+      if (requestGeneration === imageBrowseRequestGeneration) showToast(error.message || 'Could not load the next image page.', 'warn');
+      return false;
+    }
   }
 
   async function loadImages({ preserveImageId, keepCurrent = false, filterSequence = null } = {}) {
@@ -294,11 +307,21 @@
     if (!keepCurrent && !(await confirmImageTransition())) return false;
     if (filterSequence != null && filterSequence !== imageFilterSequence) return false;
     const generation = ++imageLoadGeneration;
+    const requestGeneration = ++imageBrowseRequestGeneration;
+    const currentImageId = images[currentIndex]?.id || null;
+    const startEditGeneration = editGeneration;
     imageAssignedIds = new Set();
     if (typeof API.browseProjectImages === 'function') {
       const requestedImageId = preserveImageId || new URLSearchParams(location.search).get('imageId') || undefined;
-      const result = await API.browseProjectImages(projectId, imageBrowseParams({ page: 1, ...(requestedImageId ? { imageId: requestedImageId } : {}) }));
-      if (!applyImageBrowseResult(result, generation)) return false;
+      try {
+        const result = await API.browseProjectImages(projectId, imageBrowseParams({ page: 1, ...(requestedImageId ? { imageId: requestedImageId } : {}) }));
+        if (requestGeneration !== imageBrowseRequestGeneration
+          || (!keepCurrent && ((images[currentIndex]?.id || null) !== currentImageId || editGeneration !== startEditGeneration))) return false;
+        if (!applyImageBrowseResult(result, generation, requestGeneration)) return false;
+      } catch (error) {
+        if (requestGeneration === imageBrowseRequestGeneration) showToast(error.message || 'Could not refresh the image list.', 'warn');
+        return false;
+      }
     } else {
       const batches = await API.getBatches(projectId);
       batches.forEach(batch => {
@@ -307,7 +330,8 @@
         else if (batch.assignedTo === me.id) (batch.imageIds||[]).forEach(id => imageAssignedIds.add(id));
       });
       const allProjectImages = await API.getImages(projectId);
-      if (generation !== imageLoadGeneration) return false;
+      if (generation !== imageLoadGeneration || requestGeneration !== imageBrowseRequestGeneration
+        || (!keepCurrent && ((images[currentIndex]?.id || null) !== currentImageId || editGeneration !== startEditGeneration))) return false;
       images = imageAssignedIds.size > 0 ? allProjectImages.filter(img => imageAssignedIds.has(img.id)) : allProjectImages;
       imageBrowseState = { page: 1, pageSize: images.length || 1, total: images.length, totalPages: 1 };
       imageWindowOffset = 0;
@@ -783,12 +807,14 @@
     if ((!crossingPreviousPage && !crossingNextPage && (idx < 0 || idx >= images.length || idx === currentIndex))) return;
     if (!(await confirmImageTransition())) return;
     if (crossingPreviousPage) {
-      await loadImagePage(imageBrowseState.page - 1);
+      const loaded = await loadImagePage(imageBrowseState.page - 1);
+      if (!loaded) return;
       if (images.length > 0) await loadImage(images.length - 1);
       return;
     }
     if (crossingNextPage) {
-      await loadImagePage(imageBrowseState.page + 1);
+      const loaded = await loadImagePage(imageBrowseState.page + 1);
+      if (!loaded) return;
       if (images.length > 0) await loadImage(0);
       return;
     }
@@ -920,6 +946,32 @@
     return projectModels.find(m => String(m.id) === String(id)) || null;
   }
 
+  function mergeProjectModels(models) {
+    (Array.isArray(models) ? models : []).forEach(model => {
+      const index = projectModels.findIndex(item => String(item.id) === String(model.id));
+      if (index >= 0) projectModels[index] = { ...projectModels[index], ...model };
+      else projectModels.push(model);
+    });
+  }
+
+  function registerAutoModelProvider(sel) {
+    if (!sel || !window.LibreFlowPicker?.registerProvider || sel.dataset.remoteProvider === 'true') return;
+    window.LibreFlowPicker.registerProvider(sel, async ({ query, page, pageSize }) => {
+      const result = await API.browseProjectModels(projectId, { q: query, page, pageSize, sort: 'name_asc' });
+      mergeProjectModels(result.items);
+      return {
+        ...result,
+        items: result.items.map(model => ({
+          id: model.id,
+          text: `${model.name} (${model.type || model.format || 'model'})`,
+          description: model.description || '',
+          meta: [model.type, model.format, project.name].filter(Boolean).join(' · '),
+        })),
+      };
+    });
+    sel.dataset.remoteProvider = 'true';
+  }
+
   function isDetectionModel(model) {
     return Boolean(model) && (!model.type || model.type === 'detection');
   }
@@ -1049,16 +1101,20 @@
 
   async function populateAutoModels() {
     try {
-      if (!projectModels.length) projectModels = await API.getModels(projectId);
       const sel = document.getElementById('auto-model-select');
       if (!sel) return;
+      if (!projectModels.length) {
+        const initial = await API.browseProjectModels(projectId, { page: 1, pageSize: 50, sort: 'name_asc' });
+        mergeProjectModels(initial.items);
+      }
+      registerAutoModelProvider(sel);
 
       // Build id -> type lookup
       const modelTypeMap = {};
       projectModels.forEach(m => { modelTypeMap[m.id] = m.type; });
 
       sel.innerHTML = '<option value="">-- select model --</option>';
-      projectModels.forEach(m => {
+      projectModels.slice(0, 50).forEach(m => {
         const opt = document.createElement('option');
         opt.value = m.id;
         opt.textContent = `${m.name} (${m.type})`;
@@ -1066,6 +1122,16 @@
         opt.dataset.meta = [m.type, m.format, project.name].filter(Boolean).join(' · ');
         sel.appendChild(opt);
       });
+
+      const remembered = lastModelId && projectModels.find(model => String(model.id) === String(lastModelId));
+      if (remembered && ![...sel.options].some(option => option.value === String(remembered.id))) {
+        const opt = document.createElement('option');
+        opt.value = remembered.id;
+        opt.textContent = `${remembered.name} (${remembered.type || remembered.format || 'model'})`;
+        if (remembered.description) opt.dataset.description = remembered.description;
+        opt.dataset.meta = [remembered.type, remembered.format, project.name].filter(Boolean).join(' · ');
+        sel.appendChild(opt);
+      }
 
       // Restore previously selected model
       if (lastModelId && Object.prototype.hasOwnProperty.call(modelTypeMap, lastModelId)) sel.value = lastModelId;
