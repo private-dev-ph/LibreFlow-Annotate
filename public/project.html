@@ -378,6 +378,7 @@
               <p>Assign reviewers, find open issues, and open an image at the exact point it needs attention.</p>
             </div>
             <div class="project-review-controls">
+              <label class="review-search-label" for="project-review-search">Search review queue<input id="project-review-search" type="search" maxlength="200" placeholder="Filename, reviewer, status, or issue" /></label>
               <select id="project-review-filter" aria-label="Filter by review status">
                 <option value="">All statuses</option>
                 <option value="unannotated">Unannotated</option>
@@ -391,6 +392,7 @@
           </div>
           <div id="project-review-list" class="project-review-list"></div>
           <div id="project-review-empty" class="images-empty" style="display:none">No images match this review status.</div>
+          <nav class="project-review-pagination" aria-label="Review queue pages"><button id="project-review-prev" class="btn-sm-ghost" type="button">Previous</button><span id="project-review-page-status" role="status" aria-live="polite"></span><button id="project-review-next" class="btn-sm-ghost" type="button">Next</button></nav>
         </div>
         <details class="section-card project-audit-card">
           <summary>Recent audit activity</summary>

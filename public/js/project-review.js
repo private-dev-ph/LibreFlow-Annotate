@@ -13,6 +13,10 @@
     changes_requested: 'Changes requested', approved: 'Approved',
   };
   let response = null;
+  let page = 1;
+  let pageSize = 25;
+  let query = '';
+  let requestSequence = 0;
 
   function esc(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -75,14 +79,33 @@
     });
   }
 
-  async function load() {
+  function renderPager() {
+    const status = document.getElementById('project-review-page-status');
+    const previous = document.getElementById('project-review-prev');
+    const next = document.getElementById('project-review-next');
+    const totalPages = Number(response?.totalPages) || 1;
+    const total = Number(response?.total) || response?.items?.length || 0;
+    if (status) status.textContent = total ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(total, page * pageSize)} of ${total} · Page ${page} of ${totalPages}` : 'No review items.';
+    if (previous) previous.disabled = page <= 1;
+    if (next) next.disabled = page >= totalPages;
+  }
+
+  async function load(nextPage = page) {
+    const sequence = ++requestSequence;
+    page = Math.max(1, Number(nextPage) || 1);
     list.innerHTML = '<div class="images-empty">Loading review queue…</div>';
     try {
-      response = await API.getProjectReviews(projectId, filter.value);
+      const data = await API.getProjectReviews(projectId, filter.value, { page, pageSize, q: query });
+      if (sequence !== requestSequence) return;
+      response = Array.isArray(data) ? { items: data, total: data.length, page: 1, pageSize, totalPages: 1, counts: {} } : data;
+      page = Number(response.page) || page;
       renderCounts();
       renderRows();
+      renderPager();
     } catch (error) {
+      if (sequence !== requestSequence) return;
       list.innerHTML = `<div class="images-empty">${esc(error.message)}</div>`;
+      renderPager();
     }
   }
 
@@ -100,7 +123,16 @@
     }
   }
 
-  filter.addEventListener('change', load);
+  filter.addEventListener('change', () => { page = 1; load(); });
+  document.getElementById('project-review-search')?.addEventListener('input', event => {
+    query = event.target.value.trim();
+    page = 1;
+    clearTimeout(window.__reviewSearchTimer);
+    window.__reviewSearchTimer = setTimeout(() => load(), 250);
+  });
+  document.getElementById('project-review-page-size')?.addEventListener('change', event => { pageSize = Number(event.target.value) || 25; page = 1; load(); });
+  document.getElementById('project-review-prev')?.addEventListener('click', () => load(page - 1));
+  document.getElementById('project-review-next')?.addEventListener('click', () => load(page + 1));
   document.getElementById('btn-refresh-reviews').addEventListener('click', () => Promise.all([load(), loadAudit()]));
   load();
   loadAudit();

@@ -17,6 +17,7 @@ const {
   projectReviewRows,
 } = require('../lib/review-state');
 const { readJson } = require('../lib/data-store');
+const { ReviewBrowserQueryError, parseReviewBrowseQuery, browseReviewRows } = require('../lib/review-browser');
 
 const router = express.Router();
 const STATUS_TRANSITIONS = Object.freeze({
@@ -62,16 +63,16 @@ router.get('/project/:projectId', (req, res) => {
   if (requestedStatus && !REVIEW_STATUSES.includes(requestedStatus)) {
     return res.status(400).json({ error: 'Invalid review status.' });
   }
+  let browseQuery;
+  try { browseQuery = parseReviewBrowseQuery(req.query); } catch (error) {
+    if (error instanceof ReviewBrowserQueryError) return res.status(400).json({ error: error.message });
+    throw error;
+  }
   const allRows = projectReviewRows(project.id);
   const rows = allRows.filter(row => !requestedStatus || row.review.status === requestedStatus);
   const counts = Object.fromEntries(REVIEW_STATUSES.map(status => [status, 0]));
   allRows.forEach(row => { counts[row.review.status] += 1; });
-  res.json({
-    statuses: REVIEW_STATUSES,
-    counts,
-    members: projectMembers(project),
-    canManageReviewers: isProjectOwner(project, req.session.userId),
-    items: rows.map(({ image, review }) => ({
+  const items = rows.map(({ image, review }) => ({
       imageId: image.id,
       filename: image.filename,
       originalName: image.originalName,
@@ -79,7 +80,26 @@ router.get('/project/:projectId', (req, res) => {
       isNull: Boolean(image.isNull),
       ...review,
       openIssueCount: review.issues.filter(issue => !issue.resolved).length,
-    })),
+    }));
+  const page = browseReviewRows(items, browseQuery);
+  const paged = Object.prototype.hasOwnProperty.call(req.query, 'page') || Object.prototype.hasOwnProperty.call(req.query, 'pageSize') || Object.prototype.hasOwnProperty.call(req.query, 'q');
+  if (!paged) return res.json({
+    statuses: REVIEW_STATUSES,
+    counts,
+    members: projectMembers(project),
+    canManageReviewers: isProjectOwner(project, req.session.userId),
+    items,
+  });
+  res.json({
+    statuses: REVIEW_STATUSES,
+    counts,
+    members: projectMembers(project),
+    canManageReviewers: isProjectOwner(project, req.session.userId),
+    items: page.items,
+    total: page.total,
+    page: page.page,
+    pageSize: page.pageSize,
+    totalPages: page.totalPages,
   });
 });
 

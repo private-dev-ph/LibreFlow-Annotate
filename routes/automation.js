@@ -21,6 +21,7 @@ const {
 const { readJson: readDataJson } = require('../lib/data-store');
 const { parseAllowedRoots, MAX_REMOTE_BYTES, ensureBatch, persistImageBuffer } = require('../lib/ingestion');
 const { safeStoredPath } = require('../lib/inference-client');
+const { ReviewBrowserQueryError, parseReviewBrowseQuery, browseReviewRows } = require('../lib/review-browser');
 const {
   createInferenceJob,
   createUrlIngestionJob,
@@ -338,10 +339,17 @@ router.get('/review-queue', requireScopes('projects:read'), (req, res) => {
   if (!authorizeProject(req, res, projectId)) return;
   const status = req.query.status || 'submitted';
   if (status && !REVIEW_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid review status.' });
+  let browseQuery;
+  try { browseQuery = parseReviewBrowseQuery(req.query); } catch (error) {
+    if (error instanceof ReviewBrowserQueryError) return res.status(400).json({ error: error.message });
+    throw error;
+  }
   const rows = projectReviewRows(projectId)
     .filter(({ review }) => !status || review.status === status)
     .map(({ image, review }) => automationReviewRow(image, review));
-  res.json(rows);
+  const page = browseReviewRows(rows, browseQuery);
+  const paged = Object.prototype.hasOwnProperty.call(req.query, 'page') || Object.prototype.hasOwnProperty.call(req.query, 'pageSize') || Object.prototype.hasOwnProperty.call(req.query, 'q');
+  res.json(paged ? page : rows);
 });
 
 router.patch('/review-queue/:imageId', requireScopes('annotations:write'), (req, res) => {
