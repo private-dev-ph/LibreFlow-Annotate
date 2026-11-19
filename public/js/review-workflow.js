@@ -24,6 +24,8 @@
   let imageRequestGeneration = 0;
   let refreshGeneration = 0;
   let historyGeneration = 0;
+  const discussion = window.LibreFlowListWindow?.(thread, 'discussion entries', renderThread);
+  discussion?.reset();
 
   const statusLabels = {
     unannotated: 'Unannotated',
@@ -61,11 +63,12 @@
       ...(review.comments || []).map(entry => ({ ...entry, kind: 'comment' })),
       ...(review.issues || []).map(entry => ({ ...entry, kind: 'issue' })),
     ].sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-    if (!entries.length) {
-      thread.innerHTML = '<div class="review-entry-meta">No review discussion yet.</div>';
+    const visible = discussion ? discussion.select(entries, entry => [entry.message, entry.createdByUsername, entry.kind].join(' ')) : entries;
+    if (!visible.length) {
+      thread.innerHTML = entries.length ? '<div class="review-entry-meta">No matching discussion entries.</div>' : '<div class="review-entry-meta">No review discussion yet.</div>';
       return;
     }
-    thread.innerHTML = entries.map(entry => `
+    thread.innerHTML = visible.map(entry => `
       <div class="review-entry ${entry.kind === 'issue' ? 'issue' : ''} ${entry.resolved ? 'resolved' : ''}">
         ${entry.kind === 'issue' && (!entry.resolved || review.canReview)
           ? `<button class="review-resolve-btn" data-issue-id="${escapeHtml(entry.id)}" data-next-resolved="${entry.resolved ? 'false' : 'true'}">${entry.resolved ? 'Reopen' : 'Resolve'}</button>` : ''}
@@ -115,9 +118,14 @@
     rejection.textContent = review.rejectionReason ? `Changes requested: ${review.rejectionReason}` : '';
     rejection.classList.toggle('hidden', !review.rejectionReason);
 
+    const previousRevision = revisionSelect.selectedOptions?.[0];
     revisionSelect.innerHTML = revisions.length
       ? revisions.map(item => `<option value="${escapeHtml(item.id)}">v${item.version} · ${item.annotationCount} annotations · ${escapeHtml(item.actorUsername || 'Unknown')} · ${escapeHtml(formatDate(item.createdAt))}</option>`).join('')
       : '<option value="">No saved revisions</option>';
+    if (previousRevision?.value && revisions.length && historyImageId === currentImageId) {
+      if (!Array.from(revisionSelect.options).some(option => option.value === previousRevision.value)) revisionSelect.add(previousRevision);
+      revisionSelect.value = previousRevision.value;
+    }
     restoreButton.disabled = !revisions.length;
     renderThread();
   }
@@ -128,6 +136,7 @@
   }
 
   function clearImageState() {
+    discussion?.reset();
     review = null;
     history = [];
     historyImageId = null;

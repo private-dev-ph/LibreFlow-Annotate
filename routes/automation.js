@@ -371,7 +371,7 @@ router.get('/review-queue', requireScopes('projects:read'), (req, res) => {
     .filter(({ review }) => !status || review.status === status)
     .map(({ image, review }) => automationReviewRow(image, review));
   const page = browseReviewRows(rows, browseQuery);
-  const paged = Object.prototype.hasOwnProperty.call(req.query, 'page') || Object.prototype.hasOwnProperty.call(req.query, 'pageSize') || Object.prototype.hasOwnProperty.call(req.query, 'q');
+  const paged = Object.prototype.hasOwnProperty.call(req.query, 'page') || Object.prototype.hasOwnProperty.call(req.query, 'pageSize') || Object.prototype.hasOwnProperty.call(req.query, 'q') || Object.prototype.hasOwnProperty.call(req.query, 'reviewerId');
   res.json(paged ? page : rows);
 });
 

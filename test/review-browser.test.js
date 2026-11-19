@@ -9,6 +9,7 @@ const rows = Array.from({ length: 53 }, (_, index) => ({
   originalName: `Board ${String(index + 1).padStart(3, '0')}.png`,
   filename: `board-${index + 1}.png`,
   status: index % 2 ? 'submitted' : 'approved',
+  reviewerId: index % 3 ? 'alice-id' : null,
   reviewerUsername: index % 3 ? 'alice' : 'bob',
   rejectionReason: index === 9 ? 'Needs copper review' : '',
 }));
@@ -17,6 +18,8 @@ test('review browse globally searches and pages with stable ordering', () => {
   const query = parseReviewBrowseQuery({ page: '3', pageSize: '25' });
   const page = browseReviewRows(rows, query);
   assert.equal(page.total, 53);
+  assert.equal(browseReviewRows(rows, parseReviewBrowseQuery({ reviewerId: 'alice-id' })).total, 35);
+  assert.equal(browseReviewRows(rows, parseReviewBrowseQuery({ reviewerId: 'unassigned' })).total, 18);
   assert.equal(page.page, 3);
   assert.equal(page.totalPages, 3);
   assert.equal(page.items[0].imageId, 'image-051');

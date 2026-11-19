@@ -6,6 +6,7 @@
 
   const countsContainer = document.getElementById('project-review-counts');
   const filter = document.getElementById('project-review-filter');
+  const memberFilter = document.getElementById('project-review-member-filter');
   const empty = document.getElementById('project-review-empty');
   const auditList = document.getElementById('project-audit-list');
   const labels = {
@@ -39,7 +40,7 @@
     countsContainer.querySelectorAll('.review-count-card').forEach(card => {
       card.addEventListener('click', () => {
         filter.value = filter.value === card.dataset.status ? '' : card.dataset.status;
-        load();
+        load(1);
       });
     });
   }
@@ -95,10 +96,14 @@
     page = Math.max(1, Number(nextPage) || 1);
     list.innerHTML = '<div class="images-empty">Loading review queue…</div>';
     try {
-      const data = await API.getProjectReviews(projectId, filter.value, { page, pageSize, q: query });
+      const data = await API.getProjectReviews(projectId, filter.value, { page, pageSize, q: query, reviewerId: memberFilter.value });
       if (sequence !== requestSequence) return;
       response = Array.isArray(data) ? { items: data, total: data.length, page: 1, pageSize, totalPages: 1, counts: {} } : data;
       page = Number(response.page) || page;
+      const selectedMember = memberFilter.value;
+      const members = response.members || [];
+      memberFilter.replaceChildren(new Option('All reviewers', ''), new Option('Unassigned', 'unassigned'), ...members.map(member => new Option(member.username || member.userId, member.userId)));
+      memberFilter.value = selectedMember;
       renderCounts();
       renderRows();
       renderPager();
@@ -106,6 +111,8 @@
       if (sequence !== requestSequence) return;
       list.innerHTML = `<div class="images-empty">${esc(error.message)}</div>`;
       renderPager();
+    } finally {
+      if (sequence === requestSequence) list.setAttribute('aria-busy', 'false');
     }
   }
 
@@ -151,8 +158,10 @@
     }
   }
 
+  memberFilter.addEventListener('change', () => load(1));
   filter.addEventListener('change', () => { page = 1; load(); });
   document.getElementById('project-review-search')?.addEventListener('input', event => {
+    requestSequence++;
     query = event.target.value.trim();
     page = 1;
     list.innerHTML = '<div class="images-empty">Loading review queue…</div>';

@@ -28,6 +28,7 @@ window.LibreFlowListWindow = function listWindow(container, label, redraw, optio
   previous.addEventListener('click', () => { page--; redraw(); });
   next.addEventListener('click', () => { page++; redraw(); });
   return {
+    reset() { page = 1; search.value = ''; controls.hidden = true; },
     select(items, text = String) {
       const query = search.value.trim().toLowerCase();
       const found = query ? items.filter(item => String(text(item)).toLowerCase().includes(query)) : items;

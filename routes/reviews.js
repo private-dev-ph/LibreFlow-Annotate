@@ -87,7 +87,7 @@ router.get('/project/:projectId', (req, res) => {
       openIssueCount: review.issues.filter(issue => !issue.resolved).length,
     }));
   const page = browseReviewRows(items, browseQuery);
-  const paged = Object.prototype.hasOwnProperty.call(req.query, 'page') || Object.prototype.hasOwnProperty.call(req.query, 'pageSize') || Object.prototype.hasOwnProperty.call(req.query, 'q');
+  const paged = Object.prototype.hasOwnProperty.call(req.query, 'page') || Object.prototype.hasOwnProperty.call(req.query, 'pageSize') || Object.prototype.hasOwnProperty.call(req.query, 'q') || Object.prototype.hasOwnProperty.call(req.query, 'reviewerId');
   if (!paged) return res.json({
     statuses: REVIEW_STATUSES,
     counts,
