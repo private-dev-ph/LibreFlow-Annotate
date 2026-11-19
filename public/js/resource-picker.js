@@ -2,6 +2,7 @@
   'use strict';
 
   const PAGE_SIZE = 50;
+  const REMOTE_PAGE_SIZE = 50;
   const resourceLabels = Object.freeze({
     dataset: 'dataset',
     project: 'project',
@@ -19,6 +20,11 @@
   function resourceName(select) {
     const key = (select.getAttribute('data-resource-picker') || '').trim().toLowerCase();
     return resourceLabels[key] || key || 'resource';
+  }
+
+  function usesRemoteOptions(select) {
+    return ['project', 'dataset', 'model'].includes(resourceName(select))
+      && select.getAttribute('data-picker-remote') !== 'false';
   }
 
   function titleFor(select) {
@@ -169,29 +175,36 @@
       if (activeState) {
         activeState.page = 0;
         activeState.activeIndex = 0;
-        renderDialog(activeState);
+        if (activeState.remote) loadRemote(activeState);
+        else renderDialog(activeState);
       }
       search.focus();
     });
     previous.addEventListener('click', () => {
       if (!activeState || activeState.page <= 0) return;
       activeState.page -= 1;
-      activeState.activeIndex = activeState.page * PAGE_SIZE;
-      renderDialog(activeState);
+      activeState.activeIndex = activeState.page * (activeState.remote ? REMOTE_PAGE_SIZE : PAGE_SIZE);
+      if (activeState.remote) loadRemote(activeState);
+      else renderDialog(activeState);
     });
     next.addEventListener('click', () => {
       if (!activeState) return;
-      const pageCount = Math.max(1, Math.ceil(activeState.filtered.length / PAGE_SIZE));
+      const pageCount = activeState.remote ? activeState.remoteTotalPages : Math.max(1, Math.ceil(activeState.filtered.length / PAGE_SIZE));
       if (activeState.page >= pageCount - 1) return;
       activeState.page += 1;
-      activeState.activeIndex = activeState.page * PAGE_SIZE;
-      renderDialog(activeState);
+      activeState.activeIndex = activeState.page * (activeState.remote ? REMOTE_PAGE_SIZE : PAGE_SIZE);
+      if (activeState.remote) loadRemote(activeState);
+      else renderDialog(activeState);
     });
     search.addEventListener('input', () => {
       if (!activeState) return;
       activeState.page = 0;
       activeState.activeIndex = 0;
-      renderDialog(activeState);
+      if (activeState.remote) {
+        clearTimeout(activeState.searchTimer);
+        activeState.searchTimer = setTimeout(() => loadRemote(activeState), 220);
+        renderDialog(activeState, { loading: true });
+      } else renderDialog(activeState);
     });
     dialog.addEventListener('cancel', event => {
       event.preventDefault();
@@ -300,13 +313,90 @@
       : state.options.slice();
   }
 
-  function renderDialog(state) {
+  function remoteResource(state) {
+    return resourceName(state.select);
+  }
+
+  function remoteUrl(state) {
+    const resource = remoteResource(state);
+    const query = new URLSearchParams({ page: String(state.page + 1), pageSize: String(REMOTE_PAGE_SIZE) });
+    const search = cleanLabel(pickerParts.search.value);
+    if (search) query.set('q', search);
+    if (resource === 'model') query.set('sort', 'newest');
+    return resource === 'dataset' || resource === 'model'
+      ? `/api/${resource === 'dataset' ? 'datasets' : 'models'}/browse?${query}`
+      : '/api/projects';
+  }
+
+  function remoteItems(state, data) {
+    const resource = remoteResource(state);
+    const rows = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+    const query = cleanLabel(pickerParts.search.value).toLocaleLowerCase();
+    const mapped = rows.map(item => {
+      const value = String(item.id ?? '');
+      const text = cleanLabel(item.name || item.originalName || item.id || 'Untitled');
+      const description = cleanLabel(item.description || item.type || '');
+      const meta = resource === 'model'
+        ? cleanLabel([item.projectName, item.status].filter(Boolean).join(' · '))
+        : resource === 'dataset'
+          ? cleanLabel([item.imageCount != null ? `${item.imageCount} images` : '', item.sharedWithCollaborators ? 'Shared' : ''].filter(Boolean).join(' · '))
+          : '';
+      return { value, text, description, meta, disabled: false, hidden: false, selected: value === state.select.value };
+    }).filter(item => item.value);
+    if (!Array.isArray(data)) return mapped;
+    const filtered = query ? mapped.filter(item => [item.text, item.description, item.meta].join(' ').toLocaleLowerCase().includes(query)) : mapped;
+    return filtered.slice(state.page * REMOTE_PAGE_SIZE, (state.page + 1) * REMOTE_PAGE_SIZE);
+  }
+
+  function mergeSelected(state, items) {
+    const selected = readOptions(state.select).find(item => item.value === state.select.value) || state.selectedOption;
+    const merged = [...items];
+    if (selected && selected.value && !merged.some(item => item.value === selected.value)) merged.unshift(selected);
+    state.options = merged;
+    state.filtered = merged;
+  }
+
+  async function loadRemote(state) {
     if (!pickerParts || activeState !== state) return;
-    filterOptions(state);
-    const pageCount = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
+    const sequence = ++state.remoteSequence;
+    state.remoteLoading = true;
+    state.remoteError = '';
+    renderDialog(state, { loading: true });
+    try {
+      const response = await fetch(remoteUrl(state), { credentials: 'include' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not load picker options.');
+      if (activeState !== state || sequence !== state.remoteSequence) return;
+      const pageCount = Array.isArray(data) ? Math.max(1, Math.ceil(remoteProjectCount(state, data) / REMOTE_PAGE_SIZE)) : Math.max(1, Number(data.totalPages) || 1);
+      state.remoteItems = remoteItems(state, data);
+      state.remoteTotal = Array.isArray(data) ? remoteProjectCount(state, data) : Number(data.total) || state.remoteItems.length;
+      state.remoteTotalPages = pageCount;
+      mergeSelected(state, state.remoteItems);
+      state.remoteLoading = false;
+      renderDialog(state);
+    } catch (error) {
+      if (activeState !== state || sequence !== state.remoteSequence) return;
+      state.remoteLoading = false;
+      state.remoteError = error.message || 'Could not load picker options.';
+      renderDialog(state);
+    }
+  }
+
+  function remoteProjectCount(state, data) {
+    const query = cleanLabel(pickerParts.search.value).toLocaleLowerCase();
+    const rows = Array.isArray(data) ? data : [];
+    return rows.filter(item => !query || [item.name, item.description, item.username].map(value => String(value || '').toLocaleLowerCase()).join(' ').includes(query)).length;
+  }
+
+  function renderDialog(state, options = {}) {
+    if (!pickerParts || activeState !== state) return;
+    if (state.remote) {
+      if (!state.remoteItems.length && !state.remoteLoading && !state.remoteError) mergeSelected(state, []);
+    } else filterOptions(state);
+    const pageCount = state.remote ? Math.max(1, state.remoteTotalPages) : Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
     state.page = Math.min(state.page, pageCount - 1);
-    const start = state.page * PAGE_SIZE;
-    const visible = state.filtered.slice(start, start + PAGE_SIZE);
+    const start = state.remote ? 0 : state.page * PAGE_SIZE;
+    const visible = state.remote ? state.filtered : state.filtered.slice(start, start + PAGE_SIZE);
     if (state.activeIndex >= state.filtered.length) state.activeIndex = Math.max(0, state.filtered.length - 1);
     pickerParts.title.textContent = titleFor(state.select);
     pickerDialog.setAttribute('aria-labelledby', pickerParts.title.id);
@@ -352,15 +442,15 @@
     });
     const query = cleanLabel(pickerParts.search.value);
     const resultWord = state.filtered.length === 1 ? 'result' : 'results';
-    pickerParts.count.textContent = `${state.filtered.length} ${resultWord}`;
-    pickerParts.empty.hidden = state.filtered.length !== 0;
+    pickerParts.count.textContent = state.remoteLoading ? 'Loading options…' : state.remoteError ? state.remoteError : `${state.remoteTotal || state.filtered.length} ${resultWord}`;
+    pickerParts.empty.hidden = state.remoteLoading || state.filtered.length !== 0;
     pickerParts.emptyText.textContent = query ? 'No matching resources.' : 'No resources available.';
     pickerParts.clear.hidden = !query;
     pickerParts.list.hidden = state.filtered.length === 0;
-    pickerParts.footer.hidden = state.filtered.length === 0;
-    pickerParts.page.textContent = state.filtered.length ? `Page ${state.page + 1} of ${pageCount}` : '';
+    pickerParts.footer.hidden = state.remoteLoading || (!state.remote && state.filtered.length === 0);
+    pickerParts.page.textContent = state.filtered.length || state.remoteLoading ? `Page ${state.page + 1} of ${pageCount}` : '';
     pickerParts.previous.disabled = state.page <= 0;
-    pickerParts.next.disabled = state.page >= pageCount - 1;
+    pickerParts.next.disabled = state.remoteLoading || state.page >= pageCount - 1;
   }
 
   function finishClose(state) {
@@ -405,6 +495,7 @@
       pickerDialog.setAttribute('open', '');
     }
     pickerParts.search.focus();
+    if (state.remote) loadRemote(state);
   }
 
   function updateButton(state) {
@@ -458,7 +549,7 @@
     select.tabIndex = -1;
     select.setAttribute('aria-hidden', 'true');
     select.setAttribute('data-lf-resource-picker-enhanced', 'true');
-    const state = { id: String(labelSequence), select, wrapper, button, fieldLabel: fieldLabel(select), options: [], filtered: [], page: 0, activeIndex: 0 };
+    const state = { id: String(labelSequence), select, wrapper, button, fieldLabel: fieldLabel(select), options: [], filtered: [], page: 0, activeIndex: 0, remote: usesRemoteOptions(select), remoteItems: [], remoteTotal: 0, remoteTotalPages: 1, remoteSequence: 0, remoteLoading: false, remoteError: '', selectedOption: null, searchTimer: null };
     states.set(select, state);
     button.addEventListener('click', () => openPicker(select));
     select.addEventListener('invalid', event => {
