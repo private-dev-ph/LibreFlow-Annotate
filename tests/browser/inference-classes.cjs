@@ -203,6 +203,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     await page.locator('.lf-resource-picker-page-button').last().click();
     await page.locator('.lf-resource-picker-option').filter({ hasText: 'Late Model 47' }).click();
     assert.equal(await page.locator('#auto-model-select').inputValue(), 'late-47', 'late model remains selectable from the second remote page');
+    await page.waitForFunction(() => getComputedStyle(document.getElementById('slider-row-detection')).display !== 'none', null, { timeout: 2000 });
     console.log('PASS: class picker metadata, scoped selection, subset echo, preservation, undo, race, retry, shortcut, and responsive layouts');
   } finally {
     releaseSlow?.();
