@@ -1,3 +1,4 @@
+const imagePage = require('./image-browse-fixture.cjs');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const express = require('express');
@@ -23,10 +24,10 @@ async function openAnnotator(browser, server, options = {}) {
     let body = [];
     if (pathname === '/api/auth/me') body = { id:'tester', username:'Tester' };
     else if (pathname === '/api/projects/test') body = { id:'test', name:'Null fixture', labelClasses:[] };
-    else if (pathname === '/api/images') body = [
+    else if (pathname === '/api/images/browse') body = imagePage(route, [
       { id:'one', filename:'one.svg', originalName:'One', width:400, height:300, annotated:true, isNull },
       { id:'two', filename:'two.svg', originalName:'Two', width:400, height:300, annotated:false, isNull:false },
-    ];
+    ]);
     else if (pathname === '/api/annotations/one') body = isNull ? [] : shapes;
     else if (pathname.includes('/reviews/image/')) body = { status:'unannotated', comments:[], issues:[], members:[] };
     else if (pathname === '/api/annotations' && method === 'POST') {

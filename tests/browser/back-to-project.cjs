@@ -1,3 +1,4 @@
+const imagePage = require('./image-browse-fixture.cjs');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const express = require('express');
@@ -16,7 +17,7 @@ async function makePage(browser, server, width, { autoSave = false } = {}) {
     let body = {};
     if (url.pathname === '/api/auth/me') body = { id: 'tester', username: 'Tester' };
     else if (url.pathname === `/api/projects/${encodeURIComponent(projectId)}` || url.pathname === `/api/projects/${projectId}`) body = { id: projectId, name: 'Navigation fixture', labelClasses: [] };
-    else if (url.pathname === '/api/images') body = [image];
+    else if (url.pathname === '/api/images/browse') body = imagePage(route, [image]);
     else if (url.pathname === '/api/batches') body = [];
     else if (url.pathname === '/api/annotations/board' && request.method() === 'GET') body = [];
     else if (url.pathname === '/api/annotations' && request.method() === 'POST') { saves += 1; body = { ok: true }; }
@@ -35,6 +36,12 @@ async function makePage(browser, server, width, { autoSave = false } = {}) {
   return { page, get saves() { return saves; } };
 }
 
+async function projectLink(page) {
+  const link = page.locator('#annotator-project-link');
+  if (!(await link.isVisible())) await page.locator('#mobile-nav-toggle').click();
+  return link;
+}
+
 async function addUnsaved(page, id = 'shape') {
   await page.evaluate(id => Canvas.addShapes([{ id, label: 'Part', type: 'bbox', data: { x: 10, y: 10, width: 20, height: 20 } }]), id);
   await page.waitForFunction(() => document.getElementById('save-indicator').classList.contains('show'));
@@ -48,8 +55,8 @@ async function addUnsaved(page, id = 'shape') {
   try {
     for (const width of [320, 375, 390, 430, 768, 1280]) {
       const { page } = await makePage(browser, server, width);
-      const link = page.locator('#annotator-project-link');
-      assert.equal(await link.innerText(), 'Back to project');
+      const link = await projectLink(page);
+      assert.equal((await link.innerText()).trim(), 'Back to project');
       assert.equal(await link.getAttribute('href'), '/project?projectId=fixture%2Fproject');
       assert.equal(await link.isVisible(), true);
       assert.ok((await link.boundingBox()).height >= 44, `${width}px link should have a touch-sized hit area`);
@@ -84,7 +91,7 @@ async function addUnsaved(page, id = 'shape') {
       await addUnsaved(page);
       let dialogMessage = '';
       page.once('dialog', async dialog => { dialogMessage = dialog.message(); await dialog.dismiss(); });
-      await page.locator('#annotator-project-link').click();
+      await (await projectLink(page)).click();
       await page.waitForTimeout(100);
       assert.equal(dialogMessage, 'Unsaved changes - leave anyway?');
       assert.match(new URL(page.url()).pathname, /annotator$/);
@@ -95,7 +102,7 @@ async function addUnsaved(page, id = 'shape') {
       const fixture = await makePage(browser, server, 768);
       await addUnsaved(fixture.page);
       fixture.page.once('dialog', dialog => dialog.accept());
-      await fixture.page.locator('#annotator-project-link').click();
+      await (await projectLink(fixture.page)).click();
       await fixture.page.waitForURL(url => url.pathname === '/project');
       assert.equal(new URL(fixture.page.url()).searchParams.get('projectId'), projectId);
       await fixture.page.close();
@@ -104,7 +111,7 @@ async function addUnsaved(page, id = 'shape') {
     {
       const fixture = await makePage(browser, server, 375, { autoSave: true });
       await addUnsaved(fixture.page);
-      await fixture.page.locator('#annotator-project-link').click();
+      await (await projectLink(fixture.page)).click();
       await fixture.page.waitForURL(url => url.pathname === '/project');
       assert.equal(fixture.saves, 1, 'auto-save should happen once before project navigation');
       await fixture.page.close();
@@ -119,7 +126,7 @@ async function addUnsaved(page, id = 'shape') {
         releaseSave = async () => { await route.fulfill({ json: { ok: true } }); resolve(); };
       }));
       await addUnsaved(fixture.page, 'before-save');
-      await fixture.page.locator('#annotator-project-link').click();
+      await (await projectLink(fixture.page)).click();
       await fixture.page.waitForFunction(() => document.getElementById('annotator-project-link').getAttribute('aria-busy') === 'true');
       await fixture.page.evaluate(() => document.getElementById('annotator-project-link').click());
       await fixture.page.evaluate(() => Canvas.addShapes([{ id: 'during-save', label: 'Part', type: 'bbox', data: { x: 40, y: 40, width: 20, height: 20 } }]));
@@ -136,11 +143,11 @@ async function addUnsaved(page, id = 'shape') {
       const fixture = await makePage(browser, server, 375, { autoSave: true });
       await fixture.page.route('**/api/annotations', route => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'fixture save failure' }) }));
       await addUnsaved(fixture.page, 'failed-save');
-      await fixture.page.locator('#annotator-project-link').click();
+      await (await projectLink(fixture.page)).click();
       await fixture.page.waitForFunction(() => !document.getElementById('annotator-project-link').hasAttribute('aria-busy'));
       assert.match(new URL(fixture.page.url()).pathname, /annotator$/);
       assert.equal(await fixture.page.locator('#save-indicator').evaluate(el => el.classList.contains('show')), true, 'failed auto-save must keep edits dirty');
-      assert.equal(await fixture.page.locator('#annotator-project-link').innerText(), 'Back to project', 'failed auto-save must re-enable the link');
+      assert.equal((await fixture.page.locator('#annotator-project-link').innerText()).trim(), 'Back to project', 'failed auto-save must re-enable the link');
       await fixture.page.close();
     }
 
@@ -153,7 +160,7 @@ async function addUnsaved(page, id = 'shape') {
       }));
       await fixture.page.locator('#btn-mark-null').click();
       await fixture.page.waitForFunction(() => document.getElementById('btn-mark-null').disabled);
-      await fixture.page.locator('#annotator-project-link').click();
+      await (await projectLink(fixture.page)).click();
       await fixture.page.waitForTimeout(100);
       assert.match(new URL(fixture.page.url()).pathname, /annotator$/);
       await releaseNullSave();

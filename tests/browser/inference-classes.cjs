@@ -1,3 +1,4 @@
+const imagePage = require('./image-browse-fixture.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -30,7 +31,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
       let body;
       if (p === '/api/auth/me') body = { id: 'test', username: 'Tester' };
       else if (p === '/api/projects/test') body = { id: 'test', name: 'Class picker', labelClasses: [] };
-      else if (p === '/api/images') body = [{ id: 'one', filename: 'one.svg', originalName: 'Board one', width: 400, height: 300 }];
+      else if (p === '/api/images/browse') body = imagePage(route, [{ id: 'one', filename: 'one.svg', originalName: 'Board one', width: 400, height: 300 }]);
       else if (p === '/api/batches') body = [];
       else if (p === '/api/annotations/one') body = [{ id: 'manual-a', label: 'alpha', type: 'bbox', data: { x: 20, y: 20, width: 70, height: 70 } }];
       else if (p === '/api/models') body = [

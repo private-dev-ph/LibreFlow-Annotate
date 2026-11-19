@@ -1,3 +1,4 @@
+const imagePage = require('./image-browse-fixture.cjs');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -32,9 +33,9 @@ async function waitBriefly() {
       else if (p === '/api/projects/test') body = {
         id: 'test', name: 'Shortcut test', labelClasses: [{ name: 'part', color: '#b44b40' }],
       };
-      else if (p === '/api/images') body = [{
+      else if (p === '/api/images/browse') body = imagePage(route, [{
         id: 'one', filename: 'one.svg', originalName: 'Board one', width: 400, height: 300,
-      }];
+      }]);
       else if (p === '/api/batches') body = [];
       else if (p === '/api/annotations/one') body = [];
       else if (p === '/api/models') body = [{ id: 'det', name: 'Detector', type: 'detection' }];
