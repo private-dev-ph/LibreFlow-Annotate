@@ -16,7 +16,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     else if(p==='/api/projects/test')body={id:'test',name:'Navigation fixture',labelClasses:[]};
     else if(p==='/api/images/browse'){
       const requestUrl=new URL(route.request().url()),pageNumber=Number(requestUrl.searchParams.get('page')||1);
-      const pageImages=Array.from({length:pageNumber===1?100:101},(_,offset)=>{const index=(pageNumber-1)*100+offset;return {id:index===0?'board':`image-${index}`,filename:'board.svg',originalName:index===0?'Board':`Board ${index}`,width:4000,height:3000,annotated:index===0,isNull:false,tags:[]}});
+      const pageImages=Array.from({length:pageNumber===1?100:(pageNumber===2?100:1)},(_,offset)=>{const index=(pageNumber-1)*100+offset;return {id:index===0?'board':`image-${index}`,filename:'board.svg',originalName:index===0?'Board':`Board ${index}`,width:4000,height:3000,annotated:index===0,isNull:false,tags:[]}});
       body={groups:[{key:'none',label:'',total:201,offset:0,items:pageImages}],page:pageNumber,pageSize:100,total:201,totalPages:3,projectTotal:201,scopeTotal:201,scopeAnnotatedTotal:1,scopeUnannotatedTotal:200,scopeNullTotal:0,annotatedTotal:1,unannotatedTotal:200,nullTotal:0,requestedIndex:-1};
     }
     else if(p==='/api/annotations/board')body=shapes;
@@ -78,6 +78,33 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    assert.deepEqual(errors,[]);
    await page.close();
   }
+  const densePage=await browser.newPage({viewport:{width:1280,height:812}});
+  const denseShapes=Array.from({length:322},(_,index)=>({id:`shape-${index}`,label:`Object ${index}`,type:'bbox',data:{x:index*4,y:index*3,width:40,height:30}}));
+  await densePage.route('**/api/**',route=>{
+   const p=new URL(route.request().url()).pathname;let body=[];
+   if(p==='/api/auth/me')body={id:'tester',username:'Tester'};
+   else if(p==='/api/projects/test')body={id:'test',name:'Dense annotations',labelClasses:[]};
+   else if(p==='/api/images/browse')body={groups:[{key:'none',label:'',total:1,offset:0,items:[{id:'board',filename:'board.svg',originalName:'Board',width:4000,height:3000,annotated:true,isNull:false,tags:[]}]}],page:1,pageSize:100,total:1,totalPages:1,projectTotal:1,scopeTotal:1,scopeAnnotatedTotal:1,scopeUnannotatedTotal:0,scopeNullTotal:0,annotatedTotal:1,unannotatedTotal:0,nullTotal:0,requestedIndex:-1};
+   else if(p==='/api/annotations/board')body=denseShapes;
+   else if(p.includes('/review'))body={review:{status:'unannotated'},permissions:{},collaborators:[],comments:[],history:[]};
+   return route.fulfill({json:body});
+  });
+  await densePage.route('**/uploads/board.svg',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="3000"><rect width="4000" height="3000" fill="#324d46"/></svg>'}));
+  await densePage.goto(`http://127.0.0.1:${server.address().port}/annotator?projectId=test`);
+  await densePage.waitForFunction(()=>typeof Canvas!=='undefined'&&Canvas.getImageSize()?.width===4000);
+  await densePage.waitForFunction(()=>document.querySelectorAll('#annotation-list li[data-annotation-id]').length===160);
+  assert.ok(await densePage.locator('#annotation-list li[data-annotation-id]').count()<=160);
+  await densePage.evaluate(()=>Canvas.setSelected('shape-321'));
+  await densePage.waitForSelector('#annotation-list li[data-annotation-id="shape-321"]');
+  assert.ok(await densePage.locator('#annotation-list li[data-annotation-id]').count()<=160);
+  await densePage.locator('[data-annotation-page="previous"]').click();
+  await densePage.waitForSelector('#annotation-list li[data-annotation-id="shape-160"]');
+  assert.equal(await densePage.locator('#annotation-list li[data-annotation-id="shape-321"]').count(),0);
+  assert.ok(await densePage.locator('#annotation-list li[data-annotation-id]').count()<=160);
+  await densePage.locator('[data-annotation-page="next"]').click();
+  await densePage.waitForSelector('#annotation-list li[data-annotation-id="shape-321"]');
+  assert.ok(await densePage.locator('#annotation-list li[data-annotation-id]').count()<=160);
+  await densePage.close();
   console.log('PASS: native double-click and Enter focus annotations; mobile reveals canvas; selection, deletion and data remain correct');
  }finally{await browser.close();await new Promise(r=>server.close(r))}
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -620,6 +620,7 @@
 
   // -- Shapes change callback -------------------------------------------------
   let annotationListShapes = null;
+  let annotationListSelectedId = null;
   const annotationWindowSize = 160;
   let annotationWindowOffset = 0;
   function onShapesChange(shapes, selectedId, dirty = false) {
@@ -628,18 +629,23 @@
     renderAnnotationList(shapes, selectedId, dirty);
   }
 
-  function renderAnnotationList(shapes, selectedId, dirty = false) {
+  function renderAnnotationList(shapes, selectedId, dirty = false, preserveWindow = false) {
     annCountEl.textContent = shapes.length;
     annotationsEmpty?.classList.toggle('hidden', shapes.length > 0);
     const selectedIndex = selectedId == null ? -1 : shapes.findIndex(shape => shape.id === selectedId);
-    const maxOffset = Math.max(0, shapes.length - annotationWindowSize);
-    if (selectedIndex >= 0 && (selectedIndex < annotationWindowOffset || selectedIndex >= annotationWindowOffset + annotationWindowSize)) {
+    const maxOffset = Math.max(0, Math.floor(Math.max(0, shapes.length - 1) / annotationWindowSize) * annotationWindowSize);
+    const normalizedSelectedId = selectedId == null ? null : String(selectedId);
+    const previousWindowOffset = annotationWindowOffset;
+    if (!preserveWindow && selectedIndex >= 0 && (selectedIndex < annotationWindowOffset || selectedIndex >= annotationWindowOffset + annotationWindowSize)) {
       annotationWindowOffset = Math.min(maxOffset, Math.floor(selectedIndex / annotationWindowSize) * annotationWindowSize);
     } else {
       annotationWindowOffset = Math.min(annotationWindowOffset, maxOffset);
     }
     const visibleEnd = Math.min(shapes.length, annotationWindowOffset + annotationWindowSize);
-    if (annotationListShapes === shapes && !dirty && (selectedIndex < 0 || (selectedIndex >= annotationWindowOffset && selectedIndex < visibleEnd))) {
+    const selectedInWindow = selectedIndex < 0 || (selectedIndex >= annotationWindowOffset && selectedIndex < visibleEnd);
+    const windowChanged = previousWindowOffset !== annotationWindowOffset;
+    if (annotationListShapes === shapes && !dirty && !windowChanged && selectedInWindow) {
+      annotationListSelectedId = normalizedSelectedId;
       const selected = selectedId == null ? null : String(selectedId);
       [...annotationList.children].forEach(row => {
         row.classList.toggle('selected', row.dataset.annotationId === selected);
@@ -647,6 +653,7 @@
       return;
     }
     annotationListShapes = shapes;
+    annotationListSelectedId = normalizedSelectedId;
     annotationList.innerHTML = '';
     const renderShapes = shapes.slice(annotationWindowOffset, visibleEnd);
     renderShapes.forEach(s => {
@@ -704,11 +711,11 @@
       </div>`;
       more.querySelector('[data-annotation-page="previous"]')?.addEventListener('click', () => {
         annotationWindowOffset = Math.max(0, annotationWindowOffset - annotationWindowSize);
-        renderAnnotationList(shapes, selectedId, true);
+        renderAnnotationList(shapes, selectedId, true, true);
       });
       more.querySelector('[data-annotation-page="next"]')?.addEventListener('click', () => {
         annotationWindowOffset = Math.min(maxOffset, annotationWindowOffset + annotationWindowSize);
-        renderAnnotationList(shapes, selectedId, true);
+        renderAnnotationList(shapes, selectedId, true, true);
       });
       annotationList.appendChild(more);
     }
