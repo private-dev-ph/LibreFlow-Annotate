@@ -362,7 +362,7 @@ const API = {
   },
   browseModels(parameters = {}) { return fetchLibraryPage('models', parameters); },
   browseProjectModels(projectId, parameters = {}) {
-    return fetchLibraryPage('models', { ...parameters, projectId });
+    return fetchLibraryPage('models/project-browse', { ...parameters, projectId });
   },
 
   // ── Datasets ─────────────────────────────────────────────────────────────

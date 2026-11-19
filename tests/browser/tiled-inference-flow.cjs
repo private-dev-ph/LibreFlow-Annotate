@@ -19,6 +19,7 @@ const express = require('express');
     if(p==='/api/auth/me') body={id:'test',username:'Tester'};
     else if(p==='/api/projects/test') body={id:'test',name:'Board test',labelClasses:[{name:'part',color:'#b44b40'},{name:'other',color:'#259282'}]};
     else if(p==='/api/images/browse') body=imagePage(route, [{id:'one',filename:'one.svg',originalName:'Board one',width:2050,height:1300},{id:'two',filename:'two.svg',originalName:'Board two',width:900,height:500}]);
+    else if(p==='/api/models/project-browse') body={items:[{id:'det',name:'Detector',type:'detection'},{id:'cls',name:'Classifier',type:'classification'}],total:2,page:1,pageSize:50,totalPages:1};
     else if(p==='/api/models') body=[{id:'det',name:'Detector',type:'detection'},{id:'cls',name:'Classifier',type:'classification'}];
     else if(p==='/api/models/det/classes') body={classes:[{id:0,name:'part'},{id:1,name:'other'}],task:'detect'};
     else if(p==='/api/annotations/one') body=annotations;

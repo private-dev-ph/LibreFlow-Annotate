@@ -20,6 +20,12 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   let releaseSlow;
   let mismatchNext = false;
   const payloads = [];
+  const modelRows = [
+    { id: 'a', name: 'Model A', type: 'detection' },
+    { id: 'b', name: 'Model B', type: 'detection' },
+    { id: 'c', name: 'Model C', type: 'detection' },
+    ...Array.from({ length: 49 }, (_, index) => ({ id: `late-${index}`, name: `Late Model ${index}`, type: 'detection' })),
+  ];
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
     const errors = [];
@@ -34,6 +40,11 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
       else if (p === '/api/images/browse') body = imagePage(route, [{ id: 'one', filename: 'one.svg', originalName: 'Board one', width: 400, height: 300 }]);
       else if (p === '/api/batches') body = [];
       else if (p === '/api/annotations/one') body = [{ id: 'manual-a', label: 'alpha', type: 'bbox', data: { x: 20, y: 20, width: 70, height: 70 } }];
+      else if (p === '/api/models/project-browse') {
+        const page = Number(url.searchParams.get('page') || 1);
+        const pageSize = Number(url.searchParams.get('pageSize') || 50);
+        body = { items: modelRows.slice((page - 1) * pageSize, page * pageSize), total: modelRows.length, page, pageSize, totalPages: Math.ceil(modelRows.length / pageSize) };
+      }
       else if (p === '/api/models') body = [
         { id: 'a', name: 'Model A', type: 'detection' },
         { id: 'b', name: 'Model B', type: 'detection' },
@@ -186,6 +197,12 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
         console.log(`SCREENSHOT: ${file}`);
       }
     }
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const modelTrigger = page.locator('#auto-model-select').locator('xpath=preceding-sibling::button');
+    await modelTrigger.click();
+    await page.locator('.lf-resource-picker-page-button').last().click();
+    await page.locator('.lf-resource-picker-option').filter({ hasText: 'Late Model 47' }).click();
+    assert.equal(await page.locator('#auto-model-select').inputValue(), 'late-47', 'late model remains selectable from the second remote page');
     console.log('PASS: class picker metadata, scoped selection, subset echo, preservation, undo, race, retry, shortcut, and responsive layouts');
   } finally {
     releaseSlow?.();

@@ -38,6 +38,7 @@ async function waitBriefly() {
       }]);
       else if (p === '/api/batches') body = [];
       else if (p === '/api/annotations/one') body = [];
+      else if (p === '/api/models/project-browse') body = { items: [{ id: 'det', name: 'Detector', type: 'detection' }], total: 1, page: 1, pageSize: 50, totalPages: 1 };
       else if (p === '/api/models') body = [{ id: 'det', name: 'Detector', type: 'detection' }];
       else if (p === '/api/models/det/classes') body = { classes: [{ id: 0, name: 'part' }, { id: 1, name: 'other' }], task: 'detect' };
       else if (p === '/api/notifications') body = [];

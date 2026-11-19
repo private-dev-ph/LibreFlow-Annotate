@@ -76,7 +76,7 @@ function response(body, ok = true) {
   return { ok, status: ok ? 200 : 500, async json() { return body; } };
 }
 
-async function makeHarness({ saveBehavior, browsePages, confirmBehavior } = {}) {
+async function makeHarness({ saveBehavior, browsePages, browseBehavior, confirmBehavior } = {}) {
   const document = new FakeDocument();
   const images = [
     { id: 'one', filename: 'one.svg', originalName: 'One', annotated: false, isNull: false },
@@ -100,8 +100,10 @@ async function makeHarness({ saveBehavior, browsePages, confirmBehavior } = {}) 
     async updateImage(imageId, patch) { return { id: imageId, ...patch, annotated: patch.isNull }; },
     async uploadImages() { return []; },
   };
-  if (browsePages) {
-    API.browseProjectImages = async (_projectId, params = {}) => browsePages[params.page || 1] || browsePages[1];
+  if (browsePages || browseBehavior) {
+    API.browseProjectImages = async (_projectId, params = {}) => browseBehavior
+      ? browseBehavior(params)
+      : browsePages[params.page || 1] || browsePages[1];
   }
   const Canvas = {
     init(_canvas, _wrapper, callback) { shapesChange = callback; },
@@ -232,4 +234,25 @@ test('paged filter reloads respect dirty guards and empty results disable image 
   assert.equal(emptyHarness.document.getElementById('image-nav-label').textContent, '-- / --');
   assert.equal(emptyHarness.document.getElementById('btn-save').disabled, true);
   assert.equal(emptyHarness.document.getElementById('btn-mark-null').disabled, true);
+});
+
+test('superseded page requests cannot replace edits made during a slow fetch', async () => {
+  const page = (pageNumber, id) => ({
+    groups: [{ key: 'none', label: '', total: 2, offset: 0, items: [{ id, filename: `${id}.svg`, originalName: id, annotated: false, isNull: false }] }],
+    page: pageNumber, pageSize: 1, total: 2, totalPages: 2, projectTotal: 2, scopeTotal: 2,
+    scopeAnnotatedTotal: 0, scopeUnannotatedTotal: 2, scopeNullTotal: 0,
+  });
+  let resolvePage;
+  const harness = await makeHarness({
+    browseBehavior: params => params.page === 1
+      ? page(1, 'one')
+      : new Promise(resolve => { resolvePage = () => resolve(page(2, 'two')); }),
+  });
+  const pending = harness.document.getElementById('btn-next-img').click();
+  await new Promise(resolve => setImmediate(resolve));
+  harness.shapesChange([], null, true);
+  resolvePage();
+  await pending;
+  assert.equal(harness.document.getElementById('image-nav-label').textContent, '1 / 2');
+  assert.equal(harness.document.getElementById('images-list').children[0].title, 'one');
 });
