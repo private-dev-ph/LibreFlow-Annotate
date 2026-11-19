@@ -175,7 +175,13 @@
       if (activeState) {
         activeState.page = 0;
         activeState.activeIndex = 0;
-        if (activeState.remote) loadRemote(activeState);
+        if (activeState.remote) {
+          activeState.remoteItems = [];
+          activeState.options = [];
+          activeState.filtered = [];
+          activeState.remoteTotal = 0;
+          loadRemote(activeState);
+        }
         else renderDialog(activeState);
       }
       search.focus();
@@ -201,6 +207,10 @@
       activeState.page = 0;
       activeState.activeIndex = 0;
       if (activeState.remote) {
+        activeState.remoteItems = [];
+        activeState.options = [];
+        activeState.filtered = [];
+        activeState.remoteTotal = 0;
         clearTimeout(activeState.searchTimer);
         activeState.searchTimer = setTimeout(() => loadRemote(activeState), 220);
         renderDialog(activeState, { loading: true });
@@ -296,6 +306,14 @@
     const state = activeState;
     if (!state || !item || state.select.disabled || !state.select.isConnected) return;
     const previous = state.select.value;
+    if (state.remote && ![...state.select.options].some(option => option.value === item.value)) {
+      const option = document.createElement('option');
+      option.value = item.value;
+      option.textContent = item.text;
+      if (item.description) option.dataset.description = item.description;
+      if (item.meta) option.dataset.meta = item.meta;
+      state.select.append(option);
+    }
     if (previous !== item.value) {
       state.select.value = item.value;
       state.select.dispatchEvent(new Event('input', { bubbles: true }));
