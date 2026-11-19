@@ -239,7 +239,7 @@ window.__libreFlowAutomationShell = true;
 
   function renderWebhooks() {
     document.getElementById('webhooks-list').innerHTML = state.webhooks.length ? state.webhooks.map(webhook => `<div class="compact-row"><div class="compact-row-main"><div class="compact-row-title"><span class="status-dot ${webhook.active ? 'active' : ''}"></span>${esc(webhook.name)}</div><div class="compact-row-meta">${esc(webhook.url)} · ${webhook.events.length} event${webhook.events.length === 1 ? '' : 's'} · ${webhook.projectId ? esc(projectName(webhook.projectId)) : 'all projects'}</div></div><div class="compact-row-actions"><button class="mini-action secondary" data-webhook-toggle="${esc(webhook.id)}" data-active="${webhook.active}" type="button">${webhook.active ? 'Disable' : 'Enable'}</button><button class="mini-action danger" data-webhook-delete="${esc(webhook.id)}" type="button">Delete</button></div></div>`).join('') : '<p class="muted">No webhooks configured.</p>';
-    document.getElementById('deliveries-list').innerHTML = state.deliveries.length ? state.deliveries.slice(0, 12).map(delivery => `<div class="compact-row"><div class="compact-row-main"><div class="compact-row-title"><span class="status-dot ${esc(delivery.status)}"></span>${esc(delivery.event)}</div><div class="compact-row-meta">${esc(delivery.status)} · ${delivery.attempts} attempt${delivery.attempts === 1 ? '' : 's'}${delivery.responseStatus ? ` · HTTP ${delivery.responseStatus}` : ''} · ${new Date(delivery.updatedAt).toLocaleString()}</div></div><div class="compact-row-actions">${delivery.status === 'failed' ? `<button class="mini-action" data-delivery-retry="${esc(delivery.id)}" type="button">Retry</button>` : ''}</div></div>`).join('') : '<p class="muted">No webhook deliveries yet.</p>';
+    document.getElementById('deliveries-list').innerHTML = state.deliveries.length ? state.deliveries.map(delivery => `<div class="compact-row"><div class="compact-row-main"><div class="compact-row-title"><span class="status-dot ${esc(delivery.status)}"></span>${esc(delivery.event)}</div><div class="compact-row-meta">${esc(delivery.status)} · ${delivery.attempts} attempt${delivery.attempts === 1 ? '' : 's'}${delivery.responseStatus ? ` · HTTP ${delivery.responseStatus}` : ''} · ${new Date(delivery.updatedAt).toLocaleString()}</div></div><div class="compact-row-actions">${delivery.status === 'failed' ? `<button class="mini-action" data-delivery-retry="${esc(delivery.id)}" type="button">Retry</button>` : ''}</div></div>`).join('') : '<p class="muted">No webhook deliveries yet.</p>';
   }
 
   function renderScopes() {
@@ -253,13 +253,55 @@ window.__libreFlowAutomationShell = true;
     list.innerHTML = state.apiKeys.map(key => `<div class="compact-row"><div class="compact-row-main"><div class="compact-row-title"><span class="status-dot ${key.revokedAt ? 'revoked' : 'active'}"></span>${esc(key.name)} · ${esc(key.prefix)}</div><div class="compact-row-meta">${esc(key.scopes.join(', '))}<br>${key.projectIds.length ? `${key.projectIds.length} restricted project(s)` : 'All accessible projects'} · last used ${key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString() : 'never'}</div></div><div class="compact-row-actions">${key.revokedAt ? '' : `<button class="mini-action danger" data-key-revoke="${esc(key.id)}" type="button">Revoke</button>`}</div></div>`).join('');
   }
 
+  const integrationLists = [
+    ['connectors', 'connectors', 'connectors-list', renderConnectors],
+    ['webhooks', 'webhooks', 'webhooks-list', renderWebhooks],
+    ['deliveries', 'webhook-deliveries', 'deliveries-list', renderWebhooks],
+    ['apiKeys', 'api-keys', 'api-keys-list', renderApiKeys],
+  ].map(([key, endpoint, id, render]) => {
+    const nav = document.createElement('div');
+    nav.className = 'collection-controls';
+    nav.innerHTML = `<input type="search" maxlength="200" aria-label="Search ${endpoint}" placeholder="Search ${endpoint}"><button type="button">Previous</button><span role="status"></span><button type="button">Next</button>`;
+    document.getElementById(id).before(nav);
+    const [input, prev, status, next] = nav.children;
+    let page = 1, sequence = 0, timer;
+    async function load() {
+      const current = ++sequence;
+      prev.disabled = next.disabled = true;
+      try {
+        const params = new URLSearchParams({page, q: input.value.trim()});
+        const result = await request(`/api/automation/${endpoint}?${params}`);
+        if (current !== sequence) return;
+        state[key] = result.items;
+        page = result.page;
+        status.textContent = `Page ${page} of ${result.totalPages} · ${result.total} results`;
+        prev.disabled = page <= 1;
+        next.disabled = page >= result.totalPages;
+        render();
+      } catch (error) {
+        if (sequence === current) { state[key] = []; render(); status.textContent = error.message + ' Use Refresh to retry.'; }
+      }
+    }
+    prev.onclick = () => { page--; load(); };
+    next.onclick = () => { page++; load(); };
+    input.oninput = () => {
+      page = 1;
+      sequence++;
+      clearTimeout(timer);
+      state[key] = []; render();
+      prev.disabled = next.disabled = true;
+      timer = setTimeout(load, 250);
+    };
+    return load;
+  });
+
   async function loadIntegrations() {
-    const [connectors, webhooks, deliveries, keys, ingestionStatus, eventInfo, scopeInfo] = await Promise.all([
-      request('/api/automation/connectors'), request('/api/automation/webhooks'), request('/api/automation/webhook-deliveries?limit=50'),
-      request('/api/automation/api-keys'), request('/api/automation/ingestion/status'), request('/api/automation/webhook-events'), request('/api/automation/scopes'),
+    const [ingestionStatus, eventInfo, scopeInfo] = await Promise.all([
+      request('/api/automation/ingestion/status'), request('/api/automation/webhook-events'), request('/api/automation/scopes'),
+      ...integrationLists.map(load => load()),
     ]);
-    Object.assign(state, { connectors, webhooks, deliveries, apiKeys: keys, webhookEvents: eventInfo.events, scopes: scopeInfo.scopes });
-    renderIngestionStatus(ingestionStatus); renderConnectors(); renderWebhookEvents(); renderWebhooks(); renderScopes(); renderApiKeys();
+    Object.assign(state, { webhookEvents: eventInfo.events, scopes: scopeInfo.scopes });
+    renderIngestionStatus(ingestionStatus); renderWebhookEvents(); renderScopes();
   }
 
   async function loadReviewQueue(nextPage = state.reviewPage) {

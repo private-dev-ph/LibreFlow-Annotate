@@ -51,6 +51,7 @@ const {
   listWebhooks,
   deleteWebhook,
   listDeliveries,
+  ownedDeliveries,
   retryWebhookDelivery,
   emitWebhookEvent,
 } = require('../lib/webhooks');
@@ -167,8 +168,22 @@ router.get('/scopes', requireScopes('integrations:read'), (req, res) => {
   res.json({ scopes: ALL_SCOPES });
 });
 
+function sendIntegrationList(req, res, records) {
+  if (req.query.page === undefined) return res.json(records);
+  const requested = Number(req.query.page), query = req.query.q ?? '';
+  if (!Number.isSafeInteger(requested) || requested < 1 || typeof query !== 'string' || query.length > 200) {
+    return res.status(400).json({ error: 'Invalid integration search or page.' });
+  }
+  const needle = query.trim().toLowerCase();
+  const found = records.filter(record => [record.name, record.type, record.status, record.event, record.prefix, record.url,
+    record.revokedAt ? 'revoked' : '', record.projectId].some(value => String(value ?? '').toLowerCase().includes(needle)));
+  const totalPages = Math.max(1, Math.ceil(found.length / 12));
+  const page = Math.min(requested, totalPages);
+  return res.json({ items: found.slice((page - 1) * 12, page * 12), total: found.length, page, totalPages });
+}
+
 router.get('/api-keys', requireSession, (req, res) => {
-  res.json(listApiKeys(userId(req)));
+  sendIntegrationList(req, res, listApiKeys(userId(req)));
 });
 
 router.post('/api-keys', requireSession, (req, res) => {
@@ -462,7 +477,7 @@ router.get('/connectors', requireScopes('integrations:read'), (req, res) => {
   if (req.authContext.type === 'api_key' && req.authContext.projectIds.length) {
     connectors = connectors.filter(connector => req.authContext.projectIds.includes(connector.projectId));
   }
-  res.json(connectors);
+  sendIntegrationList(req, res, connectors);
 });
 
 router.get('/connectors/s3/contract', requireScopes('integrations:read'), (req, res) => {
@@ -534,7 +549,7 @@ router.get('/webhooks', requireScopes('integrations:read'), (req, res) => {
   if (req.authContext.type === 'api_key' && req.authContext.projectIds.length) {
     hooks = hooks.filter(hook => hook.projectId && req.authContext.projectIds.includes(hook.projectId));
   }
-  res.json(hooks);
+  sendIntegrationList(req, res, hooks);
 });
 
 router.post('/webhooks', requireScopes('integrations:write'), async (req, res) => {
@@ -571,16 +586,16 @@ router.delete('/webhooks/:id', requireScopes('integrations:write'), (req, res) =
 });
 
 router.get('/webhook-deliveries', requireScopes('integrations:read'), (req, res) => {
-  let deliveries = listDeliveries(userId(req), req.query);
+  let deliveries = req.query.page === undefined ? listDeliveries(userId(req), req.query) : ownedDeliveries(userId(req), req.query.webhookId);
   if (req.authContext.type === 'api_key' && req.authContext.projectIds.length) {
     const allowedHookIds = new Set(listWebhooks(userId(req)).filter(webhook => webhook.projectId && req.authContext.projectIds.includes(webhook.projectId)).map(webhook => webhook.id));
     deliveries = deliveries.filter(delivery => allowedHookIds.has(delivery.webhookId));
   }
-  res.json(deliveries);
+  sendIntegrationList(req, res, deliveries);
 });
 
 router.post('/webhook-deliveries/:id/retry', requireScopes('integrations:write'), (req, res) => {
-  const existing = listDeliveries(userId(req), { limit: 500 }).find(delivery => delivery.id === req.params.id);
+  const existing = ownedDeliveries(userId(req)).find(delivery => delivery.id === req.params.id);
   const webhook = existing ? listWebhooks(userId(req)).find(item => item.id === existing.webhookId) : null;
   if (!existing || !webhook) return res.status(404).json({ error: 'Webhook delivery not found.' });
   if (!authorizeIntegrationProject(req, res, webhook.projectId)) return;
