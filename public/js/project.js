@@ -602,12 +602,6 @@
       { value: '', label: allLabel },
       { value: 'unbatched', label: 'Unbatched images' },
     ];
-    allBatches.forEach(batch => {
-      options.push({ value: `batch:${batch.id}`, label: `Batch: ${batch.name || batch.id}` });
-      (batch.subBatches || []).forEach(sub => {
-        options.push({ value: `sub:${sub.id}`, label: `Sub-batch: ${batch.name || batch.id} / ${sub.name || sub.id}` });
-      });
-    });
     imageBatchFilter.innerHTML = options.map(option =>
       `<option value="${escHtml(option.value)}">${escHtml(option.label)}</option>`
     ).join('');
@@ -621,6 +615,32 @@
       if (imageScroll) imageScroll.scrollTop = 0;
     }
     return !stillAvailable && Boolean(previous);
+  }
+
+  function registerImageBatchFilterProvider() {
+    if (!imageBatchFilter || !window.LibreFlowPicker?.registerProvider) return;
+    window.LibreFlowPicker.registerProvider(imageBatchFilter, async ({ query, page, pageSize }) => {
+      const response = await API.browseBatches(projectId, { q: query, page, pageSize });
+      const parents = Array.isArray(response?.items) ? response.items : [];
+      const children = await Promise.all(parents.map(async parent => {
+        const childResponse = await API.browseSubBatches(parent.id, { q: query, page: 1, pageSize: 100 });
+        return Array.isArray(childResponse?.items) ? childResponse.items.map(child => ({
+          value: `sub:${child.id}`,
+          text: `Sub-batch: ${parent.name || parent.id} / ${child.name || child.id}`,
+          meta: `${child.imageCount || 0} images`,
+        })) : [];
+      }));
+      const allLabel = imageBatchFilter.querySelector('option[value=""]')?.textContent || 'All images';
+      const items = [
+        { value: '', text: allLabel, sentinel: true },
+        { value: 'unbatched', text: 'Unbatched images', meta: 'Images without a batch', sentinel: true },
+      ];
+      parents.forEach((parent, index) => {
+        items.push({ value: `batch:${parent.id}`, text: `Batch: ${parent.name || parent.id}`, meta: `${parent.imageCount || 0} images` });
+        items.push(...children[index]);
+      });
+      return { items, total: Number(response.total || parents.length), page: Number(response.page || page), pageSize, totalPages: Number(response.totalPages || 1) };
+    });
   }
 
   function renderImageBatchFilterError() {
@@ -761,36 +781,24 @@
     const refreshVersion = ++datasetRefreshVersion;
     const isCurrentRefresh = () => refreshVersion === datasetRefreshVersion;
     const previousSelection = datasetHasValidSelection() ? datasetSelect.value : '';
+    const previousOption = previousSelection ? datasetSelect.selectedOptions?.[0] : null;
     datasetOptionsLoading = true;
-    datasetSelect.disabled = true;
-    datasetSelect.innerHTML = '<option value="" disabled selected>Loading datasets…</option>';
+    datasetSelect.disabled = false;
+    datasetSelect.innerHTML = '<option value="" disabled selected>Choose a dataset</option>';
+    if (previousSelection) {
+      const option = document.createElement('option');
+      option.value = previousSelection;
+      option.textContent = previousOption?.textContent || 'Selected dataset';
+      option.selected = true;
+      datasetSelect.append(option);
+    }
     refreshDatasetPicker();
     syncDatasetImportState();
-    try {
-      const datasets = await API.getDatasets();
-      if (!isCurrentRefresh()) return [];
-      if (!Array.isArray(datasets)) throw new Error(datasets?.error || 'Unable to load datasets.');
-      const owned = datasets
-        .filter(d => d.userId === me.id || d.sharedWithCollaborators);
-      const previousStillAvailable = owned.some(d => d.id === previousSelection);
-      datasetSelect.innerHTML = owned.length
-        ? '<option value="" disabled>Choose a dataset</option>' + owned.map(d => `<option value="${escHtml(d.id)}" data-description="${escHtml(d.description || '')}" data-meta="${escHtml(datasetMeta(d))}">${escHtml(d.name)}</option>`).join('')
-        : '<option value="" disabled selected>Choose a dataset — no datasets available.</option>';
-      if (owned.length) datasetSelect.value = previousStillAvailable ? previousSelection : '';
-      datasetSelect.disabled = false;
-      refreshDatasetPicker();
-      datasetOptionsLoading = false;
-      syncDatasetImportState();
-      return owned;
-    } catch (e) {
-      if (!isCurrentRefresh()) return [];
-      datasetSelect.innerHTML = '<option value="" disabled selected>Unable to load datasets. Open this section to retry.</option>';
-      datasetSelect.disabled = false;
-      refreshDatasetPicker();
-      datasetOptionsLoading = false;
-      syncDatasetImportState();
-      throw e;
-    }
+    if (isCurrentRefresh() && previousSelection) datasetSelect.value = previousSelection;
+    datasetOptionsLoading = false;
+    refreshDatasetPicker();
+    syncDatasetImportState();
+    return [];
   }
 
   datasetSelect?.addEventListener('change', syncDatasetImportState);
@@ -1109,9 +1117,22 @@
     document.querySelector('[data-tab="versions"]').click();
   }
 
-  document.getElementById('btn-export-all-batches')?.addEventListener('click', () => {
-    if (!batchCatalogReady || !allBatches.length) return;
-    openBatchVersions({ batchIds: allBatches.map(batch => batch.id) });
+  document.getElementById('btn-export-all-batches')?.addEventListener('click', async () => {
+    if (batchCatalogReady && allBatches.length) {
+      openBatchVersions({ batchIds: allBatches.map(batch => batch.id) });
+      return;
+    }
+    const button = document.getElementById('btn-export-all-batches');
+    if (button) button.disabled = true;
+    try {
+      const catalog = await API.getBatchCatalog(projectId);
+      if (!Array.isArray(catalog) || !catalog.length) throw new Error('No batches are available to export.');
+      openBatchVersions({ batchIds: catalog.map(batch => batch.id) });
+    } catch (error) {
+      Notify.error('Batch export unavailable', error.message);
+    } finally {
+      if (button) button.disabled = false;
+    }
   });
 
   //─── ── Jobs badge ─────────────────────────────────────────────────────────
@@ -1151,18 +1172,17 @@
     const request = ++batchCatalogRequest;
     const pageRefresh = batchBrowser.refresh();
     batchCatalogReady = false;
+    allBatches = [];
+    const filterScopeChanged = populateImageBatchFilter();
+    registerImageBatchFilterProvider();
     batchCatalogStatus.hidden = true;
     batchCatalogRetry.hidden = true;
     if (exportAllBatchesButton) exportAllBatchesButton.disabled = true;
-    let scopeChanged = false;
+    let scopeChanged = filterScopeChanged;
     try {
-      const catalog = await API.getBatchCatalog(projectId);
+      await pageRefresh;
       if (request !== batchCatalogRequest) return false;
-      allBatches = catalog;
-      batchCatalogReady = true;
-      scopeChanged = populateImageBatchFilter();
-      if (exportAllBatchesButton) exportAllBatchesButton.disabled = !allBatches.length;
-      if (scopeChanged) await loadImages();
+      if (exportAllBatchesButton) exportAllBatchesButton.disabled = false;
     } catch (error) {
       if (request === batchCatalogRequest) {
         renderImageBatchFilterError();
@@ -1170,8 +1190,6 @@
         batchCatalogStatus.hidden = false;
         batchCatalogRetry.hidden = false;
       }
-    } finally {
-      await pageRefresh;
     }
     return scopeChanged;
   }

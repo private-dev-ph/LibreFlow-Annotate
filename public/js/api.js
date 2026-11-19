@@ -30,6 +30,7 @@ const API = {
     const r = await fetch('/api/projects', { credentials: 'include' });
     return r.json();
   },
+  browseProjects(parameters = {}) { return fetchLibraryPage('projects', parameters); },
   async createProject(name, description) {
     const r = await fetch('/api/projects', {
       method: 'POST',
