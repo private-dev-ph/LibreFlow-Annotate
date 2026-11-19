@@ -97,7 +97,14 @@ test('models browse filters owned records before counting and returns summaries'
 test('models browse supports type/project filters and legacy list remains an array', async () => {
   const filtered = await request(baseUrl, '/api/models/browse?projectId=p1&type=detection');
   assert.equal(filtered.status, 200);
-  assert.deepEqual(filtered.body.items.map(model => model.id), ['m-z']);
+  assert.deepEqual(filtered.body.items.map(model => model.id), ['m-z', 'm-other']);
+
+  const models = JSON.parse(fs.readFileSync(path.join(dataDir, 'models.json'), 'utf8'));
+  models.find(model => model.id === 'm-other').sharedWithCollaborators = true;
+  writeData('models.json', models);
+  const shared = await request(baseUrl, '/api/models/browse?projectId=p1&q=Other&pageSize=1');
+  assert.equal(shared.status, 200);
+  assert.deepEqual(shared.body.items.map(model => model.id), ['m-other']);
 
   const legacy = await request(baseUrl, '/api/models');
   assert.equal(legacy.status, 200);

@@ -361,6 +361,9 @@ const API = {
     return data;
   },
   browseModels(parameters = {}) { return fetchLibraryPage('models', parameters); },
+  browseProjectModels(projectId, parameters = {}) {
+    return fetchLibraryPage('models', { ...parameters, projectId });
+  },
 
   // ── Datasets ─────────────────────────────────────────────────────────────
   async getDatasets() {

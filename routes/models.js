@@ -180,8 +180,14 @@ router.get('/browse', (req, res) => {
     return res.status(400).json({ error: error.message });
   }
 
-  const owned = readModels().filter(model => model.userId === req.session.userId &&
-    (query.projectId === undefined || model.projectId === query.projectId) &&
+  if (query.projectId !== undefined) {
+    const project = getProject(query.projectId);
+    if (denyMissingOrForbidden(res, project, isProjectMember(project, req.session.userId), 'Project')) return;
+  }
+  const owned = readModels().filter(model =>
+    (query.projectId === undefined
+      ? model.userId === req.session.userId
+      : model.projectId === query.projectId && canAccessModel(model, req.session.userId, query.projectId)) &&
     (query.type === undefined || model.type === query.type));
   return res.json(browseLibrary(owned, query, {
     timestampField: model => model.uploadedAt || model.createdAt,
