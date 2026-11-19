@@ -8,20 +8,37 @@
 .version-source-choice small, .version-source-row small { margin-left: auto; color: var(--text-dim); font-size: 12px; text-align: right; white-space: nowrap; }
 .version-source-choice input, .version-source-row input { width: 20px; height: 20px; min-height: 20px; margin: 0; padding: 0; flex: 0 0 auto; accent-color: var(--accent); }
 .version-source-options { margin-top: 10px; }
+.version-source-search { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; font-size: 14px; }
+.version-source-search input { min-height: 44px; width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 16px; }
 .version-source-list { display: grid; gap: 7px; }
-.version-source-group { display: grid; gap: 5px; }
+.version-source-group { display: block; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.version-source-group > summary { list-style: none; }
+.version-source-group > summary::-webkit-details-marker { display: none; }
+.version-source-group > summary::before { content: '›'; display: inline-block; width: 18px; color: var(--text-dim); font-size: 20px; line-height: 1; transform: rotate(0deg); transition: transform .15s ease; }
+.version-source-group[open] > summary::before { transform: rotate(90deg); }
+.version-source-summary-toggle { flex: 1 1 auto; }
+.version-source-sublist { display: grid; gap: 5px; padding: 5px 8px 8px 26px; }
 .version-source-subrow { margin-left: 18px; background: var(--surface); }
+.version-source-pagination { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 10px 0; padding-top: 10px; border-top: 1px solid var(--border); }
+.version-source-pagination button { min-height: 44px; min-width: 96px; padding: 9px 13px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.version-source-pagination span { flex: 1 1 180px; color: var(--text-dim); font-size: 13px; text-align: center; }
+.version-source-pagination button:disabled { opacity: .5; cursor: default; }
 .version-source-empty { margin: 10px 0 0; color: var(--danger); font-size: 14px; line-height: 1.45; }
 .version-source-summary { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--border); }
 .version-source-error { padding: 12px; border: 1px solid var(--danger); border-radius: 8px; background: var(--surface); }
 .version-source-error p:last-of-type { color: var(--danger); }
 .version-source-error button { min-height: 44px; padding: 9px 13px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface-2); font: inherit; cursor: pointer; }
 .version-source-controls :focus-visible, .version-source-error button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.version-source-search input:focus-visible, .version-source-pagination button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 .version-source-controls:disabled { opacity: .65; }
 @media (max-width: 520px) {
   .version-source-modes { grid-template-columns: 1fr; }
   .version-source-choice small, .version-source-row small { white-space: normal; }
   .version-source-subrow { margin-left: 10px; }
+  .version-source-sublist { padding-left: 12px; }
+  .version-source-pagination { align-items: stretch; }
+  .version-source-pagination button { flex: 1 1 120px; }
+  .version-source-pagination span { order: -1; flex-basis: 100%; }
 }
 
 .version-source-controls .version-source-choice, .version-source-controls .version-source-row { display: flex; margin-bottom: 0; color: var(--text); font-size: 14px; font-weight: 400; }
