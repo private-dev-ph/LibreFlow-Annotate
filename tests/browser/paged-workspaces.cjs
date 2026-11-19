@@ -8,7 +8,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH });
   try {
-    const p = await browser.newPage({ viewport: {width:375,height:812}, reducedMotion:'reduce' });
+    const landscape = process.argv.includes('--landscape');
+    const viewport = landscape ? {width:844, height:390} : {width:375, height:812};
+    const p = await browser.newPage({ viewport, reducedMotion:'reduce' });
+    await p.addInitScript(mode => localStorage.setItem('libreflow_theme_mode', mode), landscape ? 'dark' : 'light');
     p.setDefaultTimeout(7000);
     const errors = []; p.on('pageerror', e => errors.push(e.message));
     const url = 'http://127.0.0.1:' + server.address().port;
@@ -85,7 +88,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await deliveryNav.locator('input').fill('Inspection 44');
     await p.locator('[data-delivery-retry="id44"]').waitFor();
     assert.equal(await p.locator('[data-delivery-retry]').count(),1);
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
     assert.deepEqual(errors,[]);
-    console.log('PASS: nested health pages, child selection across pages, project label edit indices and MCP client search at 375px.');
+    console.log('PASS: health, source selections, labels, model choices, MCP and deliveries at ' + viewport.width + 'x' + viewport.height);
   }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
 })().catch(e=>{console.error(e);process.exitCode=1;});
