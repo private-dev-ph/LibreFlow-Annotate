@@ -123,22 +123,52 @@
     };
   }
 
+  const historyQuery = document.getElementById('history-query');
+  const previousHistory = document.getElementById('history-prev');
+  const nextHistory = document.getElementById('history-next');
+  const historyRange = document.getElementById('history-range');
+  let historyPage = 1, historyRequest = 0, historyTimer;
+
+  function pendingHistory() {
+    previousHistory.disabled = nextHistory.disabled = true;
+    historyRange.textContent = 'Loading versions…';
+    document.getElementById('versions-list').replaceChildren();
+  }
+
   async function loadVersions() {
-    const list = document.getElementById('versions-list');
-    list.innerHTML = '<div class="loading">Loading versions…</div>';
+    clearTimeout(historyTimer);
+    const request = ++historyRequest;
+    pendingHistory();
     try {
-      versions = await jsonRequest(`${baseUrl}/versions`);
+      const params = new URLSearchParams({ page: historyPage, pageSize: 12, q: historyQuery.value.trim() });
+      const result = await jsonRequest(`${baseUrl}/versions/browse?${params}`);
+      if (request !== historyRequest) return;
+      versions = result.items;
+      historyPage = result.page;
+      previousHistory.disabled = historyPage <= 1;
+      nextHistory.disabled = historyPage >= result.totalPages;
+      historyRange.textContent = result.total ? `Page ${result.page} of ${result.totalPages} · ${result.total} versions` : '';
       renderVersions();
       renderHealthVersionOptions();
     } catch (error) {
-      list.innerHTML = `<div class="empty-state">${esc(error.message)}</div>`;
+      if (request === historyRequest) historyRange.textContent = error.message + ' Use Refresh to try again.';
     }
   }
+
+  previousHistory.addEventListener('click', () => { historyPage--; loadVersions(); });
+  nextHistory.addEventListener('click', () => { historyPage++; loadVersions(); });
+  historyQuery.addEventListener('input', () => {
+    clearTimeout(historyTimer);
+    historyRequest++;
+    historyPage = 1;
+    pendingHistory();
+    historyTimer = setTimeout(loadVersions, 250);
+  });
 
   function renderVersions() {
     const list = document.getElementById('versions-list');
     if (!versions.length) {
-      list.innerHTML = '<div class="empty-state">No versions yet. Create the first reproducible snapshot.</div>';
+      list.textContent = historyQuery.value.trim() ? 'No versions match your search.' : 'No versions yet. Create the first reproducible snapshot.';
       return;
     }
     list.innerHTML = versions.map(version => {
@@ -162,17 +192,30 @@
     }).join('');
     list.querySelectorAll('.btn-view-manifest').forEach(button => button.addEventListener('click', () => showManifest(button.dataset.id)));
     list.querySelectorAll('.btn-version-health').forEach(button => button.addEventListener('click', async () => {
-      document.getElementById('health-version').value = button.dataset.id;
+      const select = document.getElementById('health-version');
+      select.value = button.dataset.id;
+      LibreFlowPicker.refresh(select);
       activateTab('health');
       await runHealth();
     }));
   }
 
+  LibreFlowPicker.registerProvider(document.getElementById('health-version'), async ({ query, page, pageSize }) => {
+    const params = new URLSearchParams({ q: query, page, pageSize });
+    const result = await jsonRequest(`${baseUrl}/versions/browse?${params}`);
+    const items = result.items.map(version => ({ id: version.id, text: `v${version.sequence} · ${version.name}` }));
+    if (Number(page) === 1) items.unshift({ value: '', text: 'Live dataset', sentinel: true });
+    return { ...result, total: Number(result.total || 0) + (Number(page) === 1 ? 1 : 0), items };
+  });
+
   function renderHealthVersionOptions() {
     const select = document.getElementById('health-version');
-    const selected = select.value;
+    const selected = select.selectedOptions[0]?.cloneNode(true);
     select.innerHTML = '<option value="">Live dataset</option>' + versions.map(version => `<option value="${esc(version.id)}">v${version.sequence} · ${esc(version.name)}</option>`).join('');
-    if ([...select.options].some(option => option.value === selected)) select.value = selected;
+    if (selected?.value) {
+      if (![...select.options].some(option => option.value === selected.value)) select.add(selected);
+      select.value = selected.value;
+    }
   }
 
   async function showManifest(id) {
@@ -216,12 +259,23 @@
       toast(`Created ${created.name} with ${created.stats.images} materialized images.`);
       document.getElementById('version-name').value = '';
       document.getElementById('version-description').value = '';
+      historyQuery.value = '';
+      historyPage = 1;
       await loadVersions();
     } catch (error) { toast(error.message, true); }
     finally { sourceUI?.setDisabled?.(false); button.textContent = 'Create immutable version'; updateSourceCreate(sourceUI ? sourceUI.hasSelection() : true); }
   });
   document.getElementById('btn-refresh-versions').addEventListener('click', loadVersions);
-  if (window.VersionDeleteUI) VersionDeleteUI.mount(document.getElementById('versions-list').parentElement, baseUrl, { onDeleted: async target => { await loadVersions(); toast(`Deleted v${target.sequence} · ${target.name}. Source images and annotations are unchanged.`); } });
+  if (window.VersionDeleteUI) VersionDeleteUI.mount(document.getElementById('versions-list').parentElement, baseUrl, { onDeleted: async target => {
+    const select = document.getElementById('health-version');
+    if (select.value === target.id) {
+      select.value = '';
+      document.getElementById('health-results').classList.add('hidden');
+      document.getElementById('health-empty').classList.remove('hidden');
+    }
+    Array.from(select.options).find(option => option.value === target.id)?.remove();
+    LibreFlowPicker.refresh(select);
+    await loadVersions(); toast(`Deleted v${target.sequence} · ${target.name}. Source images and annotations are unchanged.`); } });
 
   function renderHealth(report) {
     document.getElementById('health-empty').classList.add('hidden');
@@ -249,14 +303,81 @@
     renderFindings(report);
   }
 
+  // Reports describe one analysis or import dry run. Page that same snapshot
+  // so counts and findings always refer to the report the user is reviewing.
+  function pageReport(container, items, renderRows, label) {
+    const rows = document.createElement('div');
+    const nav = document.createElement('div');
+    nav.className = 'history-paging';
+    const prev = document.createElement('button');
+    const next = document.createElement('button');
+    for (const button of [prev, next]) {
+      button.type = 'button';
+      button.className = 'ghost-btn';
+    }
+    prev.textContent = 'Previous';
+    next.textContent = 'Next';
+    prev.setAttribute('aria-label', 'Previous ' + label);
+    next.setAttribute('aria-label', 'Next ' + label);
+    const status = document.createElement('span');
+    status.setAttribute('role', 'status');
+    nav.append(prev, status, next);
+    container.replaceChildren(rows);
+    if (items.length > 20) container.append(nav);
+    let offset = 0;
+    function draw() {
+      const end = Math.min(offset + 20, items.length);
+      renderRows(rows, items.slice(offset, end));
+      prev.disabled = offset === 0;
+      next.disabled = end >= items.length;
+      status.textContent = `${offset + 1}–${end} of ${items.length}`;
+    }
+    prev.onclick = () => { offset -= 20; draw(); };
+    next.onclick = () => { offset += 20; draw(); };
+    draw();
+  }
+
   function renderFindings(report) {
     const groups = [
-      { title: 'Invalid / out-of-bounds geometry', items: report.geometryIssues, row: item => [item.filename || item.imageId, `${item.label || 'Unlabeled'} · ${item.detail}`] },
-      { title: 'Exact duplicate groups', items: report.exactDuplicates, row: item => [item.contentHash.slice(0, 12), item.images.map(image => `${image.filename}${image.split ? ` [${image.split}]` : ''}`).join(', ')] },
-      { title: 'Probable filename collisions', items: report.filenameCollisions, row: item => [item.normalizedName, item.images.map(image => image.filename).join(', ')] },
-      { title: 'Train / valid / test leakage', items: report.splitLeakage, row: item => [item.splits.join(' ↔ '), item.images.map(image => image.filename).join(', ')] },
+      ['Invalid / out-of-bounds geometry', report.geometryIssues, item => item.filename || item.imageId],
+      ['Exact duplicate groups', report.exactDuplicates, item => item.contentHash.slice(0, 12)],
+      ['Probable filename collisions', report.filenameCollisions, item => item.normalizedName],
+      ['Train / valid / test leakage', report.splitLeakage, item => item.splits.join(' ↔ ')],
     ];
-    document.getElementById('quality-findings').innerHTML = groups.map(group => `<section class="finding-group"><div class="finding-title"><span>${esc(group.title)}</span><span class="count-pill">${group.items.length}</span></div>${group.items.length ? `<div class="finding-list">${group.items.slice(0, 200).map(item => { const row = group.row(item); return `<div class="finding-row"><strong title="${esc(row[0])}">${esc(row[0])}</strong><span>${esc(row[1])}</span></div>`; }).join('')}</div>` : '<div class="good-finding">No findings.</div>'}</section>`).join('');
+    const list = document.getElementById('quality-findings');
+    list.replaceChildren();
+    for (const [title, items, name] of groups) {
+      const section = document.createElement('section');
+      section.className = 'finding-group';
+      section.innerHTML = `<div class="finding-title"><span>${title}</span><span class="count-pill">${items.length}</span></div><div class="finding-list"></div>`;
+      list.append(section);
+      const container = section.lastElementChild;
+      if (!items.length) { container.textContent = 'No findings.'; continue; }
+      pageReport(container, items, (rows, visible) => {
+        rows.replaceChildren();
+        for (const item of visible) {
+          if (!Array.isArray(item.images)) {
+            const row = document.createElement('div');
+            row.className = 'finding-row';
+            row.innerHTML = `<strong>${esc(name(item))}</strong><span>${esc(item.label || 'Unlabeled')} · ${esc(item.detail)}</span>`;
+            rows.append(row);
+            continue;
+          }
+          const details = document.createElement('details');
+          const summary = document.createElement('summary');
+          summary.textContent = `${name(item)} · ${item.images.length} images`;
+          const images = document.createElement('div');
+          details.append(summary, images);
+          details.ontoggle = () => {
+            if (!details.open || images.childElementCount) return;
+            pageReport(images, item.images, (target, slice) => {
+              target.innerHTML = slice.map(image => `<div>${esc(image.filename)} ${esc(image.split || '')}</div>`).join('');
+            }, 'images');
+          };
+          rows.append(details);
+        }
+      }, title);
+    }
   }
 
   async function runHealth() {
@@ -341,9 +462,22 @@
     document.getElementById('import-preview').innerHTML = `
       <div class="preview-metrics"><div class="preview-metric"><strong>${stats.importedImages || 0}</strong><span>New images</span></div><div class="preview-metric"><strong>${stats.linkedImages || 0}</strong><span>Matched images</span></div><div class="preview-metric"><strong>${stats.importedAnnotations || 0}</strong><span>Annotations</span></div><div class="preview-metric"><strong>${stats.createdClasses || 0}</strong><span>New classes</span></div><div class="preview-metric"><strong>${stats.skippedImages || 0}</strong><span>Skipped images</span></div><div class="preview-metric"><strong>${stats.skippedAnnotations || 0}</strong><span>Skipped labels</span></div></div>
       <div class="finding-title"><span>Class plan</span><span class="count-pill">${classes.length}</span></div>
-      <div>${classes.map(item => `<div class="class-plan-row"><span>${esc(item.source)}</span><span class="arrow">${LibreFlowIcons.icon('arrowRight')}</span><span>${esc(item.target || 'skip')}</span><span class="action">${esc(item.action)}</span></div>`).join('') || '<p class="help">No classes detected.</p>'}</div>
-      ${errors.length ? `<div class="finding-group"><div class="finding-title"><span>Blocking errors</span><span class="count-pill">${errors.length}</span></div><ul class="message-list error">${errors.map(item => `<li>${esc(item)}</li>`).join('')}</ul></div>` : ''}
-      ${warnings.length ? `<div class="finding-group"><div class="finding-title"><span>Warnings</span><span class="count-pill">${warnings.length}</span></div><ul class="message-list">${warnings.map(item => `<li>${esc(item)}</li>`).join('')}</ul></div>` : ''}`;
+      <div id="import-class-pages"></div><div id="import-message-pages"></div>`;
+    const classPages = document.getElementById('import-class-pages');
+    if (classes.length) pageReport(classPages, classes, (rows, visible) => {
+      rows.innerHTML = visible.map(item => `<div class="class-plan-row"><span>${esc(item.source)}</span><span class="arrow">${LibreFlowIcons.icon('arrowRight')}</span><span>${esc(item.target || 'skip')}</span><span class="action">${esc(item.action)}</span></div>`).join('');
+    }, 'class mappings');
+    else classPages.textContent = 'No classes detected.';
+    for (const [title, items] of [['Blocking errors', errors], ['Warnings', warnings]]) {
+      if (!items.length) continue;
+      const section = document.createElement('section');
+      section.className = 'finding-group';
+      section.innerHTML = `<div class="finding-title">${title}<span class="count-pill">${items.length}</span></div><div></div>`;
+      document.getElementById('import-message-pages').append(section);
+      pageReport(section.lastElementChild, items, (rows, visible) => {
+        rows.innerHTML = `<ul class="message-list">${visible.map(item => `<li>${esc(item)}</li>`).join('')}</ul>`;
+      }, title);
+    }
   }
   document.getElementById('btn-validate-import').addEventListener('click', () => submitImport(true));
   document.getElementById('btn-commit-import').addEventListener('click', () => submitImport(false));

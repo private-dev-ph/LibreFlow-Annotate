@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/css/version-source.css" />
   <link rel="stylesheet" href="/css/theme.css" />
   <link rel="stylesheet" href="/css/icons.css" />
+  <link rel="stylesheet" href="/css/resource-picker.css">
 </head>
 <body>
   <nav id="top-nav">
@@ -133,6 +134,8 @@
             <div><p class="eyebrow">HISTORY</p><h2>Dataset versions</h2></div>
             <button class="ghost-btn" id="btn-refresh-versions">Refresh</button>
           </div>
+          <label class="field">Search version history<input type="search" id="history-query" maxlength="200" placeholder="Name, version or batch"></label>
+          <div class="history-paging"><button class="ghost-btn" id="history-prev">Previous</button><span role="status" id="history-range"></span><button class="ghost-btn" id="history-next">Next</button></div>
           <div id="versions-list" class="versions-list"><div class="loading">Loading versions…</div></div>
         </article>
       </div>
@@ -142,7 +145,7 @@
       <article class="card health-toolbar">
         <div><p class="eyebrow">QUALITY GATE</p><h2>Dataset health</h2><p class="help">Analyze the live dataset or reproduce the report for an immutable version.</p></div>
         <div class="health-actions">
-          <select id="health-version"><option value="">Live dataset</option></select>
+          <select id="health-version" data-resource-picker="version" data-picker-label="Health report version"><option value="">Live dataset</option></select>
           <button id="btn-run-health" class="primary-btn">Run health check</button>
         </div>
       </article>
@@ -199,6 +202,7 @@
   <script src="/js/version-delete-ui.js"></script>
   <script src="/js/version-source-ui.js"></script>
   <script src="/js/theme.js"></script>
+  <script src="/js/resource-picker.js"></script>
   <script src="/js/dataset-lifecycle.js"></script>
 </body>
 </html>

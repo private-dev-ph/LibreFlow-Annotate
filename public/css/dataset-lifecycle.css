@@ -161,3 +161,6 @@ summary { color: var(--text-dim); cursor: pointer; font-size: 12px; font-weight:
   .version-delete-dialog .version-actions { flex-direction: column-reverse; align-items: stretch; }
   .version-delete-dialog .version-actions button { width: 100%; }
 }
+
+.history-paging { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin:16px 0; }
+.history-paging button { min-height:44px; }
