@@ -25,6 +25,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       else if(path.endsWith('/source-options'))body={supportsBatches:true,total:12,eligible:12,totalBatches:1,totalPages:1,page:1,unbatched:{},batches:[{id:'parent',name:'Parent',subBatchCount:45,subBatches:u.searchParams.has('batchId')?items.slice((Number(u.searchParams.get('subPage'))-1)*20,Number(u.searchParams.get('subPage'))*20):[]}],...(u.searchParams.has('batchId')?{childPage:Number(u.searchParams.get('subPage')),totalPages:3}:{})};
       else if(path.endsWith('/projects/one')||path.endsWith('/datasets/one'))body=source;
       else if(path.endsWith('/models'))body=items;
+      else if(path.endsWith('/models/available/browse')){
+        const found=items.filter(row => row.name.toLowerCase().includes((u.searchParams.get('q') || '').toLowerCase()));
+        body={items:found.slice((page-1)*12,page*12).map(row => ({...row,sourceProjectName:'Source '+row.projectId})),page,total:found.length,totalPages:Math.ceil(found.length/12)||1,pageSize:12};
+      }
+      else if(path.endsWith('/projects/browse')){
+        body={items:items.slice((page-1)*50,page*50).map(row => ({id:row.id,name:row.name,description:'Synthetic project'})),page,total:items.length,totalPages:1,pageSize:50};
+      }
       else if(path.endsWith('/webhook-deliveries')){
         const found=items.filter(row => row.name.toLowerCase().includes((u.searchParams.get('q') || '').toLowerCase()));
         body={items:found.slice((page-1)*12,page*12).map(row=>({...row,status:'failed',event:row.name})),page,total:found.length,totalPages:Math.ceil(found.length/12)||1};
@@ -59,6 +66,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(await p.locator('#labels-list .label-chip').first().getAttribute('data-idx'),'12');
     await labelControls.locator('input').fill('Inspection 44');
     assert.equal(await p.locator('#labels-list .label-chip').first().getAttribute('data-idx'),'44');
+    await p.locator('[data-tab="models"]').click();
+    await p.locator('#btn-toggle-existing-models').click();
+    await p.locator('[data-copy-model="id0"]').waitFor();
+    await p.locator('[data-existing-model-next]').click();
+    await p.locator('[data-copy-model="id12"]').waitFor();
+    await p.locator('#existing-model-search').fill('Inspection 44');
+    await p.locator('[data-copy-model="id44"]').waitFor();
+    assert.equal(await p.locator('[data-copy-model]').count(),1);
     await p.goto(url+'/jobs#mcp');
     await p.locator('#client-search').fill('Inspection 44');
     await p.locator('[data-connection-id="id44"]').waitFor();

@@ -113,6 +113,25 @@ const modelFields = modelUpload.fields([
 function readModels()   { return readJson(DATA_FILE); }
 function writeModels(d) { writeJson(DATA_FILE, d); }
 
+function availableModelsFor(projectId, userId) {
+  const models = readModels();
+  const copiedSourceIds = new Set(
+    models.filter(model => model.projectId === projectId && model.sourceModelId).map(model => model.sourceModelId),
+  );
+  return models.filter(model => {
+    if (model.projectId === projectId || copiedSourceIds.has(model.id) || isBlockedModel(model)) return false;
+    const sourceProject = getProject(model.projectId);
+    return Boolean(sourceProject && isProjectMember(sourceProject, userId) && canAccessModel(model, userId, model.projectId));
+  });
+}
+
+function availableModelSummary(model) {
+  return {
+    ...model,
+    sourceProjectName: getProject(model.projectId)?.name || '',
+  };
+}
+
 // ── GET /api/models/available?projectId= ─────────────────────────────────────
 // Returns accessible models from other projects that have not already been
 // copied into the requested project.
@@ -126,20 +145,31 @@ router.get('/available', (req, res) => {
   const targetProject = getProject(projectId);
   if (denyMissingOrForbidden(res, targetProject, isProjectMember(targetProject, uid), 'Project')) return;
 
-  const models = readModels();
-  const copiedSourceIds = new Set(
-    models.filter(model => model.projectId === projectId && model.sourceModelId).map(model => model.sourceModelId),
-  );
-  const eligible = models.filter(model => {
-    if (model.projectId === projectId || copiedSourceIds.has(model.id) || isBlockedModel(model)) return false;
-    const sourceProject = getProject(model.projectId);
-    return Boolean(sourceProject && isProjectMember(sourceProject, uid) && canAccessModel(model, uid, model.projectId));
-  });
+  return res.json(availableModelsFor(projectId, uid).map(availableModelSummary));
+});
 
-  return res.json(eligible.map(model => ({
+// ── GET /api/models/available/browse?projectId= ─────────────────────────────
+// Same eligibility rules as /available, with bounded server-side search/page.
+router.get('/available/browse', (req, res) => {
+  const uid = req.session.userId;
+  const projectId = req.query.projectId;
+  if (typeof projectId !== 'string' || !projectId.trim()) {
+    return res.status(400).json({ error: 'projectId is required.' });
+  }
+  const targetProject = getProject(projectId);
+  if (denyMissingOrForbidden(res, targetProject, isProjectMember(targetProject, uid), 'Project')) return;
+  let query;
+  try { query = parseLibraryQuery(req.query); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
+  const eligible = availableModelsFor(projectId, uid).map(model => ({
     ...model,
-    sourceProjectName: getProject(model.projectId)?.name || '',
-  })));
+    _searchText: [model.name, model.description, model.type, model.format, getProject(model.projectId)?.name].filter(Boolean).join(' '),
+  }));
+  return res.json(browseLibrary(eligible, query, {
+    descriptionField: '_searchText',
+    timestampField: model => model.uploadedAt || model.createdAt,
+    summary: availableModelSummary,
+  }));
 });
 
 router.get('/browse', (req, res) => {

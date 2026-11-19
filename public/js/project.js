@@ -878,6 +878,21 @@
   const existingPickerSearch = document.getElementById('existing-model-search');
   const existingPickerStatus = document.getElementById('existing-model-status');
   const existingPickerList = document.getElementById('existing-models-list');
+  const existingPickerPage = { page: 1, pageSize: 12, total: 0, totalPages: 1 };
+  let existingPickerRequestSeq = 0;
+  let existingPickerSearchTimer = null;
+  const existingPickerPager = document.createElement('nav');
+  existingPickerPager.className = 'library-pagination';
+  existingPickerPager.setAttribute('aria-label', 'Available model pages');
+  existingPickerPager.hidden = true;
+  existingPickerPager.innerHTML = `
+    <span class="library-page-status" data-existing-model-page-status></span>
+    <button class="library-page-button" type="button" data-existing-model-prev>Previous</button>
+    <button class="library-page-button" type="button" data-existing-model-next>Next</button>`;
+  existingPickerBody?.append(existingPickerPager);
+  const existingPickerPageStatus = existingPickerPager.querySelector('[data-existing-model-page-status]');
+  const existingPickerPagePrev = existingPickerPager.querySelector('[data-existing-model-prev]');
+  const existingPickerPageNext = existingPickerPager.querySelector('[data-existing-model-next]');
 
   function setExistingPickerStatus(message = '', kind = '') {
     existingPickerStatus.textContent = message;
@@ -885,20 +900,32 @@
   }
 
   function filteredAvailableModels() {
-    const query = (existingPickerSearch.value || '').trim().toLowerCase();
-    if (!query) return availableModels;
-    return availableModels.filter(model => [model.name, model.sourceProjectName, model.type, model.format]
-      .filter(Boolean)
-      .some(value => String(value).toLowerCase().includes(query)));
+    return availableModels;
+  }
+
+  function updateExistingPickerPager() {
+    const hasPages = existingPickerPage.total > 0;
+    existingPickerPager.hidden = !hasPages;
+    if (existingPickerPageStatus) {
+      const start = hasPages ? ((existingPickerPage.page - 1) * existingPickerPage.pageSize) + 1 : 0;
+      const end = hasPages ? Math.min(existingPickerPage.total, existingPickerPage.page * existingPickerPage.pageSize) : 0;
+      existingPickerPageStatus.textContent = hasPages
+        ? `Showing ${start}–${end} of ${existingPickerPage.total} · Page ${existingPickerPage.page} of ${existingPickerPage.totalPages}`
+        : '';
+    }
+    if (existingPickerPagePrev) existingPickerPagePrev.disabled = existingPickerPage.page <= 1 || existingPickerLoading;
+    if (existingPickerPageNext) existingPickerPageNext.disabled = existingPickerPage.page >= existingPickerPage.totalPages || existingPickerLoading;
   }
 
   function renderAvailableModels() {
     if (existingPickerLoading) {
+      updateExistingPickerPager();
       setExistingPickerStatus('Loading available models…', 'loading');
       existingPickerList.innerHTML = '<div class="existing-model-state">Loading available models…</div>';
       return;
     }
     if (existingPickerError) {
+      updateExistingPickerPager();
       setExistingPickerStatus(existingPickerError, 'error');
       existingPickerList.innerHTML = '<button class="btn-existing-retry" type="button" id="btn-retry-existing-models">Retry</button>';
       document.getElementById('btn-retry-existing-models').addEventListener('click', loadAvailableModels);
@@ -907,15 +934,16 @@
 
     const models = filteredAvailableModels();
     if (!availableModels.length) {
+      updateExistingPickerPager();
       setExistingPickerStatus('', '');
-      existingPickerList.innerHTML = '<div class="existing-model-state">No models are available from other projects.</div>';
+      existingPickerList.innerHTML = existingPickerPage.total
+        ? '<div class="existing-model-state">No models match your search.</div>'
+        : '<div class="existing-model-state">No models are available from other projects.</div>';
       return;
     }
-    if (!models.length) {
-      setExistingPickerStatus('', '');
-      existingPickerList.innerHTML = '<div class="existing-model-state">No models match your search.</div>';
-      return;
-    }
+    updateExistingPickerPager();
+    const pageTotal = existingPickerPage.total;
+    setExistingPickerStatus(pageTotal ? `Showing ${models.length} of ${pageTotal} eligible models.` : '', '');
 
     setExistingPickerStatus('', '');
     existingPickerList.innerHTML = models.map(model => {
@@ -945,16 +973,30 @@
   }
 
   async function loadAvailableModels() {
+    const requestSeq = ++existingPickerRequestSeq;
     existingPickerLoading = true;
     existingPickerError = '';
     renderAvailableModels();
     try {
-      const models = await API.getAvailableModels(projectId);
-      availableModels = Array.isArray(models) ? models : [];
+      const result = await API.browseAvailableModels(projectId, {
+        q: existingPickerSearch.value.trim(),
+        page: existingPickerPage.page,
+        pageSize: existingPickerPage.pageSize,
+        sort: 'name_asc',
+      });
+      if (requestSeq !== existingPickerRequestSeq) return;
+      availableModels = result.items;
+      existingPickerPage.page = Math.max(1, Number(result.page) || existingPickerPage.page);
+      existingPickerPage.total = Math.max(0, Number(result.total) || 0);
+      existingPickerPage.totalPages = Math.max(1, Number(result.totalPages) || 1);
     } catch (error) {
+      if (requestSeq !== existingPickerRequestSeq) return;
       existingPickerError = error.message || 'Failed to load available models.';
       availableModels = [];
+      existingPickerPage.total = 0;
+      existingPickerPage.totalPages = 1;
     } finally {
+      if (requestSeq !== existingPickerRequestSeq) return;
       existingPickerLoading = false;
       renderAvailableModels();
     }
@@ -965,6 +1007,7 @@
     existingPickerBody.hidden = false;
     existingPickerToggle.setAttribute('aria-expanded', 'true');
     existingPickerSearch.focus();
+    existingPickerPage.page = 1;
     loadAvailableModels();
   }
 
@@ -1011,7 +1054,24 @@
     else openExistingPicker();
   });
   existingPickerCancel.addEventListener('click', () => closeExistingPicker());
-  existingPickerSearch.addEventListener('input', renderAvailableModels);
+  existingPickerSearch.addEventListener('input', () => {
+    existingPickerPage.page = 1;
+    clearTimeout(existingPickerSearchTimer);
+    existingPickerSearchTimer = setTimeout(() => loadAvailableModels(), 220);
+    existingPickerLoading = true;
+    existingPickerError = '';
+    renderAvailableModels();
+  });
+  existingPickerPagePrev?.addEventListener('click', () => {
+    if (existingPickerPage.page <= 1 || existingPickerLoading) return;
+    existingPickerPage.page -= 1;
+    loadAvailableModels();
+  });
+  existingPickerPageNext?.addEventListener('click', () => {
+    if (existingPickerPage.page >= existingPickerPage.totalPages || existingPickerLoading) return;
+    existingPickerPage.page += 1;
+    loadAvailableModels();
+  });
   document.addEventListener('keydown', event => {
     if (existingPickerOpen && event.key === 'Escape') {
       event.preventDefault();

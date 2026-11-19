@@ -110,6 +110,41 @@ test('available models only expose accessible sources and include the source pro
   assert.equal(outsider.status, 403);
 });
 
+test('available model browse preserves eligibility while paging and searching', async () => {
+  const models = read('models.json');
+  for (let index = 0; index < 25; index += 1) {
+    models.push({
+      id: `model-eligible-${index}`, projectId: 'p-source', userId: 'u-owner',
+      name: `Eligible detector ${String(index).padStart(2, '0')}`, type: 'detection',
+      format: 'onnx', filename: 'source.onnx', sharedWithCollaborators: true,
+      createdAt: `2026-01-${String((index % 9) + 1).padStart(2, '0')}T00:00:00.000Z`,
+    });
+  }
+  models.push({
+    id: 'model-not-shared', projectId: 'p-source', userId: 'u-owner',
+    name: 'Eligible private detector', type: 'detection', format: 'onnx',
+    filename: 'source.onnx', sharedWithCollaborators: false,
+  });
+  write('models.json', models);
+
+  const first = await request('/api/models/available/browse?projectId=p-target&q=Eligible&page=1&pageSize=10&sort=name_asc', users.target);
+  assert.equal(first.status, 200);
+  assert.equal(first.body.total, 25);
+  assert.equal(first.body.items.length, 10);
+  assert.equal(first.body.page, 1);
+  assert.equal(first.body.totalPages, 3);
+  assert.equal(first.body.items[0].id, 'model-eligible-0');
+  assert.equal(first.body.items[0].sourceProjectName, 'Source Project');
+
+  const third = await request('/api/models/available/browse?projectId=p-target&q=Eligible&page=3&pageSize=10&sort=name_asc', users.target);
+  assert.equal(third.status, 200);
+  assert.deepEqual(third.body.items.map(model => model.id), ['model-eligible-20', 'model-eligible-21', 'model-eligible-22', 'model-eligible-23', 'model-eligible-24']);
+  assert.equal(third.body.items.some(model => model.id === 'model-not-shared'), false);
+
+  const outsider = await request('/api/models/available/browse?projectId=p-target&page=1&pageSize=10', users.outsider);
+  assert.equal(outsider.status, 403);
+});
+
 test('copy authorization and project ID validation fail before writing files', async () => {
   const before = fs.readdirSync(modelsDir).sort();
   const privateSource = await request('/api/models/model-private/copy', users.target, {

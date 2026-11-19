@@ -223,6 +223,17 @@ const API = {
     if (!r.ok) throw new Error(data.error || 'Failed to load available models.');
     return data;
   },
+  async browseAvailableModels(projectId, parameters = {}) {
+    const query = new URLSearchParams({ projectId: String(projectId) });
+    Object.entries(parameters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const r = await fetch(`/api/models/available/browse?${query}`, { credentials: 'include' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to load available models.');
+    if (!data || !Array.isArray(data.items)) throw new Error('Available models response was invalid.');
+    return data;
+  },
   async copyModel(id, projectId) {
     const r = await fetch(`/api/models/${encodeURIComponent(id)}/copy`, {
       method: 'POST',

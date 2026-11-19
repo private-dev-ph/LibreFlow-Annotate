@@ -9,6 +9,7 @@ const { ROOT_DIR, dataFile, readJson, writeJson } = require('../lib/json-store')
 const {
   getProject,
   isProjectOwner,
+  isProjectMember,
   projectMember,
 } = require('../lib/access-control');
 const { appendAuditEvent } = require('../lib/audit-log');
@@ -22,13 +23,14 @@ const { readJson: readDataJson } = require('../lib/data-store');
 const { parseAllowedRoots, MAX_REMOTE_BYTES, ensureBatch, persistImageBuffer } = require('../lib/ingestion');
 const { safeStoredPath } = require('../lib/inference-client');
 const { ReviewBrowserQueryError, parseReviewBrowseQuery, browseReviewRows } = require('../lib/review-browser');
-const { parseJobBrowseQuery, browseJobs } = require('../lib/job-browser');
+const { parseJobBrowseQuery } = require('../lib/job-browser');
 const {
   createInferenceJob,
   createUrlIngestionJob,
   createFolderIngestionJob,
   createS3IngestionJob,
   listJobs,
+  browseUserJobs,
   getJob,
   cancelJob,
   retryJob,
@@ -289,18 +291,17 @@ router.post('/images/upload', requireScopes('ingest:write'), (req, res) => {
 router.get('/jobs', requireScopes('jobs:read'), (req, res) => {
   if (req.query.projectId && !authorizeProject(req, res, req.query.projectId)) return;
   const browseRequested = req.query.browse === '1' || req.query.page !== undefined || req.query.q !== undefined || req.query.pageSize !== undefined || req.query.from !== undefined || req.query.to !== undefined;
-  let jobs = listJobs(userId(req), browseRequested ? { limit: null } : req.query);
-  jobs = jobs.filter(job => canAccessProject(job.projectId, userId(req)));
-  if (req.authContext.type === 'api_key' && req.authContext.projectIds.length) {
-    jobs = jobs.filter(job => req.authContext.projectIds.includes(job.projectId));
-  }
+  const uid = userId(req);
+  const allowedProjects = new Set(readJson(dataFile('projects.json'), [])
+    .filter(project => isProjectMember(project, uid) && apiKeyAllowsProject(req.authContext, project.id))
+    .map(project => project.id));
   if (browseRequested) {
     let options;
     try { options = parseJobBrowseQuery(req.query); }
     catch (error) { return res.status(400).json({ error: error.message }); }
-    return res.json(browseJobs(jobs, options));
+    return res.json(browseUserJobs(uid, allowedProjects, options));
   }
-  res.json(jobs);
+  res.json(listJobs(uid, req.query).filter(job => allowedProjects.has(job.projectId)));
 });
 
 router.delete('/jobs', requireScopes('jobs:write'), (req, res) => {

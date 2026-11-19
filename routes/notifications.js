@@ -1,20 +1,10 @@
 // routes/notifications.js – User notification inbox
 const express = require('express');
-const fs      = require('fs');
-const path    = require('path');
+const { createCollectionStore } = require('../lib/json-store');
 const { v4: uuidv4 } = require('uuid');
 
 const router     = express.Router();
-const NOTIF_FILE = path.join(__dirname, '..', 'data', 'notifications.json');
-
-function readNotifs() {
-  try { return JSON.parse(fs.readFileSync(NOTIF_FILE, 'utf-8')); }
-  catch { return []; }
-}
-
-function writeNotifs(d) {
-  fs.writeFileSync(NOTIF_FILE, JSON.stringify(d, null, 2));
-}
+const { read: readNotifs, write: writeNotifs } = createCollectionStore('notifications.json');
 
 /**
  * Push a notification to a user.
