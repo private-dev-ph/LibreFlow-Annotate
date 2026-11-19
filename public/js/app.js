@@ -37,6 +37,8 @@
   let imageBrowseState = { page: 1, pageSize: 100, total: 0, totalPages: 1 };
   let imageWindowOffset = 0;
   let imageAssignedIds = new Set();
+  let imageViewGeneration = 0;
+  let imageFilterSequence = 0;
   let autoSaveEnabled = localStorage.getItem('annotator_autosave') === 'true';
   let tilingUI = null;
   let inferenceRunning = false;
@@ -222,6 +224,47 @@
     };
   }
 
+  async function confirmImageTransition() {
+    if (currentIndex < 0) return true;
+    const currentImage = images[currentIndex];
+    if (!currentImage) return true;
+    if (pendingNullMutations.has(currentImage.id)) {
+      showToast('Finish the null-image update before changing the image list.', 'warn');
+      return false;
+    }
+    if (unsaved && autoSaveEnabled) {
+      try {
+        return (await saveAnnotations()) !== false;
+      } catch (error) {
+        showToast(error.message || 'Auto-save failed.', 'warn');
+        return false;
+      }
+    }
+    if (unsaved && !confirm('Unsaved changes - leave anyway?')) return false;
+    return true;
+  }
+
+  function setImageAvailability(available) {
+    canvasEmpty.classList.toggle('hidden', available);
+    const controls = [
+      'btn-save', 'btn-save-next', 'btn-mark-null', 'btn-save-tag',
+      'tool-select', 'tool-bbox', 'tool-rbox', 'tool-polygon', 'tool-point',
+      'tool-mask', 'tool-line', 'tool-skeleton', 'tool-smart', 'mobile-tool',
+    ];
+    controls.forEach(id => {
+      const control = document.getElementById(id);
+      if (control) control.disabled = !available;
+    });
+    if (!available) {
+      imageNavLabel.textContent = '-- / --';
+      document.getElementById('btn-prev-img').disabled = true;
+      document.getElementById('btn-next-img').disabled = true;
+      document.getElementById('mobile-image-name').textContent = 'No image selected';
+      updateNullButton(null);
+      if (imageTagInput) imageTagInput.value = '';
+    }
+  }
+
   function applyImageBrowseResult(result, generation = imageLoadGeneration) {
     if (generation !== imageLoadGeneration) return false;
     const pageImages = result.groups.flatMap(group => group.items);
@@ -246,13 +289,16 @@
     return applyImageBrowseResult(result, generation);
   }
 
-  async function loadImages({ preserveImageId } = {}) {
+  async function loadImages({ preserveImageId, keepCurrent = false, filterSequence = null } = {}) {
+    if (filterSequence != null && filterSequence !== imageFilterSequence) return false;
+    if (!keepCurrent && !(await confirmImageTransition())) return false;
+    if (filterSequence != null && filterSequence !== imageFilterSequence) return false;
     const generation = ++imageLoadGeneration;
     imageAssignedIds = new Set();
     if (typeof API.browseProjectImages === 'function') {
       const requestedImageId = preserveImageId || new URLSearchParams(location.search).get('imageId') || undefined;
       const result = await API.browseProjectImages(projectId, imageBrowseParams({ page: 1, ...(requestedImageId ? { imageId: requestedImageId } : {}) }));
-      if (!applyImageBrowseResult(result, generation)) return;
+      if (!applyImageBrowseResult(result, generation)) return false;
     } else {
       const batches = await API.getBatches(projectId);
       batches.forEach(batch => {
@@ -261,7 +307,7 @@
         else if (batch.assignedTo === me.id) (batch.imageIds||[]).forEach(id => imageAssignedIds.add(id));
       });
       const allProjectImages = await API.getImages(projectId);
-      if (generation !== imageLoadGeneration) return;
+      if (generation !== imageLoadGeneration) return false;
       images = imageAssignedIds.size > 0 ? allProjectImages.filter(img => imageAssignedIds.has(img.id)) : allProjectImages;
       imageBrowseState = { page: 1, pageSize: images.length || 1, total: images.length, totalPages: 1 };
       imageWindowOffset = 0;
@@ -271,9 +317,25 @@
       const requestedImageId = new URLSearchParams(location.search).get('imageId');
       const targetId = preserveImageId || requestedImageId;
       const requestedIndex = targetId ? images.findIndex(image => image.id === targetId) : -1;
-      await loadImage(requestedIndex >= 0 ? requestedIndex : 0);
+      const nextIndex = requestedIndex >= 0 ? requestedIndex : 0;
+      if (keepCurrent && preserveImageId && images[nextIndex]?.id === preserveImageId) {
+        currentIndex = nextIndex;
+        setImageAvailability(true);
+        updateCurrentImageUI(images[nextIndex], nextIndex);
+      } else {
+        await loadImage(nextIndex);
+      }
+      return true;
     }
-    else { canvasEmpty.classList.remove('hidden'); imageNavLabel.textContent = '-- / --'; }
+    currentIndex = -1;
+    imageViewGeneration += 1;
+    unsaved = false;
+    saveIndicator.classList.remove('show');
+    smartPromptImageId = null;
+    Canvas.clearShapes();
+    setImageAvailability(false);
+    renderImageList();
+    return true;
   }
 
   function updateImageListSelection() {
@@ -339,22 +401,69 @@
       more.querySelector('button').addEventListener('click', () => { imageRenderLimit += 120; renderImageList(); });
       imagesList.appendChild(more);
     }
+    if (imageBrowseState.totalPages > 1) {
+      const pager = document.createElement('li');
+      pager.className = 'annotator-load-more annotator-page-controls';
+      pager.innerHTML = `<div class="annotator-page-buttons">
+        <button type="button" data-page="previous" ${imageBrowseState.page <= 1 ? 'disabled' : ''}>Previous page</button>
+        <span>Page ${imageBrowseState.page} of ${imageBrowseState.totalPages}</span>
+        <button type="button" data-page="next" ${imageBrowseState.page >= imageBrowseState.totalPages ? 'disabled' : ''}>Next page</button>
+      </div>`;
+      pager.querySelector('[data-page="previous"]')?.addEventListener('click', () => void navigateTo(-1));
+      pager.querySelector('[data-page="next"]')?.addEventListener('click', () => void navigateTo(images.length));
+      imagesList.appendChild(pager);
+    }
+  }
+
+  function adjustImageBrowseCounts(before, after) {
+    if (!before || !after) return;
+    const beforeAnnotated = Boolean(before.annotated) && !Boolean(before.isNull);
+    const afterAnnotated = Boolean(after.annotated) && !Boolean(after.isNull);
+    const beforeNull = Boolean(before.isNull);
+    const afterNull = Boolean(after.isNull);
+    const annotatedDelta = Number(afterAnnotated) - Number(beforeAnnotated);
+    const nullDelta = Number(afterNull) - Number(beforeNull);
+    ['scopeAnnotatedTotal', 'annotatedTotal'].forEach(key => {
+      if (Number.isInteger(imageBrowseState[key])) imageBrowseState[key] += annotatedDelta;
+    });
+    ['scopeNullTotal', 'nullTotal'].forEach(key => {
+      if (Number.isInteger(imageBrowseState[key])) imageBrowseState[key] += nullDelta;
+    });
   }
 
   const imageStatusSelect = document.getElementById('image-status-filter');
   if (imageStatusSelect) {
     imageStatusSelect.value = imageStatusFilter;
-    imageStatusSelect.addEventListener('change', () => {
+    imageStatusSelect.addEventListener('change', async () => {
+      const previous = imageStatusFilter;
+      const previousImageId = images[currentIndex]?.id;
+      const sequence = ++imageFilterSequence;
       imageStatusFilter = imageStatusSelect.value;
       localStorage.setItem('annotator_status_filter', imageStatusFilter);
-      return loadImages({ preserveImageId: images[currentIndex]?.id });
+      const loaded = await loadImages({ preserveImageId: previousImageId, filterSequence: sequence });
+      if (!loaded && sequence === imageFilterSequence) {
+        imageStatusFilter = previous;
+        imageStatusSelect.value = previous;
+        localStorage.setItem('annotator_status_filter', previous);
+      }
     });
   }
   let imageSearchTimer;
   document.getElementById('annotator-image-search')?.addEventListener('input', e => {
-    imageSearchQuery = e.target.value || '';
+    const nextQuery = e.target.value || '';
+    const previousQuery = imageSearchQuery;
+    const previousImageId = images[currentIndex]?.id;
+    const sequence = ++imageFilterSequence;
+    imageSearchQuery = nextQuery;
     clearTimeout(imageSearchTimer);
-    imageSearchTimer = setTimeout(() => void loadImages({ preserveImageId: images[currentIndex]?.id }), 180);
+    imageSearchTimer = setTimeout(async () => {
+      if (sequence !== imageFilterSequence) return;
+      const loaded = await loadImages({ preserveImageId: previousImageId, filterSequence: sequence });
+      if (!loaded && sequence === imageFilterSequence) {
+        imageSearchQuery = previousQuery;
+        e.target.value = previousQuery;
+      }
+    }, 180);
   });
 
   function esc(s) { return String(s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -368,7 +477,7 @@
     if (!img) {
       btnMarkNull.classList.remove('is-null');
       btnMarkNull.textContent = '';
-      btnMarkNull.disabled = false;
+      btnMarkNull.disabled = true;
       btnMarkNull.removeAttribute('aria-busy');
       return;
     }
@@ -389,27 +498,7 @@
     btnMarkNull.setAttribute('aria-label', img.isNull ? 'Unmark image as null' : 'Mark image as null');
   }
 
-  async function loadImage(idx) {
-    currentIndex = idx;
-    smartPoints = [];
-    smartPointLabels = [];
-    smartPromptImageId = images[idx]?.id || null;
-    unsaved = false;
-    saveIndicator.classList.remove('show');
-    const img = images[idx];
-    const url = `/uploads/${img.filename}`;
-    const annotations = await API.getAnnotations(img.id);
-    if (images[currentIndex]?.id !== img.id) return;
-    canvasEmpty.classList.add('hidden');
-    const imageIdAtLoad = img.id;
-    const knownSize = Number.isFinite(Number(img.width)) && Number.isFinite(Number(img.height))
-      ? { width: Number(img.width), height: Number(img.height) } : null;
-    tilingUI?.updateImageSize(knownSize);
-    Canvas.loadImage(url, annotations, size => {
-      if (images[currentIndex]?.id === imageIdAtLoad) tilingUI?.updateImageSize(size);
-    });
-    unsaved = false;
-    saveIndicator.classList.remove('show');
+  function updateCurrentImageUI(img, idx) {
     const globalIndex = imageWindowOffset + idx;
     imageNavLabel.textContent = `${globalIndex + 1} / ${imageBrowseState.total || images.length}`;
     const mobileImageName = document.getElementById('mobile-image-name');
@@ -422,6 +511,36 @@
     updateNullButton(img);
     if (imageTagInput) imageTagInput.value = (img.tags && img.tags[0]) ? img.tags[0] : '';
     updateImageListSelection();
+  }
+
+  async function loadImage(idx) {
+    if (!images[idx]) {
+      currentIndex = -1;
+      setImageAvailability(false);
+      return;
+    }
+    const viewGeneration = ++imageViewGeneration;
+    currentIndex = idx;
+    smartPoints = [];
+    smartPointLabels = [];
+    smartPromptImageId = images[idx]?.id || null;
+    unsaved = false;
+    saveIndicator.classList.remove('show');
+    const img = images[idx];
+    const url = `/uploads/${img.filename}`;
+    const annotations = await API.getAnnotations(img.id);
+    if (viewGeneration !== imageViewGeneration || images[currentIndex]?.id !== img.id) return;
+    setImageAvailability(true);
+    const imageIdAtLoad = img.id;
+    const knownSize = Number.isFinite(Number(img.width)) && Number.isFinite(Number(img.height))
+      ? { width: Number(img.width), height: Number(img.height) } : null;
+    tilingUI?.updateImageSize(knownSize);
+    Canvas.loadImage(url, annotations, size => {
+      if (viewGeneration === imageViewGeneration && images[currentIndex]?.id === imageIdAtLoad) tilingUI?.updateImageSize(size);
+    });
+    unsaved = false;
+    saveIndicator.classList.remove('show');
+    updateCurrentImageUI(img, idx);
     // Populate semi-auto after image loads
     populateAutoModels();
   }
@@ -431,6 +550,7 @@
     const img       = images[currentIndex];
     const imageId = img.id;
     if (pendingNullMutations.has(imageId)) return;
+    const beforeImageState = { annotated: img.annotated, isNull: img.isNull };
     const markingNull = !img.isNull;
     const startGeneration = editGeneration;
     const startShapes = JSON.stringify(Canvas.getShapes());
@@ -454,6 +574,7 @@
       img.isNull = Boolean(updated.isNull);
       if (updated.annotated != null) img.annotated = updated.annotated;
       else if (markingNull && editGeneration === startGeneration) img.annotated = true;
+      adjustImageBrowseCounts(beforeImageState, img);
       if (images[currentIndex]?.id === imageId) {
         updateNullButton(img);
         renderImageList();
@@ -499,7 +620,8 @@
 
   // -- Shapes change callback -------------------------------------------------
   let annotationListShapes = null;
-  let annotationRenderLimit = 160;
+  const annotationWindowSize = 160;
+  let annotationWindowOffset = 0;
   function onShapesChange(shapes, selectedId, dirty = false) {
     if (dirty) { unsaved = true; editGeneration += 1; }
     saveIndicator.classList[unsaved ? 'add' : 'remove']('show');
@@ -509,7 +631,15 @@
   function renderAnnotationList(shapes, selectedId, dirty = false) {
     annCountEl.textContent = shapes.length;
     annotationsEmpty?.classList.toggle('hidden', shapes.length > 0);
-    if (annotationListShapes === shapes && !dirty) {
+    const selectedIndex = selectedId == null ? -1 : shapes.findIndex(shape => shape.id === selectedId);
+    const maxOffset = Math.max(0, shapes.length - annotationWindowSize);
+    if (selectedIndex >= 0 && (selectedIndex < annotationWindowOffset || selectedIndex >= annotationWindowOffset + annotationWindowSize)) {
+      annotationWindowOffset = Math.min(maxOffset, Math.floor(selectedIndex / annotationWindowSize) * annotationWindowSize);
+    } else {
+      annotationWindowOffset = Math.min(annotationWindowOffset, maxOffset);
+    }
+    const visibleEnd = Math.min(shapes.length, annotationWindowOffset + annotationWindowSize);
+    if (annotationListShapes === shapes && !dirty && (selectedIndex < 0 || (selectedIndex >= annotationWindowOffset && selectedIndex < visibleEnd))) {
       const selected = selectedId == null ? null : String(selectedId);
       [...annotationList.children].forEach(row => {
         row.classList.toggle('selected', row.dataset.annotationId === selected);
@@ -518,9 +648,7 @@
     }
     annotationListShapes = shapes;
     annotationList.innerHTML = '';
-    const renderShapes = shapes.slice(0, annotationRenderLimit);
-    const selectedShape = selectedId == null ? null : shapes.find(shape => shape.id === selectedId);
-    if (selectedShape && !renderShapes.some(shape => shape.id === selectedId)) renderShapes.push(selectedShape);
+    const renderShapes = shapes.slice(annotationWindowOffset, visibleEnd);
     renderShapes.forEach(s => {
       const li = document.createElement('li');
       li.dataset.annotationId = s.id;
@@ -566,11 +694,22 @@
       li.addEventListener('mouseleave', () => Canvas.clearHighlight());
       annotationList.appendChild(li);
     });
-    if (shapes.length > renderShapes.length) {
+    if (shapes.length > annotationWindowSize) {
       const more = document.createElement('li');
-      more.className = 'annotation-load-more';
-      more.innerHTML = `<button type="button">Load more annotations <span>(${shapes.length - renderShapes.length} remaining)</span></button>`;
-      more.querySelector('button').addEventListener('click', () => { annotationRenderLimit += 160; renderAnnotationList(shapes, selectedId, true); });
+      more.className = 'annotation-load-more annotation-page-controls';
+      more.innerHTML = `<div class="annotator-page-buttons">
+        <button type="button" data-annotation-page="previous" ${annotationWindowOffset <= 0 ? 'disabled' : ''}>Previous</button>
+        <span>${annotationWindowOffset + 1}–${visibleEnd} of ${shapes.length}</span>
+        <button type="button" data-annotation-page="next" ${visibleEnd >= shapes.length ? 'disabled' : ''}>Next</button>
+      </div>`;
+      more.querySelector('[data-annotation-page="previous"]')?.addEventListener('click', () => {
+        annotationWindowOffset = Math.max(0, annotationWindowOffset - annotationWindowSize);
+        renderAnnotationList(shapes, selectedId, true);
+      });
+      more.querySelector('[data-annotation-page="next"]')?.addEventListener('click', () => {
+        annotationWindowOffset = Math.min(maxOffset, annotationWindowOffset + annotationWindowSize);
+        renderAnnotationList(shapes, selectedId, true);
+      });
       annotationList.appendChild(more);
     }
   }
@@ -585,6 +724,7 @@
     }
     if (!unsaved) return true;
     const imageId = img.id;
+    const beforeImageState = { annotated: img.annotated, isNull: img.isNull };
     const startGeneration = editGeneration;
     const shapes = Canvas.getShapes().map(({ color, ...shape }) => ({
       ...shape,
@@ -601,6 +741,7 @@
     unsaved = false;
     saveIndicator.classList.remove('show');
     img.annotated = shapes.length > 0 || Boolean(img.isNull);
+    adjustImageBrowseCounts(beforeImageState, img);
     renderImageList();
     showToast('Annotations saved.', 'success');
     return true;
@@ -633,17 +774,7 @@
     const crossingPreviousPage = idx < 0 && imageBrowseState.page > 1 && typeof API.browseProjectImages === 'function';
     const crossingNextPage = idx >= images.length && imageBrowseState.page < imageBrowseState.totalPages && typeof API.browseProjectImages === 'function';
     if ((!crossingPreviousPage && !crossingNextPage && (idx < 0 || idx >= images.length || idx === currentIndex))) return;
-    if (currentIndex >= 0 && pendingNullMutations.has(images[currentIndex].id)) {
-      showToast('Finish the null-image update before navigating.', 'warn');
-      return;
-    }
-    if (unsaved && autoSaveEnabled) {
-      try {
-        const saved = await saveAnnotations();
-        if (saved === false) return;
-      }
-      catch (e) { showToast(e.message || 'Auto-save failed.', 'warn'); return; }
-    } else if (unsaved && !confirm('Unsaved changes - leave anyway?')) return;
+    if (!(await confirmImageTransition())) return;
     if (crossingPreviousPage) {
       await loadImagePage(imageBrowseState.page - 1);
       if (images.length > 0) await loadImage(images.length - 1);
@@ -712,10 +843,9 @@
     showToast(`Uploading ${files.length} image(s)...`);
     const uploaded = await API.uploadImages(projectId, files);
     const wasEmpty = images.length === 0;
-    images = images.concat(uploaded);
-    renderImageList();
-    if (wasEmpty && images.length > 0) await loadImage(0);
-    canvasEmpty.classList.add('hidden');
+    const currentImageId = images[currentIndex]?.id;
+    const refreshed = await loadImages({ preserveImageId: currentImageId, keepCurrent: !wasEmpty });
+    if (!refreshed) return;
     showToast(`${uploaded.length} image(s) uploaded.`);
   }
 

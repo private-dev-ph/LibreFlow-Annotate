@@ -8,13 +8,17 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH});
  try{
   for(const width of [1280,375,768]){
-   const page=await browser.newPage({viewport:{width,height:812}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+   const page=await browser.newPage({viewport:{width,height:812}});const errors=[];const failedRequests=[];page.on('pageerror',e=>errors.push(e.message));page.on('requestfailed',r=>failedRequests.push(`${r.url()} ${r.failure()?.errorText||''}`));page.on('dialog',dialog=>dialog.accept());
    const shapes=[{id:'part',label:'Far component',type:'bbox',data:{x:3200,y:2400,width:120,height:80}},{id:'point',label:'Inspection point',type:'point',data:{x:200,y:300}},{id:'class',label:'Board class',type:'classification',data:{value:'board'}}];
    await page.route('**/api/**',route=>{
     const p=new URL(route.request().url()).pathname;let body=[];
     if(p==='/api/auth/me')body={id:'tester',username:'Tester'};
     else if(p==='/api/projects/test')body={id:'test',name:'Navigation fixture',labelClasses:[]};
-    else if(p==='/api/images')body=[{id:'board',filename:'board.svg',originalName:'Board',width:4000,height:3000}];
+    else if(p==='/api/images/browse'){
+      const requestUrl=new URL(route.request().url()),pageNumber=Number(requestUrl.searchParams.get('page')||1);
+      const pageImages=Array.from({length:pageNumber===1?100:101},(_,offset)=>{const index=(pageNumber-1)*100+offset;return {id:index===0?'board':`image-${index}`,filename:'board.svg',originalName:index===0?'Board':`Board ${index}`,width:4000,height:3000,annotated:index===0,isNull:false,tags:[]}});
+      body={groups:[{key:'none',label:'',total:201,offset:0,items:pageImages}],page:pageNumber,pageSize:100,total:201,totalPages:3,projectTotal:201,scopeTotal:201,scopeAnnotatedTotal:1,scopeUnannotatedTotal:200,scopeNullTotal:0,annotatedTotal:1,unannotatedTotal:200,nullTotal:0,requestedIndex:-1};
+    }
     else if(p==='/api/annotations/board')body=shapes;
     else if(p.includes('/review'))body={review:{status:'unannotated'},permissions:{},collaborators:[],comments:[],history:[]};
     return route.fulfill({json:body});
@@ -69,6 +73,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    await page.mouse.move(panel.x+panel.width/2,Math.min(792,panel.y+panel.height-20));
    for(let attempt=0;attempt<5;attempt++){await page.mouse.wheel(0,4000);await page.waitForTimeout(60)}
    assert.equal(await page.locator('#btn-auto-infer').evaluate(el=>{const b=el.getBoundingClientRect();return b.top>=0&&b.bottom<=innerHeight}),true,'actual app can scroll to inference action');
+   await page.evaluate(()=>document.querySelector('.annotator-page-controls [data-page="next"]')?.click());
+   await page.waitForFunction(()=>document.getElementById('image-nav-label').textContent==='101 / 201');
    assert.deepEqual(errors,[]);
    await page.close();
   }

@@ -136,3 +136,21 @@ test('project browse keeps assigned pagination bounded and resolves off-page sta
   assert.equal(nulls.total, 13);
   assert.equal(nulls.scopeNullTotal, 13);
 });
+
+test('project browse resolves deeplinks after search and sort ordering', () => {
+  const images = [
+    { id: 'other', projectId: 'search-project', originalName: 'Other', uploadedAt: '2026-01-01T00:00:00Z' },
+    { id: 'target', projectId: 'search-project', originalName: 'Needle target', uploadedAt: '2026-01-02T00:00:00Z' },
+    { id: 'needle-first', projectId: 'search-project', originalName: 'Needle first', uploadedAt: '2026-01-03T00:00:00Z' },
+  ];
+  const result = browseProjectImages({
+    query: { projectId: 'search-project', q: 'needle', sort: 'name_asc', pageSize: '1', imageId: 'target' },
+    images,
+    batches: [],
+  });
+  assert.equal(result.page, 2);
+  assert.equal(result.requestedIndex, 1);
+  assert.deepEqual(result.groups.flatMap(group => group.items.map(item => item.id)), ['target']);
+  assert.equal(result.scopeTotal, 3);
+  assert.equal(result.filteredTotal, 2);
+});

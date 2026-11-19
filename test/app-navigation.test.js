@@ -76,7 +76,7 @@ function response(body, ok = true) {
   return { ok, status: ok ? 200 : 500, async json() { return body; } };
 }
 
-async function makeHarness({ saveBehavior } = {}) {
+async function makeHarness({ saveBehavior, browsePages, confirmBehavior } = {}) {
   const document = new FakeDocument();
   const images = [
     { id: 'one', filename: 'one.svg', originalName: 'One', annotated: false, isNull: false },
@@ -100,6 +100,9 @@ async function makeHarness({ saveBehavior } = {}) {
     async updateImage(imageId, patch) { return { id: imageId, ...patch, annotated: patch.isNull }; },
     async uploadImages() { return []; },
   };
+  if (browsePages) {
+    API.browseProjectImages = async (_projectId, params = {}) => browsePages[params.page || 1] || browsePages[1];
+  }
   const Canvas = {
     init(_canvas, _wrapper, callback) { shapesChange = callback; },
     getShapes() { return shapes; },
@@ -124,7 +127,7 @@ async function makeHarness({ saveBehavior } = {}) {
     document, window, location: window.location,
     localStorage: { getItem(key) { return storage.get(key) ?? null; }, setItem(key, value) { storage.set(key, String(value)); }, removeItem(key) { storage.delete(key); } },
     fetch: async () => response({ id: 'test', name: 'Fixture', labelClasses: [] }),
-    confirm: () => true, console, URLSearchParams, setTimeout, clearTimeout,
+    confirm: confirmBehavior || (() => true), console, URLSearchParams, setTimeout, clearTimeout,
     MutationObserver: class { observe() {} },
     Element: FakeElement,
     Event: class { constructor(type, init = {}) { this.type = type; Object.assign(this, init); } },
@@ -202,4 +205,31 @@ test('dirty Save+Next posts, failed saves stay put, and newer edits block leavin
   await pendingNewer;
   assert.equal(newer.document.getElementById('image-nav-label').textContent, '1 / 2');
   assert.equal(newer.document.getElementById('save-indicator').classList.contains('show'), true);
+});
+
+test('paged filter reloads respect dirty guards and empty results disable image editing', async () => {
+  const page = {
+    groups: [{ key: 'none', label: '', total: 2, offset: 0, items: [
+      { id: 'one', filename: 'one.svg', originalName: 'One', annotated: false, isNull: false },
+      { id: 'two', filename: 'two.svg', originalName: 'Two', annotated: true, isNull: false },
+    ] }],
+    page: 1, pageSize: 100, total: 2, totalPages: 1, projectTotal: 2, scopeTotal: 2,
+    scopeAnnotatedTotal: 1, scopeUnannotatedTotal: 1, scopeNullTotal: 0,
+  };
+  const guarded = await makeHarness({ browsePages: { 1: page }, confirmBehavior: () => false });
+  guarded.shapesChange([], null, true);
+  const filter = guarded.document.getElementById('image-status-filter');
+  filter.value = 'annotated';
+  await filter.dispatchEvent({ type: 'change' });
+  assert.equal(filter.value, 'all');
+  assert.equal(guarded.document.getElementById('image-nav-label').textContent, '1 / 2');
+
+  const empty = {
+    groups: [], page: 1, pageSize: 100, total: 0, totalPages: 1, projectTotal: 0, scopeTotal: 0,
+    scopeAnnotatedTotal: 0, scopeUnannotatedTotal: 0, scopeNullTotal: 0,
+  };
+  const emptyHarness = await makeHarness({ browsePages: { 1: empty } });
+  assert.equal(emptyHarness.document.getElementById('image-nav-label').textContent, '-- / --');
+  assert.equal(emptyHarness.document.getElementById('btn-save').disabled, true);
+  assert.equal(emptyHarness.document.getElementById('btn-mark-null').disabled, true);
 });

@@ -165,6 +165,9 @@ html, body { height: 100%; overflow: hidden; }
 .annotator-load-more, .annotation-load-more { justify-content: center; padding: 10px; border-bottom: 0; }
 .annotator-load-more button, .annotation-load-more button { min-height: 44px; padding: 9px 13px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer; }
 .annotator-load-more button:hover, .annotation-load-more button:hover { background: var(--bg3); }
+.annotator-page-buttons { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; width: 100%; }
+.annotator-page-buttons span { color: var(--muted); font-size: .82rem; }
+.annotator-page-buttons button:disabled { opacity: .45; cursor: not-allowed; }
 .img-list-state-icon { margin-left: auto; color: var(--accent2); flex-shrink: 0; }
 .img-list-item.active .img-list-state-icon { color: var(--on-accent); }
 .img-list-state-icon .lf-icon { width: 14px; height: 14px; }
