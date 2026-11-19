@@ -85,9 +85,34 @@ router.get('/downloads/:projectId/:exportId', requireSessionOnly, (req,res) => {
   try {const principal=require('../lib/mcp-export-actions').resolveBrowserDownload(req.session.userId,req.params.projectId,req.params.exportId);return require('../lib/mcp-downloads').sendExportDownload(req,res,principal);}catch(error){return safeError(res,error);}
 });
 
+router.get('/browse/:collection', requireSessionOnly, (req, res) => {
+  const page = Number(req.query.page || 1), query = req.query.q ?? '';
+  if (!Number.isSafeInteger(page) || page < 1 || typeof query !== 'string' || query.length > 200) return errorResponse(res, 400, 'INVALID_INPUT', 'Invalid page or search.');
+  try {
+    const userId = req.session.userId;
+    const projects = readJson(dataFile('projects.json'), []).filter(project => isProjectMember(project, userId));
+    const names = new Map(projects.map(project => [project.id, project.name]));
+    const group = req.params.collection;
+    let rows;
+    if (group === 'projects') rows = projects.map(({ id, name }) => ({ id, name }));
+    else if (group === 'clients') rows = listConnections(userId);
+    else if (group === 'requests') {
+      const clients = new Map(listConnections(userId).map(client => [client.id, client.name]));
+      rows = operations.listUserProposals(userId).map(item => ({ ...item, connectionName: clients.get(item.connectionId) || '', projectName: names.get(item.projectId) || '' }));
+    } else return errorResponse(res, 404, 'NOT_FOUND', 'Unknown collection.');
+    const needle = query.trim().toLowerCase();
+    const found = rows.filter(item => [item.name, item.summary?.title, item.status, item.connectionName, item.projectName].some(value => String(value || '').toLowerCase().includes(needle)));
+    const totalPages = Math.max(1, Math.ceil(found.length / 12));
+    const current = Math.min(totalPages, page);
+    const items = found.slice((current - 1) * 12, current * 12);
+    const related = new Set(items.flatMap(item => item.projectIds || (item.projectId ? [item.projectId] : [])));
+    res.json({ items, page: current, total: found.length, totalPages, projects: Array.from(related).filter(id => names.has(id)).map(id => ({id, name:names.get(id)})) });
+  } catch (error) { safeError(res, error); }
+});
+
 router.get('/', requireSessionOnly, (req, res) => {
   try {
-    const projects = readJson(dataFile('projects.json'), [])
+    const projects = req.query.view === 'settings' ? [] : readJson(dataFile('projects.json'), [])
       .filter(project => isProjectMember(project, req.session.userId))
       .map(project => ({ id: project.id, name: project.name }));
     res.json({
@@ -102,7 +127,7 @@ router.get('/', requireSessionOnly, (req, res) => {
         limits: require('../lib/mcp-job-context').LIMITS,
       },
       projects,
-      connections: listConnections(req.session.userId),
+      connections: req.query.view === 'settings' ? [] : listConnections(req.session.userId),
     });
   } catch (error) {
     safeError(res, error);

@@ -185,16 +185,13 @@
   }
   function projectName(id) {
     return (
-      state.projects.find((project) => String(project.id) === String(id))
-        ?.name ||
+      projectNames.get(String(id)) ||
       id ||
       "Unknown project"
     );
   }
   function selectedProjectIds() {
-    return state.projects
-      .filter((project) => state.selectedProjects.has(String(project.id)))
-      .map((project) => project.id);
+    return Array.from(state.selectedProjects);
   }
   function scopeById(id) {
     return state.scopes.find((scope) => scope.id === id);
@@ -335,13 +332,75 @@
     els.remotePrerequisite.textContent = reason;
   }
 
-  const projectPages = LibreFlowListWindow(els.projects, 'projects', renderProjects, { search: els.search });
-  const clientPages = LibreFlowListWindow(els.list, 'clients', renderConnections, { search: els.listSearch });
-  const requestPages = LibreFlowListWindow(els.requests, 'requests', renderRequests);
-
+  const projectNames = new Map();
+  function collectionBrowser(container, search, collection, stateKey, render) {
+    const toolbar = node('div', 'collection-controls');
+    if (!search) {
+      search = document.createElement('input');
+      search.type = 'search';
+      search.placeholder = 'Search ' + collection;
+      search.setAttribute('aria-label', search.placeholder);
+      toolbar.append(search);
+    }
+    search.maxLength = 200;
+    const prev = node('button', 'secondary-action', 'Previous');
+    const next = node('button', 'secondary-action', 'Next');
+    prev.type = next.type = 'button';
+    const status = node('span', '');
+    status.setAttribute('role', 'status');
+    const retry = node('button', 'secondary-action', 'Retry');
+    retry.type = 'button';
+    retry.hidden = true;
+    toolbar.append(prev, status, next, retry);
+    container.before(toolbar);
+    let page = 1, sequence = 0, timer;
+    async function load() {
+      const current = ++sequence;
+      retry.hidden = true;
+      prev.disabled = next.disabled = true;
+      try {
+        const params = new URLSearchParams({ page, q: search.value.trim() });
+        const data = await request('/api/mcp/connections/browse/' + collection + '?' + params);
+        if (current !== sequence) return;
+        for (const row of data.projects || []) projectNames.set(String(row.id), row.name);
+        if (collection === 'projects') for (const row of data.items) projectNames.set(String(row.id), row.name);
+        page = data.page;
+        state[stateKey] = data.items;
+        state[stateKey + 'Total'] = data.total;
+        render();
+        status.textContent = `${data.total} ${collection} · Page ${page} of ${data.totalPages}`;
+        prev.disabled = page <= 1;
+        next.disabled = page >= data.totalPages;
+      } catch (error) {
+        if (current === sequence) {
+          state[stateKey] = [];
+          state[stateKey + 'Total'] = 0;
+          render();
+          retry.hidden = false;
+          status.textContent = error.message;
+        }
+      }
+    }
+    prev.onclick = () => { page--; load(); };
+    next.onclick = () => { page++; load(); };
+    search.addEventListener('input', () => {
+      sequence++; page = 1;
+      container.replaceChildren();
+      prev.disabled = next.disabled = true;
+      status.textContent = 'Searching…';
+      clearTimeout(timer);
+      timer = setTimeout(load, 250);
+    });
+    retry.onclick = load;
+    load.reset = () => { clearTimeout(timer); page = 1; search.value = ''; return load(); };
+    return load;
+  }
+  const loadProjectPage = collectionBrowser(els.projects, els.search, 'projects', 'projects', renderProjects);
+  const loadClientPage = collectionBrowser(els.list, els.listSearch, 'clients', 'connections', renderConnections);
+  const loadRequestPage = collectionBrowser(els.requests, null, 'requests', 'requests', renderRequests);
   function renderProjects() {
     clear(els.projects);
-    const projects = projectPages.select(state.projects, project => project.name);
+    const projects = state.projects;
     if (!state.projects.length)
       els.projects.append(
         node(
@@ -664,14 +723,14 @@
   }
   function renderConnections(focusTarget = null) {
     clear(els.list);
-    const connections = clientPages.select(state.connections, item => item.name);
-    els.count.textContent = `${state.connections.length} clients`;
+    const connections = state.connections;
+    els.count.textContent = `${state.connectionsTotal || 0} clients`;
     if (!connections.length) {
       els.list.append(
         node(
           "p",
           "muted",
-          state.connections.length
+          els.listSearch.value.trim()
             ? "No connected clients match your search."
             : "No connected clients yet.",
         ),
@@ -1074,24 +1133,20 @@
       : "Selected project";
     return {
       connection:
-        connection?.name || request?.connectionId || "Connected client",
+        connection?.name || request?.connectionName || request?.connectionId || "Connected client",
       project,
     };
   }
 
   function renderRequests(focusId = null) {
     clear(els.requests);
-    els.requestCount.textContent = `${state.requests.length} request${state.requests.length === 1 ? "" : "s"}`;
+    els.requestCount.textContent = `${state.requestsTotal || 0} request${state.requestsTotal === 1 ? "" : "s"}`;
     if (!state.requests.length) {
       els.requests.append(node("p", "muted", "No pending AI actions."));
       return;
     }
 
-    const visible = requestPages.select(state.requests, item => {
-      const context = requestContext(item);
-      return [item.summary?.title, item.status, context.project, context.connection].join(' ');
-    });
-    visible.forEach((request) => {
+    state.requests.forEach((request) => {
       const status = requestStatus(request);
       const context = requestContext(request);
       const card = node("article", "request-row");
@@ -1339,9 +1394,7 @@
         node("p", "muted", "Loading pending requests…"),
       );
     try {
-      const data = await request("/api/mcp/connections/requests");
-      state.requests = Array.isArray(data?.requests) ? data.requests : [];
-      renderRequests();
+      await loadRequestPage();
       const hashId = getRequestHashId();
       if (hashId) await openRequest(hashId);
     } catch (error) {
@@ -1382,6 +1435,7 @@
     if (state.tokenVisible) return;
     state.lastTrigger = document.activeElement;
     resetDialog();
+    loadProjectPage.reset();
     if (typeof els.dialog.showModal === "function") els.dialog.showModal();
     else els.dialog.setAttribute("open", "");
     els.close.focus();
@@ -1444,7 +1498,7 @@
     els.refresh.disabled = true;
     els.list.replaceChildren(node("p", "muted", "Loading connections…"));
     try {
-      const data = await request("/api/mcp/connections");
+      const data = await request("/api/mcp/connections?view=settings");
       state.config = data || {};
       state.capabilities = data?.capabilities || {};
       state.projects = Array.isArray(data?.projects) ? data.projects : [];
@@ -1471,7 +1525,7 @@
       renderProjects();
       renderScopes();
       renderExpiry();
-      renderConnections();
+      await loadClientPage();
     } catch (error) {
       state.configLoaded = false;
       state.capabilities = {};
@@ -1563,7 +1617,7 @@
       els.tokenPanel.hidden = false;
       els.form.hidden = true;
       renderSetupInstructions();
-      renderConnections();
+      await loadClientPage();
       updateStatusCard();
       notify(
         "success",

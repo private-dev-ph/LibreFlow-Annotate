@@ -96,6 +96,14 @@ function startFixture() {
     if (url.pathname === "/api/notifications")
       return sendJson(response, 200, []);
 
+    if (url.pathname.startsWith("/api/mcp/connections/browse/")) {
+      const project = { id: "project-1", name: "First project" };
+      const group = url.pathname.split("/").pop();
+      const rows = { clients: state.connections, requests: state.requests, projects: [project] }[group];
+      const q = (url.searchParams.get("q") || "").toLowerCase();
+      const items = rows.filter(row => (row.name || row.summary?.title || "").toLowerCase().includes(q));
+      return sendJson(response, 200, { items, page: 1, total: items.length, totalPages: 1, projects: [project] });
+    }
     if (url.pathname === "/api/mcp/connections" && request.method === "GET") {
       return sendJson(response, 200, {
         enabled: true,
@@ -203,7 +211,7 @@ function startFixture() {
     }
 
     const relative =
-      url.pathname === "/" ? "ai-connections.html" : url.pathname.slice(1);
+      url.pathname === "/jobs" ? "jobs.html" : url.pathname.slice(1);
     const filename = path.resolve(publicRoot, relative);
     if (!filename.startsWith(publicRoot) || !fs.existsSync(filename))
       return sendJson(response, 404, { error: "not found" });
@@ -365,6 +373,7 @@ async function run() {
 
     await page.locator("#dismiss-token").click();
     await page.locator("#client-search").fill("Fixture");
+    await page.locator(".connection-row").waitFor();
     assert.equal(await page.locator(".connection-row").count(), 1);
     assert.equal(await page.locator(".request-row").count(), 2);
     const firstReview = page.locator(
