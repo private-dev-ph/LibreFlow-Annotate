@@ -352,6 +352,11 @@
       section.innerHTML = `<div class="finding-title"><span>${title}</span><span class="count-pill">${items.length}</span></div><div class="finding-list"></div>`;
       list.append(section);
       const container = section.lastElementChild;
+      if (items === report.geometryIssues && report.geometryIssuesTruncated) {
+        const note = document.createElement('p');
+        note.textContent = 'Showing the first ' + items.length + ' of ' + report.summary.invalidGeometry + ' geometry findings.';
+        container.before(note);
+      }
       if (!items.length) { container.textContent = 'No findings.'; continue; }
       pageReport(container, items, (rows, visible) => {
         rows.replaceChildren();
