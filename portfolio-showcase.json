@@ -1,0 +1,107 @@
+{
+  "title": "LibreFlow Annotate",
+  "summary": "A self-hosted workspace for labeling images and turning reviewed annotations into training datasets. Inspectors can run a model on a board image without uploading it to a third party.",
+  "status": "Active prototype",
+  "logo": {
+    "src": "public/assets/libreflow-logo.svg",
+    "alt": "LibreFlow Annotate logo"
+  },
+  "internalDemoAvailable": false,
+  "images": [
+    {
+      "src": "docs/assets/showcase/annotator.webp",
+      "alt": "Five labeled boxes surround the controller, status LEDs, capacitor bank, USB-C port, and sensor module on a synthetic board.",
+      "caption": "A reviewer can check each component label against its location on the original board."
+    },
+    {
+      "src": "docs/assets/showcase/dataset-versions.webp",
+      "alt": "The Versions form shows the source selector and a split of 70% training, 20% validation, and 10% test.",
+      "caption": "The version builder shows how many source images each split will receive before export."
+    }
+  ],
+  "sections": [
+    {
+      "type": "problemPurpose"
+    },
+    {
+      "type": "carousel",
+      "title": "From annotation to dataset release",
+      "summary": "Follow a synthetic board inspection from component labels to a training split.",
+      "autoPlay": false,
+      "images": [
+        {
+          "src": "docs/assets/showcase/annotator.webp",
+          "alt": "Five labeled boxes surround the controller, status LEDs, capacitor bank, USB-C port, and sensor module on a synthetic board.",
+          "caption": "A reviewer can check each component label against its location on the original board."
+        },
+        {
+          "src": "docs/assets/showcase/dataset-versions.webp",
+          "alt": "The Versions form shows the source selector and a split of 70% training, 20% validation, and 10% test.",
+          "caption": "The version builder shows how many source images each split will receive before export."
+        }
+      ]
+    },
+    {
+      "type": "keyFeatures"
+    },
+    {
+      "type": "techStack"
+    },
+    {
+      "type": "role"
+    },
+    {
+      "type": "technicalHighlights"
+    },
+    {
+      "type": "challenges"
+    },
+    {
+      "type": "results"
+    },
+    {
+      "type": "lessons"
+    }
+  ],
+  "problem": "Inspection data is scattered across labeling tools, review notes, model scripts, and export utilities. That makes it harder to know what was reviewed and which dataset reached training, especially for sensitive images.",
+  "purpose": "The goal was a local-first path from board images to reviewed annotations, immutable versions, and training exports while keeping source pixels and inference under operator control.",
+  "keyFeatures": [
+    "Draw boxes, polygons, masks, and points. Reviewers can flag an individual annotation and restore earlier revisions.",
+    "Run a local detector for selected classes or use point prompts to generate a mask.",
+    "Choose project batches, set train/validation/test proportions, and preview preprocessing and augmentation before creating a version.",
+    "Export the same version for training in formats including YOLO, COCO, and Pascal VOC."
+  ],
+  "techStack": [
+    "JavaScript",
+    "Canvas API",
+    "Node.js",
+    "Express",
+    "FastAPI",
+    "Ultralytics YOLO",
+    "Sharp",
+    "Docker Compose"
+  ],
+  "role": "I shaped the annotation and dataset workflows around board inspection. I wanted to run detection for a missing component class while keeping existing labels, then select reviewed batches for a training release.",
+  "technicalHighlights": [
+    "Each detection tile starts with the original image pixels. LibreFlow maps boxes back onto the full board and merges overlapping detections of the same class.",
+    "Split assignment happens before augmentation. Generated training images keep a link to their source, so validation and test images stay out of the augmentation pool."
+  ],
+  "challengesAndSolutions": [
+    {
+      "challenge": "A second model pass can duplicate objects an inspector has already labeled.",
+      "solution": "The inspector chooses which model classes to run. Existing annotations stay in place while the new predictions are added."
+    },
+    {
+      "challenge": "A training export can be difficult to trace once the working project changes.",
+      "solution": "Each version records its source images, split assignments, transformation settings, and file checksums."
+    }
+  ],
+  "resultsImpact": [
+    "A reviewer can trace a training image back to its source and inspect how it was transformed.",
+    "A team can export a saved version again while continuing to label new images in the project."
+  ],
+  "lessonsLearned": [
+    "Show original and augmented image counts separately. A training multiplier is easier to interpret when the user can see both counts.",
+    "Keep the board visible at the current zoom when jumping between annotations so reviewers can judge each label in context."
+  ]
+}
