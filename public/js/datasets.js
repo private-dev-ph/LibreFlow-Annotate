@@ -1,8 +1,7 @@
 (async () => {
   const me = await API.getMe();
   if (!me) { window.location.href = '/login'; return; }
-  const projectResponse = await API.getProjects();
-  const projects = Array.isArray(projectResponse) ? projectResponse : [];
+  const sharingProjectNames = new Map();
 
   document.getElementById('nav-avatar').textContent = me.username.slice(0, 2).toUpperCase();
   document.getElementById('nav-username').textContent = me.username;
@@ -607,12 +606,19 @@
     const scopeId = ds.sourceProjectId || ds.shareProjectId || '';
     projectSelect.innerHTML = '';
     projectSelect.appendChild(new Option('Choose sharing project…', ''));
-    projects.forEach(project => {
-      const option = new Option(project.name, project.id);
-      if (project.description) option.dataset.description = project.description;
-      option.dataset.meta = project.id;
-      projectSelect.appendChild(option);
-    });
+    if (scopeId) {
+      const option = new Option(sharingProjectNames.get(scopeId) || 'Selected sharing project', scopeId);
+      projectSelect.append(option);
+      if (!sharingProjectNames.has(scopeId)) {
+        fetch('/api/projects/' + encodeURIComponent(scopeId), { credentials: 'include' })
+          .then(response => response.ok ? response.json() : null)
+          .then(project => {
+            if (!project?.name) return;
+            sharingProjectNames.set(scopeId, project.name);
+            if (option.isConnected) { option.text = project.name; refreshPicker(projectSelect); }
+          }).catch(() => {});
+      }
+    }
     projectSelect.value = scopeId;
     projectSelect.disabled = Boolean(ds.sourceProjectId);
     refreshPicker(projectSelect);
