@@ -2,9 +2,43 @@
 // Run offline with the application stopped. Backups contain sensitive old records.
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const { encryptSecret, decryptSecret } = require('../lib/secret-box');
 const { loadSecurityConfig } = require('../lib/security-config');
 const { writeJson } = require('../lib/json-store');
+
+function writePrivateBackup(filePath, bytes) {
+  if (process.platform !== 'win32') {
+    const descriptor = fs.openSync(filePath, 'wx', 0o600);
+    try {
+      fs.writeFileSync(descriptor, bytes);
+      fs.fsyncSync(descriptor);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    return;
+  }
+
+  const helper = path.join(__dirname, 'create-private-backup.ps1');
+  const systemRoot = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows';
+  const powershell = path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  if (!fs.existsSync(powershell)) throw new Error('Windows PowerShell is unavailable.');
+  const result = spawnSync(powershell, [
+    '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', helper, filePath,
+  ], {
+    input: bytes,
+    encoding: null,
+    windowsHide: true,
+    maxBuffer: 1024 * 1024,
+    env: {
+      SystemRoot: systemRoot,
+      WINDIR: systemRoot,
+      SystemDrive: process.env.SystemDrive || path.parse(systemRoot).root.replace(/\\$/, ''),
+      Path: process.env.Path || process.env.PATH || '',
+    },
+  });
+  if (result.status !== 0) throw new Error('Unable to create the protected migration backup.');
+}
 
 function prepare(directory) {
   const configuration = loadSecurityConfig();
@@ -39,8 +73,12 @@ function migrate(directory, apply = false) {
   // Exclusive backups precede every replacement; keep them private and offline.
   for (const item of prepared) {
     const backup = item.file + suffix;
-    const descriptor=fs.openSync(backup,'wx',0o600);
-    try {fs.writeFileSync(descriptor,fs.readFileSync(item.file));} finally {fs.closeSync(descriptor);}
+    try {
+      writePrivateBackup(backup, fs.readFileSync(item.file));
+    } catch (error) {
+      try { fs.unlinkSync(backup); } catch {}
+      throw error;
+    }
   }
   for (const item of prepared) writeJson(item.file, item.migrated);
   return { files: prepared.length, records: prepared.reduce((n, item) => n + item.changed, 0), applied: true };
