@@ -48,9 +48,38 @@
   let dropdownOpen = false;
 
   // ── Fetch server notifications ────────────────────────────────────────────
-  async function fetchServerNotifs() {
-    try { serverNotifs = await API.getNotifications(); }
-    catch { serverNotifs = []; }
+  let olderCursor = null;
+  let unreadServer = 0;
+  let visibleCount = 30;
+  let requestInFlight = false;
+  let fetchError = '';
+
+  async function fetchServerNotifs(older = false) {
+    if (requestInFlight || (older && !olderCursor)) return;
+    requestInFlight = true;
+    try {
+      const url = '/api/notifications/browse' + (older ? '?before=' + encodeURIComponent(olderCursor) : '');
+      const response = await fetch(url, { credentials: 'include' });
+      if (!response.ok) throw new Error('Could not load notifications.');
+      const data = await response.json();
+      if (older) {
+        const known = new Set(serverNotifs.map(item => item.id));
+        serverNotifs.push(...data.items.filter(item => !known.has(item.id)));
+        olderCursor = data.next;
+      } else {
+        const last = data.items.at(-1);
+        const overlap = last ? serverNotifs.findIndex(item => item.id === last.id) : -1;
+        const tail = overlap >= 0 ? serverNotifs.slice(overlap + 1) : [];
+        serverNotifs = [...data.items, ...tail];
+        if (!tail.length) olderCursor = data.next;
+      }
+      unreadServer = data.unread;
+      fetchError = '';
+    } catch {
+      fetchError = 'Could not load notifications. Try again.';
+    } finally {
+      requestInFlight = false;
+    }
   }
 
   // ── Build merged item list ────────────────────────────────────────────────
@@ -68,7 +97,7 @@
 
     // Enrich with client-side job history (if Jobs is loaded)
     if (typeof Jobs !== 'undefined') {
-      Jobs.getAll().slice(0, 25).forEach(j => {
+      Jobs.getAll().forEach(j => {
         if (j.status === 'running') return; // still in-progress — skip
         items.push({
           id:     `job-${j.id}`,
@@ -93,12 +122,12 @@
     if (!items.length) {
       dropdown.innerHTML = `
         <div class="nav-inbox-header"><span>Notifications</span></div>
-        <div class="nav-inbox-empty">No notifications yet</div>
+        <div class="nav-inbox-empty">${fetchError || 'No notifications yet'}</div>
       `;
       return;
     }
 
-    const rows = items.slice(0, 30).map(item => `
+    const rows = items.slice(0, visibleCount).map(item => `
       <div class="notif-row ${item.read ? '' : 'unread'}"
            data-id="${esc(item.id)}"
            data-source="${esc(item.source)}"
@@ -118,8 +147,19 @@
         <span>Notifications</span>
         <button class="btn-mark-all-read" id="btn-mark-all-read">Mark all read</button>
       </div>
-      <div class="nav-inbox-list">${rows}</div>
+      <div class="nav-inbox-list">${rows}
+        ${fetchError ? '<p role="status">' + fetchError + '</p>' : ''}
+        ${olderCursor || items.length > visibleCount ? '<button type="button" class="btn-mark-all-read" id="notif-older" style="min-height:44px">Load older</button>' : ''}
+      </div>
     `;
+
+    dropdown.querySelector('#notif-older')?.addEventListener('click', async event => {
+      event.stopPropagation();
+      event.currentTarget.disabled = true;
+      await fetchServerNotifs(true);
+      if (!fetchError) visibleCount += 30;
+      updateBadge();
+    });
 
     // Row click — mark read + navigate
     dropdown.querySelectorAll('.notif-row').forEach(row => {
@@ -129,9 +169,9 @@
         const projId = row.dataset.project;
 
         if (source === 'server') {
-          await API.markNotificationRead(id).catch(() => {});
+          try { await API.markNotificationRead(id); } catch { return; }
           const n = serverNotifs.find(x => x.id === id);
-          if (n) n.read = true;
+          if (n && !n.read) { n.read = true; unreadServer = Math.max(0, unreadServer - 1); }
         } else {
           // Mark job as read in localStorage
           const realId = id.replace(/^job-/, '');
@@ -151,7 +191,8 @@
     // Mark all read
     document.getElementById('btn-mark-all-read')?.addEventListener('click', async (e) => {
       e.stopPropagation();
-      await API.markAllNotificationsRead().catch(() => {});
+      try { await API.markAllNotificationsRead(); } catch { return; }
+      unreadServer = 0;
       serverNotifs.forEach(n => { n.read = true; });
       try {
         const jobs = JSON.parse(localStorage.getItem('libreflow_jobs') || '[]');
@@ -165,7 +206,7 @@
   // ── Update badge + re-render ──────────────────────────────────────────────
   function updateBadge() {
     const items  = buildItems();
-    const unread = items.filter(i => !i.read).length;
+    const unread = unreadServer + items.filter(i => i.source === 'job' && !i.read).length;
     badge.textContent = unread > 9 ? '9+' : String(unread);
     badge.classList.toggle('hidden', unread === 0);
     if (dropdownOpen) renderDropdown(items);

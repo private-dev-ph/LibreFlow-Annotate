@@ -42,6 +42,16 @@ function pushNotification(userId, type, title, body, meta = {}) {
 
 // ── GET /api/notifications ────────────────────────────────────────────────────
 // Returns the 50 most recent notifications for the current user, newest first.
+router.get('/browse', (req, res) => {
+  const owned = readNotifs().filter(item => item.userId === req.session.userId).reverse();
+  const cursor = req.query.before;
+  const index = cursor === undefined ? -1 : owned.findIndex(item => item.id === cursor);
+  if (cursor !== undefined && index < 0) return res.status(400).json({ error: 'Invalid notification cursor.' });
+  const items = owned.slice(index + 1, index + 31);
+  res.json({ items, unread: owned.filter(item => !item.read).length,
+    next: index + 1 + items.length < owned.length ? items.at(-1).id : null });
+});
+
 router.get('/', (req, res) => {
   const all = readNotifs()
     .filter(n => n.userId === req.session.userId)
