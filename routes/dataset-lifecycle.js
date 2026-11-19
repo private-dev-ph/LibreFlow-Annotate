@@ -16,7 +16,7 @@ const {
 } = require('../lib/dataset-lifecycle');
 const { normalizeProcessingConfig } = require('../lib/version-processing');
 const { selectVersionInputs } = require('../lib/version-selection');
-const { buildSourceOptions, resolveSourceScope, applySourceScope, sourceScopeSnapshot } = require('../lib/version-source');
+const { buildSourceOptions, buildPagedSourceOptions, parseSourceBrowseQuery, resolveSourceScope, applySourceScope, sourceScopeSnapshot } = require('../lib/version-source');
 const { createProcessingPreview } = require('../lib/version-preview');
 const { inspectVersionExport, createVersionExportStream } = require('../lib/version-export');
 const { deleteDatasetVersion } = require('../lib/version-deletion');
@@ -477,8 +477,11 @@ router.get('/:sourceType/:sourceId/versions/source-options', requireScopes('vers
   const { resolved } = resolveRequestSource(req);
   if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
   try {
-    res.json(buildSourceOptions({ sourceType: req.params.sourceType, sourceId: req.params.sourceId,
-      images: resolved.images, annotations: resolved.annotations, batches: readJson(BATCHES_FILE, []) }));
+    const hasBrowseQuery = Object.keys(req.query || {}).length > 0;
+    const query = hasBrowseQuery ? parseSourceBrowseQuery(req.query) : null;
+    const builder = query ? buildPagedSourceOptions : buildSourceOptions;
+    res.json(builder({ sourceType: req.params.sourceType, sourceId: req.params.sourceId,
+      images: resolved.images, annotations: resolved.annotations, batches: readJson(BATCHES_FILE, []), ...(query || {}) }));
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 

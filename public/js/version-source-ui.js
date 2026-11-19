@@ -32,17 +32,18 @@
       const focusKey = active?.dataset?.sourceBatch ? ['batch', active.dataset.sourceBatch] : active?.dataset?.sourceSub ? ['sub', active.dataset.sourceSub] : active?.dataset?.sourceUnbatched !== undefined ? ['unbatched', ''] : active?.name === 'version-source-mode' ? ['mode', active.value] : null;
       const summary = selectedSummary();
       const query = searchQuery.toLowerCase();
-      const filtered = options.batches.filter(batch => !query || batch.name.toLowerCase().includes(query) || batch.subBatches.some(sub => sub.name.toLowerCase().includes(query)));
-      const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-      page = Math.min(page, totalPages);
-      const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
-      const pageLabel = filtered.length ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, filtered.length)} of ${filtered.length} batches · Page ${page} of ${totalPages}` : 'No batches match your search.';
+      const filtered = options.totalBatches === undefined ? options.batches.filter(batch => !query || batch.name.toLowerCase().includes(query) || batch.subBatches.some(sub => sub.name.toLowerCase().includes(query))) : options.batches;
+      const total = options.totalBatches === undefined ? filtered.length : Number(options.totalBatches);
+      const totalPages = options.totalBatches === undefined ? Math.max(1, Math.ceil(total / pageSize)) : Math.max(1, Number(options.totalPages) || 1);
+      page = options.totalBatches === undefined ? Math.min(page, totalPages) : Number(options.page) || page;
+      const visible = options.totalBatches === undefined ? filtered.slice((page - 1) * pageSize, page * pageSize) : filtered;
+      const pageLabel = total ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total} batches · Page ${page} of ${totalPages}` : 'No batches match your search.';
       container.innerHTML = `<fieldset class="version-source-controls" ${disabled ? 'disabled' : ''}><legend>Image source</legend><p class="version-source-help">Choose which batches to include. Selecting a batch includes its sub-batches.</p><div class="version-source-modes" role="radiogroup" aria-label="Image source mode"><label class="version-source-choice"><input type="radio" name="version-source-mode" value="all" ${scope.mode === 'all' ? 'checked' : ''}> <span>All images</span><small>${number(options.eligible)} ready / ${number(options.total)} total</small></label><label class="version-source-choice"><input type="radio" name="version-source-mode" value="batches" ${scope.mode === 'batches' ? 'checked' : ''}> <span>Selected batches</span><small>Choose one or more groups</small></label></div><div class="version-source-options" ${scope.mode === 'all' ? 'hidden' : ''}><label class="version-source-search">Search batches and sub-batches<input type="search" data-source-search maxlength="200" value="${esc(searchQuery)}" placeholder="Search by name"></label><div class="version-source-list" aria-label="Batches">${visible.map(batch => `<details class="version-source-group" data-source-group="${esc(batch.id)}" ${openBatchIds.has(batch.id) || scope.batchIds.includes(batch.id) ? 'open' : ''}><summary class="version-source-row"><span class="version-source-summary-toggle">${esc(batch.name)}</span><small>${number(batch.eligibleCount)} ready / ${number(batch.imageCount)} total</small><input type="checkbox" data-source-batch="${esc(batch.id)}" aria-label="Select ${esc(batch.name)}" ${scope.batchIds.includes(batch.id) ? 'checked' : ''}></summary><div class="version-source-sublist">${batch.subBatches.map(sub => `<label class="version-source-row version-source-subrow"><input type="checkbox" data-source-sub="${esc(sub.id)}" ${scope.subBatchIds.includes(sub.id) ? 'checked' : ''} ${scope.batchIds.includes(batch.id) ? 'disabled' : ''}><span>${esc(sub.name)}</span><small>${number(sub.eligibleCount)} ready / ${number(sub.imageCount)} total</small></label>`).join('') || '<p class="version-source-empty">No sub-batches.</p>'}</div></details>`).join('') || '<p class="version-source-empty">No batches match your search.</p>'}<div class="version-source-pagination"><button type="button" data-source-prev ${page <= 1 ? 'disabled' : ''}>Previous</button><span role="status" aria-live="polite">${pageLabel}</span><button type="button" data-source-next ${page >= totalPages ? 'disabled' : ''}>Next</button></div><label class="version-source-row"><input type="checkbox" data-source-unbatched ${scope.includeUnbatched ? 'checked' : ''}><span>Images without a batch</span><small>${number(options.unbatched?.eligibleCount)} ready / ${number(options.unbatched?.imageCount)} total</small></label></div><p class="version-source-empty" role="alert" ${valid() ? 'hidden' : ''}>Select at least one batch, sub-batch, or images without a batch to continue.</p></div><p class="version-source-summary" aria-live="polite"><strong>${esc(summary.label)}</strong>${summary.countsExact ? ` · ${summary.eligibleCount} ready / ${summary.imageCount} total in this scope.` : ` · ${summary.groupCount} selected ${summary.groupCount === 1 ? 'group' : 'groups'}. Selection is preserved while browsing.`}</p></fieldset>`;
       container.querySelectorAll('input[name="version-source-mode"]').forEach(input => input.addEventListener('change', event => { scope.mode = event.target.value; if (scope.mode === 'all') scope = allScope(); render(); notify(); }));
-      container.querySelector('[data-source-search]')?.addEventListener('input', event => { searchQuery = event.target.value.trim(); page = 1; render(); });
-      container.querySelector('[data-source-prev]')?.addEventListener('click', () => { page -= 1; render(); });
-      container.querySelector('[data-source-next]')?.addEventListener('click', () => { page += 1; render(); });
-      container.querySelectorAll('[data-source-group]').forEach(group => group.addEventListener('toggle', () => { if (group.open) openBatchIds.add(group.dataset.sourceGroup); else openBatchIds.delete(group.dataset.sourceGroup); }));
+      container.querySelector('[data-source-search]')?.addEventListener('input', event => { searchQuery = event.target.value.trim(); page = 1; loadPage(); });
+      container.querySelector('[data-source-prev]')?.addEventListener('click', () => { page -= 1; loadPage(); });
+      container.querySelector('[data-source-next]')?.addEventListener('click', () => { page += 1; loadPage(); });
+      container.querySelectorAll('[data-source-group]').forEach(group => group.addEventListener('toggle', () => { const id = group.dataset.sourceGroup; if (group.open) { openBatchIds.add(id); const batch = options.batches.find(item => item.id === id); if (batch && batch.subBatchCount > batch.subBatches.length) loadChildren(id); } else openBatchIds.delete(id); }));
       container.querySelectorAll('[data-source-batch]').forEach(input => input.addEventListener('change', event => { const id = event.target.dataset.sourceBatch; scope.mode = 'batches'; scope.batchIds = event.target.checked ? [...new Set([...scope.batchIds, id])] : scope.batchIds.filter(value => value !== id); scope.subBatchIds = scope.subBatchIds.filter(subId => !options.batches.some(batch => batch.id === id && batch.subBatches.some(sub => sub.id === subId))); render(); notify(); }));
       container.querySelectorAll('[data-source-sub]').forEach(input => input.addEventListener('change', event => { const id = event.target.dataset.sourceSub; scope.mode = 'batches'; scope.subBatchIds = event.target.checked ? [...new Set([...scope.subBatchIds, id])] : scope.subBatchIds.filter(value => value !== id); render(); notify(); }));
       container.querySelector('[data-source-unbatched]')?.addEventListener('change', event => { scope.mode = 'batches'; scope.includeUnbatched = event.target.checked; render(); notify(); });
@@ -52,27 +53,28 @@
       }
       onReady?.(options); resolveReady(true);
     }
-    async function load() {
+    async function fetchOptions(params = {}) {
       const sequence = ++loadSequence;
-      options = null;
-      container.hidden = false; container.innerHTML = '<div class="version-source-loading" role="status">Loading image source options…</div>';
-      notify();
+      const query = new URLSearchParams({ page: String(params.page || page), pageSize: String(pageSize) });
+      if (searchQuery) query.set('q', searchQuery);
+      if (params.batchId) query.set('batchId', params.batchId);
+      if (params.subPage) query.set('subPage', String(params.subPage));
+      if (params.subPageSize) query.set('subPageSize', String(params.subPageSize));
       try {
-        const response = await fetch(endpoint, { credentials: 'include' });
+        const response = await fetch(`${endpoint}?${query}`, { credentials: 'include' });
         const data = await response.json().catch(() => ({ error: `Request failed (${response.status}).` }));
         if (sequence !== loadSequence) return;
         if (!response.ok) throw new Error(data.error || `Request failed (${response.status}).`);
         if (!data || typeof data !== 'object' || Array.isArray(data) || typeof data.supportsBatches !== 'boolean' || !Number.isFinite(Number(data.total)) || !Number.isFinite(Number(data.eligible)) || !data.unbatched || !Array.isArray(data.batches)) throw new Error('Source options response was invalid.');
-        options = { ...data, batches: data.batches.map(batch => ({ ...batch, id: String(batch.id), name: String(batch.name || batch.id), subBatches: Array.isArray(batch.subBatches) ? batch.subBatches.map(sub => ({ ...sub, id: String(sub.id), name: String(sub.name || sub.id) })) : [] })) };
-        if (scope.mode === 'batches') {
-          const batches = new Set(options.batches.map(batch => batch.id));
-          const subs = new Set(options.batches.flatMap(batch => batch.subBatches.map(sub => sub.id)));
-          scope.batchIds = scope.batchIds.filter(id => batches.has(id));
-          scope.subBatchIds = scope.subBatchIds.filter(id => subs.has(id));
-        }
+        const next = { ...data, batches: data.batches.map(batch => ({ ...batch, id: String(batch.id), name: String(batch.name || batch.id), subBatches: Array.isArray(batch.subBatches) ? batch.subBatches.map(sub => ({ ...sub, id: String(sub.id), name: String(sub.name || sub.id) })) : [] })) };
+        if (params.batchId && options) options = { ...options, batches: options.batches.map(batch => batch.id === params.batchId ? { ...batch, ...next.batches[0], subBatches: next.batches[0]?.subBatches || [] } : batch) };
+        else options = next;
         render(); notify();
-      } catch (error) { if (sequence !== loadSequence) return; container.innerHTML = `<div class="version-source-error" role="alert"><p>Source options could not be loaded. Version creation is blocked until they are available.</p><p>${esc(error.message)}</p><button type="button" data-source-retry>Retry source options</button></div>`; container.querySelector('[data-source-retry]').addEventListener('click', load); onError?.(error); resolveReady(false); }
+      } catch (error) { if (sequence !== loadSequence) return; if (!options) container.innerHTML = `<div class="version-source-error" role="alert"><p>Source options could not be loaded. Version creation is blocked until they are available.</p><p>${esc(error.message)}</p><button type="button" data-source-retry>Retry source options</button></div>`; else container.querySelector('.version-source-summary')?.insertAdjacentHTML('beforebegin', `<p class="version-source-error" role="alert">${esc(error.message)}</p>`); container.querySelector('[data-source-retry]')?.addEventListener('click', () => load()); onError?.(error); resolveReady(false); }
     }
+    async function load() { options = null; container.hidden = false; container.innerHTML = '<div class="version-source-loading" role="status">Loading image source options…</div>'; notify(); await fetchOptions({ page: 1 }); }
+    async function loadPage() { if (!options) return load(); container.querySelector('.version-source-list')?.setAttribute('aria-busy', 'true'); await fetchOptions({ page }); }
+    async function loadChildren(batchId) { await fetchOptions({ batchId, subPage: 1, subPageSize: 20 }); }
     function setScope(next, { reload = false } = {}) {
       if (disabled) return false;
       scope = copyScope(next);

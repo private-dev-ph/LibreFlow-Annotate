@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const {
   normalizeRequestedScope,
   buildSourceOptions,
+  buildPagedSourceOptions,
   resolveSourceScope,
   applySourceScope,
   sourceScopeSnapshot,
@@ -33,6 +34,23 @@ test('source options use the project batch union and eligible counts', () => {
     id: 'b1', name: 'Batch One', imageCount: 3, eligibleCount: 2,
     subBatches: [{ id: 's1', name: 'Sub One', imageCount: 2, eligibleCount: 1 }],
   });
+});
+
+test('paged source options bound parent responses and fetch children separately', () => {
+  const manyBatches = Array.from({ length: 37 }, (_, index) => ({
+    id: `batch-${index}`, projectId: 'p1', name: `Batch ${index}`,
+    imageIds: ['i1'], subBatches: Array.from({ length: 23 }, (_, child) => ({ id: `sub-${index}-${child}`, name: `Child ${child}`, imageIds: ['i2'] })),
+  }));
+  const parentPage = buildPagedSourceOptions({ sourceType: 'project', sourceId: 'p1', images, annotations, batches: manyBatches, page: 2, pageSize: 12 });
+  assert.equal(parentPage.batches.length, 12);
+  assert.equal(parentPage.totalBatches, 37);
+  assert.equal(parentPage.totalPages, 4);
+  assert.deepEqual(parentPage.batches[0].subBatches, []);
+  const childPage = buildPagedSourceOptions({ sourceType: 'project', sourceId: 'p1', images, annotations, batches: manyBatches, batchId: 'batch-1', subPage: 2, subPageSize: 10 });
+  assert.equal(childPage.batches.length, 1);
+  assert.equal(childPage.batches[0].subBatches.length, 10);
+  assert.equal(childPage.childPage, 2);
+  assert.equal(childPage.totalBatches, 23);
 });
 
 test('parent and sub-batch selections union and deduplicate images', () => {

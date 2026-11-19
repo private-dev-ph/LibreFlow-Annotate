@@ -47,6 +47,17 @@ test('version source routes share scoped selection and preserve immutable names'
   assert.equal(options.batches[0].subBatches[0].imageCount, 1);
   assert.equal(options.unbatched.imageCount, 1);
 
+  const pagedResponse = await fetch(`${base}/versions/source-options?page=1&pageSize=1`, { headers: { 'x-user': 'owner' } });
+  const paged = await pagedResponse.json();
+  assert.equal(pagedResponse.status, 200);
+  assert.equal(paged.batches.length, 1);
+  assert.equal(paged.batches[0].subBatches.length, 0);
+  assert.equal(paged.totalBatches, 1);
+  const childrenResponse = await fetch(`${base}/versions/source-options?batchId=batch-1&subPage=1&subPageSize=1`, { headers: { 'x-user': 'owner' } });
+  const children = await childrenResponse.json();
+  assert.equal(childrenResponse.status, 200);
+  assert.equal(children.batches[0].subBatches[0].id, 'sub-1');
+
   const previewResponse = await post('/versions/preview', { sourceScope: scope, selection: 'all', splitRatios: { train: 100, valid: 0, test: 0 } });
   const preview = await previewResponse.json();
   assert.equal(previewResponse.status, 200, JSON.stringify(preview));
