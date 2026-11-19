@@ -6,7 +6,7 @@ window.__libreFlowAutomationShell = true;
 
   const state = {
     projects: [], serverJobs: [], connectors: [], webhooks: [], deliveries: [], apiKeys: [],
-    webhookEvents: [], scopes: [], reviewItems: [], reviewPage: 1, reviewPageSize: 25, reviewQuery: '', lastWebhookSecret: '', lastApiToken: '',
+    webhookEvents: [], scopes: [], reviewItems: [], reviewPage: 1, reviewPageSize: 25, reviewQuery: '', reviewRequestSequence: 0, lastWebhookSecret: '', lastApiToken: '',
   };
 
   document.getElementById('nav-avatar').textContent = (me.username || '?').slice(0, 2).toUpperCase();
@@ -266,10 +266,13 @@ window.__libreFlowAutomationShell = true;
     const projectId = document.getElementById('review-project').value;
     const list = document.getElementById('review-list');
     if (!projectId) { list.innerHTML = '<p class="muted">Choose a project to load its queue.</p>'; return; }
+    const requestSequence = ++state.reviewRequestSequence;
     state.reviewPage = Math.max(1, Number(nextPage) || 1);
+    list.setAttribute('aria-busy', 'true');
     const params = new URLSearchParams({ projectId, status: 'submitted', page: state.reviewPage, pageSize: state.reviewPageSize });
     if (state.reviewQuery) params.set('q', state.reviewQuery);
     const data = await request(`/api/automation/review-queue?${params}`);
+    if (requestSequence !== state.reviewRequestSequence) return;
     const page = Array.isArray(data) ? { items: data, total: data.length, page: 1, totalPages: 1 } : data;
     state.reviewItems = page.items || [];
     state.reviewPage = Number(page.page) || state.reviewPage;
@@ -281,6 +284,7 @@ window.__libreFlowAutomationShell = true;
     if (prev) prev.disabled = state.reviewPage <= 1;
     if (next) next.disabled = state.reviewPage >= (Number(page.totalPages) || 1);
     if (next) next.dataset.totalPages = String(page.totalPages || 1);
+    list.setAttribute('aria-busy', 'false');
   }
 
   async function fullRefresh() { await Promise.all([loadJobs(), loadIntegrations()]); await loadReviewQueue(); }
@@ -311,7 +315,7 @@ window.__libreFlowAutomationShell = true;
 
   document.getElementById('inference-project').addEventListener('change', event => loadModels(event.target.value).catch(error => toast('error', 'Could not load models', error.message)));
   document.getElementById('review-project').addEventListener('change', () => loadReviewQueue().catch(error => toast('error', 'Review queue failed', error.message)));
-  document.getElementById('review-search')?.addEventListener('input', event => { state.reviewQuery = event.target.value.trim(); state.reviewPage = 1; clearTimeout(window.__automationReviewSearchTimer); window.__automationReviewSearchTimer = setTimeout(() => loadReviewQueue(), 250); });
+  document.getElementById('review-search')?.addEventListener('input', event => { state.reviewQuery = event.target.value.trim(); state.reviewPage = 1; state.reviewRequestSequence += 1; document.getElementById('review-list').innerHTML = '<p class="muted">Loading review queue…</p>'; clearTimeout(window.__automationReviewSearchTimer); window.__automationReviewSearchTimer = setTimeout(() => loadReviewQueue(), 250); });
   document.getElementById('review-page-size')?.addEventListener('change', event => { state.reviewPageSize = Number(event.target.value) || 25; state.reviewPage = 1; loadReviewQueue().catch(error => toast('error', 'Review queue failed', error.message)); });
   document.getElementById('review-page-prev')?.addEventListener('click', () => loadReviewQueue(state.reviewPage - 1).catch(error => toast('error', 'Review queue failed', error.message)));
   document.getElementById('review-page-next')?.addEventListener('click', () => loadReviewQueue(state.reviewPage + 1).catch(error => toast('error', 'Review queue failed', error.message)));

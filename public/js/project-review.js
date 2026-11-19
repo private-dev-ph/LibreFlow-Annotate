@@ -109,9 +109,37 @@
     }
   }
 
+  const auditNav = document.createElement('div');
+  auditNav.className = 'collection-controls';
+  auditNav.innerHTML = '<input type="search" maxlength="200" aria-label="Search audit history" placeholder="Search audit history"><button type="button">Previous</button><span role="status"></span><button type="button">Next</button>';
+  auditList.before(auditNav);
+  const [auditSearch, auditPrev, auditStatus, auditNext] = auditNav.children;
+  let auditPage = 1, auditSequence = 0, auditTimer;
+  auditPrev.onclick = () => { auditPage--; loadAudit(); };
+  auditNext.onclick = () => { auditPage++; loadAudit(); };
+  auditSearch.oninput = () => {
+    auditSequence++;
+    auditList.replaceChildren();
+    auditPage = 1;
+    auditNext.disabled = auditPrev.disabled = true;
+    clearTimeout(auditTimer);
+    auditTimer = setTimeout(loadAudit, 250);
+  };
+
   async function loadAudit() {
+    const sequence = ++auditSequence;
+    auditNext.disabled = auditPrev.disabled = true;
     try {
-      const events = await API.getProjectAudit(projectId, 100);
+      const params = new URLSearchParams({ page: auditPage, q: auditSearch.value.trim() });
+      const response = await fetch(`/api/reviews/project/${encodeURIComponent(projectId)}/audit?${params}`);
+      if (!response.ok) throw new Error('Could not load audit history.');
+      const data = await response.json();
+      if (sequence !== auditSequence) return;
+      const events = data.items;
+      auditPage = data.page;
+      auditStatus.textContent = `Page ${auditPage} of ${data.totalPages} · ${data.total} events`;
+      auditNext.disabled = auditPage >= data.totalPages;
+      auditPrev.disabled = auditPage <= 1;
       auditList.innerHTML = events.length ? events.map(event => `
         <div class="project-audit-entry">
           <div>${esc(event.type.replaceAll('.', ' · '))}${event.details?.message ? ` — ${esc(event.details.message)}` : ''}</div>
@@ -119,7 +147,7 @@
         </div>
       `).join('') : '<div class="images-empty">No audit events yet.</div>';
     } catch (error) {
-      auditList.textContent = error.message;
+      if (sequence === auditSequence) { auditStatus.textContent = ''; auditList.textContent = error.message; }
     }
   }
 
@@ -127,6 +155,8 @@
   document.getElementById('project-review-search')?.addEventListener('input', event => {
     query = event.target.value.trim();
     page = 1;
+    list.innerHTML = '<div class="images-empty">Loading review queue…</div>';
+    list.setAttribute('aria-busy', 'true');
     clearTimeout(window.__reviewSearchTimer);
     window.__reviewSearchTimer = setTimeout(() => load(), 250);
   });
