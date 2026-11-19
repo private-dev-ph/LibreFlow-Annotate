@@ -915,3 +915,9 @@ summary:focus-visible,
     max-height: calc(100dvh - var(--nav-h) - 20px);
   }
 }
+
+.collection-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:12px 0; }
+.collection-controls[hidden], .collection-controls [hidden] { display:none !important; }
+.collection-controls input { flex:1 1 180px; min-width:0; max-width:100%; }
+.collection-controls :is(input,button) { min-height:44px; padding:8px 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); color:var(--text); font:inherit; }
+.collection-controls span { font-size:13px; color:var(--text-dim); }

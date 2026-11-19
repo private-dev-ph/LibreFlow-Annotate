@@ -119,14 +119,19 @@
   });
 
   //─── ── LABELS ─────────────────────────────────────────────────────────────
+  const labelPages = LibreFlowListWindow(document.getElementById('labels-list'), 'labels', renderLabels);
+  const linkedModelPages = LibreFlowListWindow(document.getElementById('models-list'), 'linked models', renderModels);
+  const collaboratorPages = LibreFlowListWindow(document.getElementById('collab-list'), 'collaborators', renderCollaborators);
+
   function renderLabels() {
     const list   = document.getElementById('labels-list');
     const labels = project.labelClasses || [];
+    const visibleLabels = labelPages.select(labels.map((label, index) => ({ label, index })), row => row.label.name);
     if (!labels.length) {
       list.innerHTML = '<span class="labels-empty">No labels yet — add one above.</span>';
       return;
     }
-    list.innerHTML = labels.map((lbl, i) => `
+    list.innerHTML = visibleLabels.map(({ label: lbl, index: i }) => `
       <span class="label-chip" data-idx="${i}">
         <span class="label-dot label-dot-pick" data-idx="${i}" title="Click to change color"
               style="background:${escHtml(lbl.color || '#6c63ff')};cursor:pointer"></span>
@@ -1019,13 +1024,14 @@
     const list  = document.getElementById('models-list');
     const empty = document.getElementById('models-empty');
 
+    const visibleModels = linkedModelPages.select(allModels, item => [item.name, item.type, item.description].join(' '));
     if (!allModels.length) {
       list.innerHTML = '';
       empty.style.display = 'block';
       return;
     }
     empty.style.display = 'none';
-    list.innerHTML = allModels.map(m => `
+    list.innerHTML = visibleModels.map(m => `
       <div class="model-card">
         <div class="model-icon">${LibreFlowIcons.icon('brain', 'Model')}</div>
         <div class="model-info">
@@ -1184,9 +1190,10 @@
     const empty = document.getElementById('collab-empty');
     if (!list) return;
     const collabs = project.collaborators || [];
+    const visibleMembers = collaboratorPages.select(collabs, member => member.username);
     if (!collabs.length) { list.innerHTML = ''; empty.style.display = 'block'; return; }
     empty.style.display = 'none';
-    list.innerHTML = collabs.map(c => `
+    list.innerHTML = visibleMembers.map(c => `
       <div class="collab-row">
         <div class="collab-avatar">${escHtml(c.username.slice(0,2).toUpperCase())}</div>
         <span class="collab-username">${escHtml(c.username)}</span>

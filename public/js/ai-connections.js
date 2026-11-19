@@ -335,14 +335,13 @@
     els.remotePrerequisite.textContent = reason;
   }
 
+  const projectPages = LibreFlowListWindow(els.projects, 'projects', renderProjects, { search: els.search });
+  const clientPages = LibreFlowListWindow(els.list, 'clients', renderConnections, { search: els.listSearch });
+  const requestPages = LibreFlowListWindow(els.requests, 'requests', renderRequests);
+
   function renderProjects() {
     clear(els.projects);
-    const query = els.search.value.trim().toLowerCase();
-    const projects = state.projects.filter((project) =>
-      String(project.name || "")
-        .toLowerCase()
-        .includes(query),
-    );
+    const projects = projectPages.select(state.projects, project => project.name);
     if (!state.projects.length)
       els.projects.append(
         node(
@@ -665,13 +664,8 @@
   }
   function renderConnections(focusTarget = null) {
     clear(els.list);
-    const query = els.listSearch.value.trim().toLowerCase();
-    const connections = state.connections.filter((connection) =>
-      String(connection.name || "")
-        .toLowerCase()
-        .includes(query),
-    );
-    els.count.textContent = `${connections.length} of ${state.connections.length} client${state.connections.length === 1 ? "" : "s"}`;
+    const connections = clientPages.select(state.connections, item => item.name);
+    els.count.textContent = `${state.connections.length} clients`;
     if (!connections.length) {
       els.list.append(
         node(
@@ -763,19 +757,18 @@
         ),
       );
       const activity = Array.isArray(connection.activity)
-        ? connection.activity.slice(-4).reverse()
+        ? connection.activity.slice().reverse()
         : [];
       if (activity.length) {
         body.append(node("h4", "activity-title", "Recent activity (redacted)"));
-        activity.forEach((item) =>
-          body.append(
-            node(
-              "p",
-              "activity-row",
-              `${[item.tool || "MCP tool", item.outcome || "Completed", item.projectId ? projectName(item.projectId) : ""].filter(Boolean).join(" · ")} · ${formatDate(item.at)}`,
-            ),
-          ),
-        );
+        const entries = node("div", "activity-rows");
+        body.append(entries);
+        const page = LibreFlowListWindow(entries, "activity entries", drawActivity, { size: 8, filter: false });
+        function drawActivity() {
+          entries.replaceChildren(...page.select(activity).map(item => node("p", "activity-row",
+            `${[item.tool || "MCP tool", item.outcome || "Completed", item.projectId ? projectName(item.projectId) : ""].filter(Boolean).join(" · ")} · ${formatDate(item.at)}`)));
+        }
+        drawActivity();
       } else
         body.append(node("p", "activity-empty", "No activity recorded yet."));
       details.append(summary, body);
@@ -1094,7 +1087,11 @@
       return;
     }
 
-    state.requests.forEach((request) => {
+    const visible = requestPages.select(state.requests, item => {
+      const context = requestContext(item);
+      return [item.summary?.title, item.status, context.project, context.connection].join(' ');
+    });
+    visible.forEach((request) => {
       const status = requestStatus(request);
       const context = requestContext(request);
       const card = node("article", "request-row");
@@ -1512,8 +1509,8 @@
     event.preventDefault();
     closeDialog();
   });
-  els.search.addEventListener("input", renderProjects);
-  els.listSearch.addEventListener("input", () => renderConnections());
+
+
   els.refresh.addEventListener("click", loadConnections);
   els.copyToken.addEventListener("click", () =>
     copyText(els.token.value, "Token copied"),
