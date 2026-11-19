@@ -11,6 +11,7 @@
     version: 'version',
   });
   const states = new WeakMap();
+  const providers = new WeakMap();
   let activeState = null;
   let pickerDialog = null;
   let pickerParts = null;
@@ -23,8 +24,8 @@
   }
 
   function usesRemoteOptions(select) {
-    return ['project', 'dataset', 'model'].includes(resourceName(select))
-      && select.getAttribute('data-picker-remote') !== 'false';
+    return providers.has(select) || (['project', 'dataset', 'model'].includes(resourceName(select))
+      && select.getAttribute('data-picker-remote') !== 'false');
   }
 
   function titleFor(select) {
@@ -343,7 +344,7 @@
     if (resource === 'model') query.set('sort', 'newest');
     return resource === 'dataset' || resource === 'model'
       ? `/api/${resource === 'dataset' ? 'datasets' : 'models'}/browse?${query}`
-      : '/api/projects';
+      : `/api/projects/browse?${query}`;
   }
 
   function remoteItems(state, data) {
@@ -351,8 +352,8 @@
     const rows = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
     const query = cleanLabel(pickerParts.search.value).toLocaleLowerCase();
     const mapped = rows.map(item => {
-      const value = String(item.id ?? '');
-      const text = cleanLabel(item.name || item.originalName || item.id || 'Untitled');
+      const value = String(item.value ?? item.id ?? '');
+      const text = cleanLabel(item.text || item.name || item.originalName || item.id || 'Untitled');
       const description = cleanLabel(item.description || item.type || '');
       const meta = resource === 'model'
         ? cleanLabel([item.projectName, item.status].filter(Boolean).join(' · '))
@@ -381,9 +382,15 @@
     state.remoteError = '';
     renderDialog(state, { loading: true });
     try {
-      const response = await fetch(remoteUrl(state), { credentials: 'include' });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Could not load picker options.');
+      const provider = providers.get(state.select);
+      let data;
+      if (provider) {
+        data = await provider({ query: cleanLabel(pickerParts.search.value), page: state.page + 1, pageSize: REMOTE_PAGE_SIZE, selectedValue: state.select.value });
+      } else {
+        const response = await fetch(remoteUrl(state), { credentials: 'include' });
+        data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Could not load picker options.');
+      }
       if (activeState !== state || sequence !== state.remoteSequence) return;
       const pageCount = Array.isArray(data) ? Math.max(1, Math.ceil(remoteProjectCount(state, data) / REMOTE_PAGE_SIZE)) : Math.max(1, Number(data.totalPages) || 1);
       state.remoteItems = remoteItems(state, data);
@@ -634,6 +641,23 @@
     focus(select) {
       const state = states.get(select);
       if (state && !state.select.disabled) state.button.focus();
+    },
+    registerProvider(select, provider, options = {}) {
+      if (!(select instanceof HTMLSelectElement) || typeof provider !== 'function') return () => {};
+      if (!select.matches('select[data-resource-picker]')) {
+        select.setAttribute('data-resource-picker', options.resource || 'resource');
+        if (options.label) select.setAttribute('data-picker-label', options.label);
+      }
+      providers.set(select, provider);
+      if (!states.has(select)) enhanceSelect(select);
+      const state = states.get(select);
+      if (state) {
+        state.remote = true;
+        if (activeState === state && pickerDialog?.open) loadRemote(state);
+      }
+      return () => {
+        if (providers.get(select) === provider) providers.delete(select);
+      };
     },
   });
 

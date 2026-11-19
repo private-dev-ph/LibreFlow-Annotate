@@ -194,8 +194,9 @@ const API = {
     if (!r.ok) throw new Error(data.error || 'Failed to update issue.');
     return data;
   },
-  async getProjectReviews(projectId, status = '') {
-    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+  async getProjectReviews(projectId, status = '', parameters = {}) {
+    const params = new URLSearchParams({ ...(status ? { status } : {}), ...parameters });
+    const query = params.toString() ? `?${params}` : '';
     const r = await fetch(`/api/reviews/project/${projectId}${query}`, { credentials: 'include' });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Failed to load project reviews.');

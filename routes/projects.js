@@ -24,6 +24,7 @@ const PALETTE = [
 const { pushNotification } = require('./notifications');
 const { emitWebhookEvent } = require('../lib/webhooks');
 const { readPins, setPinned } = require('../lib/project-pins');
+const { parseLibraryQuery, browseLibrary } = require('../lib/library-pagination');
 
 const router = express.Router();
 const PROJECTS_FILE = dataFile('projects.json');
@@ -52,6 +53,26 @@ router.get('/', (req, res) => {
       pinned: pinnedProjects.has(p.id),
     }));
   res.json(all);
+});
+
+// GET paged projects for picker and large-list consumers.
+router.get('/browse', (req, res) => {
+  let query;
+  try { query = parseLibraryQuery(req.query); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
+  const uid = req.session.userId;
+  const pinnedProjects = new Set(readPins().filter(pin => pin.userId === uid).map(pin => pin.projectId));
+  const users = readJson(dataFile('users.json'), []);
+  const visible = readProjects()
+    .filter(project => project.userId === uid || (project.collaborators || []).some(collaborator => collaborator.userId === uid))
+    .map(project => ({
+      ...project,
+      ownerUsername: users.find(user => user.id === project.userId)?.username || '',
+      pinned: pinnedProjects.has(project.id),
+    }));
+  return res.json(browseLibrary(visible, query, {
+    summary: project => ({ id: project.id, name: project.name, description: project.description || '', ownerUsername: project.ownerUsername, pinned: project.pinned }),
+  }));
 });
 
 // POST create a project
