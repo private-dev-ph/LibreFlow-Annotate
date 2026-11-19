@@ -57,6 +57,7 @@ async function request(urlPath, key, { method = 'GET', body } = {}) {
   const response = await fetch(`${baseUrl}${urlPath}`, {
     method,
     headers: {
+      Connection: 'close',
       Authorization: `Bearer ${key.token}`,
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
     },
