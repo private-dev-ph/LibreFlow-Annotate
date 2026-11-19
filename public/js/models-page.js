@@ -81,9 +81,6 @@
   async function loadAll() {
     setModelsStatus('Loading models…');
     try {
-      const projects = await API.getProjects();
-      if (!Array.isArray(projects)) throw new Error(projects?.error || 'Failed to load projects.');
-      allProjects = projects;
       projectsLoaded = true;
       populateProjectFilter();
       populateUploadProjects();
@@ -101,16 +98,13 @@
   function populateProjectFilter() {
     const sel = document.getElementById('filter-project');
     const selected = sel.value;
-    // Keep first "All projects" option, rebuild rest
+    // Project options are fetched by the shared remote picker as needed.
     sel.innerHTML = '<option value="">All projects</option>';
-    allProjects.forEach(project => {
-      const opt = document.createElement('option');
-      opt.value = project.id;
-      opt.textContent = project.name;
-      if (project.description) opt.dataset.description = project.description;
-      sel.appendChild(opt);
-    });
-    sel.value = [...sel.options].some(option => option.value === selected) ? selected : '';
+    if (selected) {
+      const option = new Option('Selected project', selected);
+      option.selected = true;
+      sel.appendChild(option);
+    }
     refreshPicker(sel);
   }
 
@@ -198,14 +192,6 @@
   function populateUploadProjects() {
     uploadProject.innerHTML = '<option value="" disabled>Select a project</option>';
     uploadProject.options[0].defaultSelected = true;
-    allProjects.forEach(project => {
-      const option = document.createElement('option');
-      option.value = project.id;
-      option.textContent = project.name;
-      if (project.description) option.dataset.description = project.description;
-      option.dataset.meta = project.id;
-      uploadProject.appendChild(option);
-    });
     uploadProject.value = '';
     refreshPicker(uploadProject);
   }
@@ -296,8 +282,7 @@
     modelsEmpty.classList.add('hidden');
 
     modelsList.innerHTML = allModels.map(m => {
-      const proj = allProjects.find(p => p.id === m.projectId);
-      const projName = proj ? proj.name : 'Unknown project';
+      const projName = m.projectName || allProjects.find(p => p.id === m.projectId)?.name || 'Unknown project';
       const isOwner  = m.userId === me.id;
       return `
         <div class="model-row" data-id="${esc(m.id)}">

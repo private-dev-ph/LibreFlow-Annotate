@@ -159,6 +159,7 @@ router.get('/browse', (req, res) => {
       id: model.id ?? null,
       userId: model.userId ?? null,
       projectId: model.projectId ?? null,
+      projectName: getProject(model.projectId)?.name ?? null,
       name: model.name ?? null,
       description: model.description ?? null,
       type: model.type ?? null,
