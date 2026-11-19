@@ -153,6 +153,15 @@ router.get('/:imageId/revisions', (req, res) => {
   const revisions = existingRevisions.length
     ? existingRevisions
     : revisionsForImage(context.image.id);
+  if (req.query.page !== undefined) {
+    const page = Number(req.query.page), size = Number(req.query.pageSize || 20);
+    const query = req.query.q ?? '';
+    if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(size) || size < 1 || size > 100 || typeof query !== 'string' || query.length > 200) return res.status(400).json({ error: 'Invalid history query.' });
+    const found = revisions.filter(item => [`v${item.version}`, item.actorUsername, item.createdAt, item.action].some(field => String(field || '').toLowerCase().includes(query.toLowerCase())));
+    const totalPages = Math.max(1, Math.ceil(found.length / size));
+    const current = Math.min(page, totalPages);
+    return res.json({ items: found.slice((current - 1) * size, current * size).map(item => revisionSummary(item, false)), page: current, total: found.length, totalPages });
+  }
   res.json(revisions.map(revision => revisionSummary(revision, includeAnnotations)));
 });
 

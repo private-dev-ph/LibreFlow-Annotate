@@ -153,6 +153,20 @@
     clearHistoryControls();
   }
 
+  async function revisionPage(imageId, query = '', page = 1, pageSize = 20) {
+    const params = new URLSearchParams({ page, pageSize, q: query });
+    const response = await fetch(`/api/annotations/${encodeURIComponent(imageId)}/revisions?${params}`);
+    if (!response.ok) throw new Error('Could not load annotation revisions.');
+    return response.json();
+  }
+  if (window.LibreFlowPicker) {
+    LibreFlowPicker.registerProvider(revisionSelect, async ({ query, page, pageSize }) => {
+      const id = currentImageId;
+      const result = await revisionPage(id, query, page, pageSize);
+      if (id !== currentImageId) throw new Error('The active image changed.');
+      return { ...result, items: result.items.map(item => ({ id: item.id, text: `v${item.version} · ${item.actorUsername || 'Unknown'} · ${formatDate(item.createdAt)}` })) };
+    });
+  }
   function loadHistory(imageId) {
     if (!panel.open || !imageId || currentImageId !== imageId) return Promise.resolve();
     if (historyImageId === imageId) return Promise.resolve(history);
@@ -163,7 +177,7 @@
     historyLoading = pending;
     setFeedback('Loading history…');
     pending.promise = Promise.resolve()
-      .then(() => API.getAnnotationRevisions(imageId))
+      .then(() => API.getAnnotationRevisions(imageId, false, { page: 1, pageSize: 20 }))
       .then(revisions => {
         if (historyLoading === pending) historyLoading = null;
         if (currentImageId !== imageId || requestId !== historyGeneration || !panel.open) return;

@@ -53,6 +53,11 @@ function projectMembers(project) {
 router.get('/project/:projectId/audit', (req, res) => {
   const project = getProject(req.params.projectId);
   if (denyMissingOrForbidden(res, project, isProjectMember(project, req.session.userId), 'Project')) return;
+  if (req.query.page !== undefined) {
+    const page = Number(req.query.page);
+    if (!Number.isSafeInteger(page) || page < 1 || typeof (req.query.q ?? '') !== 'string' || (req.query.q || '').length > 200) return res.status(400).json({ error: 'Invalid audit query.' });
+    return res.json(listAuditEvents({ projectId: project.id, limit: 25, page, q: req.query.q || '' }));
+  }
   res.json(listAuditEvents({ projectId: project.id, limit: req.query.limit }));
 });
 

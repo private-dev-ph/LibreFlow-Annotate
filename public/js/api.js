@@ -130,11 +130,11 @@ const API = {
     if (!r.ok) throw new Error(data.error || 'Failed to save annotations.');
     return data;
   },
-  async getAnnotationRevisions(imageId, includeAnnotations = false) {
-    const r = await fetch(`/api/annotations/${imageId}/revisions?includeAnnotations=${includeAnnotations}`, { credentials: 'include' });
+  async getAnnotationRevisions(imageId, includeAnnotations = false, paging = null) {
+    const r = await fetch(`/api/annotations/${encodeURIComponent(imageId)}/revisions?${new URLSearchParams({ includeAnnotations, ...paging })}`, { credentials: 'include' });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Failed to load annotation history.');
-    return data;
+    return paging ? data.items : data;
   },
   async restoreAnnotationRevision(imageId, revisionId) {
     const r = await fetch(`/api/annotations/${imageId}/revisions/${revisionId}/restore`, {
