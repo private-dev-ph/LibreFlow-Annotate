@@ -17,13 +17,12 @@ const json = value => `${JSON.stringify(value, null, 2)}\n`;
 async function writeJson(root, relative, value) {
   const target = path.join(root, relative); await fs.mkdir(path.dirname(target), { recursive: true }); await fs.writeFile(target, json(value));
 }
-async function fixture(base, { versionSchema = 'libreflow.dataset-version/v1', symlinkImage = false } = {}) {
+
+async function fixture(base, { versionSchema = 'libreflow.dataset-version/v1' } = {}) {
   const source = path.join(base, 'source');
   for (const dir of ['data', 'uploads', 'models', 'datasets', 'versions']) await fs.mkdir(path.join(source, dir), { recursive: true });
   const imagePath = path.join(source, 'uploads', 'one.png');
-  if (symlinkImage) {
-    const outside = path.join(base, 'outside.png'); await fs.writeFile(outside, PNG); await fs.symlink(outside, imagePath);
-  } else await fs.writeFile(imagePath, PNG);
+  await fs.writeFile(imagePath, PNG);
   await fs.writeFile(path.join(source, 'datasets', 'copy.png'), PNG);
   await fs.writeFile(path.join(source, 'models', 'weights.pt'), Buffer.from('opaque model archival bytes'));
   await fs.writeFile(path.join(source, 'models', 'classes.yaml'), Buffer.from('names: [part]\n'));
@@ -117,15 +116,46 @@ test('migration encrypts selected project data, assets, revisions, reviews, data
   await connected.disconnect();
 });
 
-test('invalid traversal and symlink asset paths fail before destination writes', async t => {
-  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'libreflow-migration-path-')); t.after(() => fs.rm(base, { recursive: true, force: true }));
-  const symlink = await fixture(base, { symlinkImage: true }); const destination = path.join(base, 'destination');
-  await assert.rejects(migrateLocalWorkspace({ source: symlink.source, destination, project: ids.project, passphrase: PASS, env: {} }), error => error instanceof MigrationError && error.code === 'unsafe_path');
+test('invalid traversal paths fail before destination writes', async t => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'libreflow-migration-traversal-'));
+  t.after(() => fs.rm(base, { recursive: true, force: true }));
+  const { source } = await fixture(base);
+  const destination = path.join(base, 'destination');
+  const imagesFile = path.join(source, 'data', 'images.json');
+  const images = JSON.parse(await fs.readFile(imagesFile, 'utf8'));
+  images[0].filename = '../../outside.png';
+  await fs.writeFile(imagesFile, json(images));
+
+  await assert.rejects(migrateLocalWorkspace({ source, destination, project: ids.project, passphrase: PASS, env: {} }), error => error instanceof MigrationError && error.code === 'unsafe_path');
   await assert.rejects(fs.access(destination), { code: 'ENOENT' });
-  const badBase = await fs.mkdtemp(path.join(os.tmpdir(), 'libreflow-migration-traversal-')); t.after(() => fs.rm(badBase, { recursive: true, force: true }));
-  const bad = await fixture(badBase); const imageFile = path.join(bad.source, 'data/images.json');
-  const records = JSON.parse(await fs.readFile(imageFile, 'utf8')); records[0].filename = '../../outside.png'; await fs.writeFile(imageFile, json(records));
-  await assert.rejects(migrateLocalWorkspace({ source: bad.source, destination: path.join(badBase, 'destination'), project: ids.project, passphrase: PASS, env: {} }), error => error instanceof MigrationError && error.code === 'unsafe_path');
+});
+
+test('linked assets fail before destination writes', async t => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'libreflow-migration-link-'));
+  t.after(() => fs.rm(base, { recursive: true, force: true }));
+  const { source } = await fixture(base);
+  const destination = path.join(base, 'destination');
+  const uploads = path.join(source, 'uploads');
+  const outside = path.join(base, 'fixture-assets');
+  await fs.mkdir(outside);
+  const imagePath = path.join(uploads, 'one.png');
+  const target = path.join(outside, 'one.png');
+  await fs.rename(imagePath, target);
+
+  try {
+    await fs.symlink(target, imagePath, 'file');
+  } catch (error) {
+    if (process.platform !== 'win32' || !['EPERM', 'EACCES'].includes(error.code)) throw error;
+    // A directory junction exercises the same asset reader on Windows without file-symlink privileges.
+    await fs.symlink(outside, path.join(uploads, 'linked'), 'junction');
+    const imagesFile = path.join(source, 'data', 'images.json');
+    const images = JSON.parse(await fs.readFile(imagesFile, 'utf8'));
+    images[0].filename = 'linked/one.png';
+    await fs.writeFile(imagesFile, json(images));
+  }
+
+  await assert.rejects(migrateLocalWorkspace({ source, destination, project: ids.project, passphrase: PASS, env: {} }), error => error instanceof MigrationError && error.code === 'unsafe_path');
+  await assert.rejects(fs.access(destination), { code: 'ENOENT' });
 });
 
 test('unsupported dataset-version schemas are rejected before creating the destination', async t => {
