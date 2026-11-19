@@ -89,7 +89,21 @@
       </nav>
 
       <section class="automation-panel active" data-panel="jobs">
+        <div class="jobs-browser-toolbar" aria-label="Filter automation jobs">
+          <label class="jobs-search-field">Search jobs<input id="jobs-search" type="search" placeholder="Name, project, status, or type" /></label>
+          <label>Status<select id="jobs-status-filter"><option value="">All statuses</option><option value="queued">Queued</option><option value="running">Running</option><option value="completed">Completed</option><option value="completed_with_errors">Completed with errors</option><option value="failed">Failed</option><option value="canceled">Canceled</option></select></label>
+          <label>Type<input id="jobs-type-filter" type="search" placeholder="e.g. batch_inference" /></label>
+          <label>Project<select id="jobs-project-filter" class="project-select" data-resource-picker="project" data-picker-label="Project"><option value="">All projects</option></select></label>
+          <label>From<input id="jobs-from-filter" type="date" /></label>
+          <label>To<input id="jobs-to-filter" type="date" /></label>
+        </div>
         <div id="jobs-list" class="jobs-list"></div>
+        <div class="jobs-pagination" aria-label="Jobs pagination">
+          <span id="jobs-page-status" class="muted">No server jobs loaded.</span>
+          <label>Per page<select id="jobs-page-size"><option value="25" selected>25</option><option value="50">50</option><option value="100">100</option></select></label>
+          <button id="jobs-page-prev" class="mini-action secondary" type="button" disabled>Previous</button>
+          <button id="jobs-page-next" class="mini-action secondary" type="button" disabled>Next</button>
+        </div>
         <div id="jobs-empty" class="jobs-empty" style="display:none">
           <div class="jobs-empty-icon" data-lf-icon="package" data-lf-icon-label="Jobs"></div>
           <h2>No jobs yet</h2>

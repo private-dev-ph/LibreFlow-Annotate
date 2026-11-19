@@ -7,6 +7,7 @@ window.__libreFlowAutomationShell = true;
   const state = {
     projects: [], serverJobs: [], connectors: [], webhooks: [], deliveries: [], apiKeys: [],
     webhookEvents: [], scopes: [], reviewItems: [], reviewPage: 1, reviewPageSize: 25, reviewQuery: '', reviewRequestSequence: 0, lastWebhookSecret: '', lastApiToken: '',
+    jobsPage: 1, jobsPageSize: 25, jobsQuery: '', jobsStatus: '', jobsType: '', jobsProjectId: '', jobsFrom: '', jobsTo: '', jobsTotal: 0, jobsTotalPages: 1, jobsRunningCount: 0, jobsRequestSequence: 0, jobDetails: null, jobDetailsPage: 1,
   };
 
   document.getElementById('nav-avatar').textContent = (me.username || '?').slice(0, 2).toUpperCase();
@@ -65,7 +66,7 @@ window.__libreFlowAutomationShell = true;
   function fillProjectSelects() {
     document.querySelectorAll('.project-select').forEach(select => {
       const previous = select.value;
-      const includeAll = select.id === 'webhook-project';
+      const includeAll = ['webhook-project', 'jobs-project-filter'].includes(select.id);
       select.innerHTML = '';
       const placeholder = new Option(includeAll ? 'All my projects' : 'Select project', '');
       placeholder.disabled = select.required;
@@ -101,19 +102,28 @@ window.__libreFlowAutomationShell = true;
   function renderJobs() {
     const local = Jobs.getAll()
       .filter(localJob => !state.serverJobs.some(job => job.id === localJob.id))
+      .filter(job => {
+        if (state.jobsStatus && job.status !== state.jobsStatus) return false;
+        if (state.jobsType && job.type !== state.jobsType) return false;
+        if (state.jobsProjectId && job.projectId !== state.jobsProjectId) return false;
+        const created = Date.parse(job.createdAt || '') || 0;
+        if (state.jobsFrom && created < Date.parse(`${state.jobsFrom}T00:00:00.000Z`)) return false;
+        if (state.jobsTo && created > Date.parse(`${state.jobsTo}T23:59:59.999Z`)) return false;
+        return !state.jobsQuery || [job.name, job.projectId, job.status, job.type, job.id].some(value => String(value || '').toLowerCase().includes(state.jobsQuery.toLowerCase()));
+      })
       .map(job => ({ ...job, source: 'browser', progress: { percent: Number(job.progress) || 0 } }));
-    const jobs = [...state.serverJobs.map(job => ({ ...job, source: 'server' })), ...local]
-      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    const server = state.serverJobs.map(job => ({ ...job, source: 'server' }));
+    const jobs = [...server, ...local];
     const list = document.getElementById('jobs-list');
     const empty = document.getElementById('jobs-empty');
-    const running = jobs.filter(job => ['queued', 'running', 'canceling'].includes(job.status)).length;
+    const running = Number(state.jobsRunningCount || 0) + local.filter(job => ['queued', 'running', 'canceling'].includes(job.status)).length;
     const navBadge = document.getElementById('jobs-badge');
     navBadge.textContent = running;
     navBadge.classList.toggle('hidden', running === 0);
     empty.style.display = jobs.length ? 'none' : 'block';
     if (!jobs.length) { list.innerHTML = ''; return; }
 
-    list.innerHTML = jobs.map(job => {
+    const renderCard = job => {
       const status = statusPresentation(job.status);
       const percent = jobProgress(job);
       const count = job.progress?.total !== undefined ? `${job.progress.processed}/${job.progress.total} items` : (job.fileCount ? `${job.fileCount} files` : job.type || 'Job');
@@ -128,11 +138,35 @@ window.__libreFlowAutomationShell = true;
         ${job.error ? `<div class="job-error-msg">${LibreFlowIcons.icon('warning')} ${esc(job.error)}</div>` : ''}
         ${canCancel || canRetry || job.source === 'server' ? `<div class="job-actions">${job.source === 'server' ? `<button class="mini-action secondary" data-job-details="${esc(job.id)}" type="button">Details</button>` : ''}${canCancel ? `<button class="mini-action danger" data-job-cancel="${esc(job.id)}" type="button">Cancel</button>` : ''}${canRetry ? `<button class="mini-action" data-job-retry="${esc(job.id)}" type="button">Retry failed</button>` : ''}</div>` : ''}
       </article>`;
-    }).join('');
+    };
+    list.innerHTML = `${server.length ? `<div class="jobs-source-heading">Server jobs</div>${server.map(renderCard).join('')}` : ''}${local.length ? `<div class="jobs-source-heading">This browser</div>${local.map(renderCard).join('')}` : ''}`;
+    const pageStatus = document.getElementById('jobs-page-status');
+    if (pageStatus) pageStatus.textContent = state.jobsTotal ? `Showing ${(state.jobsPage - 1) * state.jobsPageSize + 1}–${Math.min(state.jobsTotal, state.jobsPage * state.jobsPageSize)} of ${state.jobsTotal} · Page ${state.jobsPage} of ${state.jobsTotalPages}` : 'No server jobs match these filters.';
+    const previous = document.getElementById('jobs-page-prev');
+    const next = document.getElementById('jobs-page-next');
+    if (previous) previous.disabled = state.jobsPage <= 1;
+    if (next) next.disabled = state.jobsPage >= state.jobsTotalPages;
   }
 
-  async function loadJobs() {
-    state.serverJobs = await request('/api/automation/jobs?limit=200');
+  async function loadJobs(nextPage = state.jobsPage) {
+    const requestSequence = ++state.jobsRequestSequence;
+    state.jobsPage = Math.max(1, Number(nextPage) || 1);
+    const params = new URLSearchParams({ browse: '1', page: state.jobsPage, pageSize: state.jobsPageSize });
+    if (state.jobsQuery) params.set('q', state.jobsQuery);
+    if (state.jobsStatus) params.set('status', state.jobsStatus);
+    if (state.jobsType) params.set('type', state.jobsType);
+    if (state.jobsProjectId) params.set('projectId', state.jobsProjectId);
+    if (state.jobsFrom) params.set('from', state.jobsFrom);
+    if (state.jobsTo) params.set('to', state.jobsTo);
+    const data = await request(`/api/automation/jobs?${params}`);
+    if (requestSequence !== state.jobsRequestSequence) return;
+    const page = Array.isArray(data) ? { items: data, total: data.length, page: 1, pageSize: data.length || state.jobsPageSize, totalPages: 1, runningCount: data.filter(job => ['queued', 'running', 'canceling'].includes(job.status)).length } : data;
+    state.serverJobs = page.items || [];
+    state.jobsTotal = Number(page.total) || 0;
+    state.jobsPage = Number(page.page) || state.jobsPage;
+    state.jobsPageSize = Number(page.pageSize) || state.jobsPageSize;
+    state.jobsTotalPages = Number(page.totalPages) || 1;
+    state.jobsRunningCount = Number(page.runningCount) || 0;
     renderJobs();
   }
 
@@ -199,9 +233,15 @@ window.__libreFlowAutomationShell = true;
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   }
 
-  function showJobDetails(job, trigger) {
+  function renderJobDetails() {
+    const job = state.jobDetails;
+    if (!job) return;
     const modal = document.getElementById('job-details-modal');
-    const details = job.items?.slice(0, 25) || [];
+    const allItems = job.items || [];
+    const pageSize = 25;
+    const totalPages = Math.max(1, Math.ceil(allItems.length / pageSize));
+    state.jobDetailsPage = Math.min(Math.max(1, state.jobDetailsPage), totalPages);
+    const details = allItems.slice((state.jobDetailsPage - 1) * pageSize, state.jobDetailsPage * pageSize);
     const progress = job.progress || {};
     const percent = jobProgress(job);
     document.getElementById('job-details-title').textContent = job.name || 'Job details';
@@ -213,8 +253,15 @@ window.__libreFlowAutomationShell = true;
       </div>
       ${jobResultLinks(job)}
       ${job.error ? `<p class="job-error-msg">${LibreFlowIcons.icon('warning')} ${esc(job.error)}</p>` : ''}
-      <h3 class="subheading">Items${job.items?.length > details.length ? ` (showing first ${details.length})` : ''}</h3>
-      ${details.length ? `<ul class="job-details-list">${details.map(item => `<li class="job-details-item"><span class="job-details-item-status">${esc(item.status || 'pending')}</span>${esc(item.originalName || item.imageId || item.id || 'Untitled item')}${item.error ? `<span class="job-details-item-error">${esc(item.error)}</span>` : ''}</li>`).join('')}</ul>` : '<p class="job-details-empty">No item details are available for this job.</p>'}`;
+      <h3 class="subheading">Items${allItems.length > details.length ? ` (showing ${((state.jobDetailsPage - 1) * pageSize) + 1}–${Math.min(allItems.length, state.jobDetailsPage * pageSize)} of ${allItems.length})` : ''}</h3>
+      ${details.length ? `<ul class="job-details-list">${details.map(item => `<li class="job-details-item"><span class="job-details-item-status">${esc(item.status || 'pending')}</span>${esc(item.originalName || item.imageId || item.id || 'Untitled item')}${item.error ? `<span class="job-details-item-error">${esc(item.error)}</span>` : ''}</li>`).join('')}</ul>${allItems.length > pageSize ? `<div class="job-details-pagination"><button class="mini-action secondary" data-job-items-prev type="button" ${state.jobDetailsPage <= 1 ? 'disabled' : ''}>Previous</button><span>Page ${state.jobDetailsPage} of ${totalPages}</span><button class="mini-action secondary" data-job-items-next type="button" ${state.jobDetailsPage >= totalPages ? 'disabled' : ''}>Next</button></div>` : ''}` : '<p class="job-details-empty">No item details are available for this job.</p>'}`;
+  }
+
+  function showJobDetails(job, trigger) {
+    const modal = document.getElementById('job-details-modal');
+    state.jobDetails = job;
+    state.jobDetailsPage = 1;
+    renderJobDetails();
     jobDetailsReturnFocus = trigger;
     modal.hidden = false;
     modal.addEventListener('keydown', trapJobDetailsFocus);
@@ -361,6 +408,16 @@ window.__libreFlowAutomationShell = true;
   document.getElementById('review-page-size')?.addEventListener('change', event => { state.reviewPageSize = Number(event.target.value) || 25; state.reviewPage = 1; loadReviewQueue().catch(error => toast('error', 'Review queue failed', error.message)); });
   document.getElementById('review-page-prev')?.addEventListener('click', () => loadReviewQueue(state.reviewPage - 1).catch(error => toast('error', 'Review queue failed', error.message)));
   document.getElementById('review-page-next')?.addEventListener('click', () => loadReviewQueue(state.reviewPage + 1).catch(error => toast('error', 'Review queue failed', error.message)));
+  const refreshJobsFromFilters = () => { state.jobsPage = 1; loadJobs().catch(error => toast('error', 'Jobs could not load', error.message)); };
+  document.getElementById('jobs-search')?.addEventListener('input', event => { state.jobsQuery = event.target.value.trim(); clearTimeout(window.__automationJobsSearchTimer); window.__automationJobsSearchTimer = setTimeout(refreshJobsFromFilters, 250); });
+  document.getElementById('jobs-status-filter')?.addEventListener('change', event => { state.jobsStatus = event.target.value; refreshJobsFromFilters(); });
+  document.getElementById('jobs-type-filter')?.addEventListener('input', event => { state.jobsType = event.target.value.trim(); clearTimeout(window.__automationJobsTypeTimer); window.__automationJobsTypeTimer = setTimeout(refreshJobsFromFilters, 250); });
+  document.getElementById('jobs-project-filter')?.addEventListener('change', event => { state.jobsProjectId = event.target.value; refreshJobsFromFilters(); });
+  document.getElementById('jobs-from-filter')?.addEventListener('change', event => { state.jobsFrom = event.target.value; refreshJobsFromFilters(); });
+  document.getElementById('jobs-to-filter')?.addEventListener('change', event => { state.jobsTo = event.target.value; refreshJobsFromFilters(); });
+  document.getElementById('jobs-page-size')?.addEventListener('change', event => { state.jobsPageSize = Number(event.target.value) || 25; state.jobsPage = 1; loadJobs().catch(error => toast('error', 'Jobs could not load', error.message)); });
+  document.getElementById('jobs-page-prev')?.addEventListener('click', () => loadJobs(state.jobsPage - 1).catch(error => toast('error', 'Jobs could not load', error.message)));
+  document.getElementById('jobs-page-next')?.addEventListener('click', () => loadJobs(state.jobsPage + 1).catch(error => toast('error', 'Jobs could not load', error.message)));
   document.getElementById('s3-credential-mode').addEventListener('change', event => document.getElementById('s3-static-fields').classList.toggle('hidden', event.target.value !== 'static'));
 
   document.getElementById('inference-form').addEventListener('submit', async event => {
@@ -430,7 +487,9 @@ window.__libreFlowAutomationShell = true;
       else if (button.dataset.jobDetails) {
         const job = await request(`/api/automation/jobs/${button.dataset.jobDetails}`);
         showJobDetails(job, button);
-      } else if (button.dataset.connectorScan) { await request(`/api/automation/connectors/${button.dataset.connectorScan}/scan`, { method: 'POST' }); toast('success', 'Folder scan queued'); }
+      } else if (button.dataset.jobItemsPrev) { state.jobDetailsPage -= 1; renderJobDetails(); return; }
+      else if (button.dataset.jobItemsNext) { state.jobDetailsPage += 1; renderJobDetails(); return; }
+      else if (button.dataset.connectorScan) { await request(`/api/automation/connectors/${button.dataset.connectorScan}/scan`, { method: 'POST' }); toast('success', 'Folder scan queued'); }
       else if (button.dataset.connectorStatus) window.alert(JSON.stringify(await request(`/api/automation/connectors/${button.dataset.connectorStatus}/status`), null, 2));
       else if (button.dataset.connectorDelete) { if (window.confirm('Delete this connector?')) await request(`/api/automation/connectors/${button.dataset.connectorDelete}`, { method: 'DELETE' }); else return; }
       else if (button.dataset.webhookToggle) await request(`/api/automation/webhooks/${button.dataset.webhookToggle}`, { method: 'PATCH', body: JSON.stringify({ active: button.dataset.active !== 'true' }) });
