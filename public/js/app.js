@@ -32,6 +32,8 @@
   let viewMode = localStorage.getItem('annotator_view_mode') || 'list';
   let imageStatusFilter = localStorage.getItem('annotator_status_filter') || 'all';
   let imageSearchQuery = '';
+  let imageRenderLimit = 120;
+  let imageLoadGeneration = 0;
   let autoSaveEnabled = localStorage.getItem('annotator_autosave') === 'true';
   let tilingUI = null;
   let inferenceRunning = false;
@@ -206,10 +208,20 @@
 
   // -- Image list -------------------------------------------------------------
   async function loadImages() {
-    const [allProjectImages, batches] = await Promise.all([
-      API.getImages(projectId),
-      API.getBatches(projectId),
-    ]);
+    const generation = ++imageLoadGeneration;
+    const batches = await API.getBatches(projectId);
+    const allProjectImages = [];
+    if (typeof API.browseProjectImages === 'function') {
+      const firstPage = await API.browseProjectImages(projectId, { page: 1, pageSize: 100, sort: 'uploadedAt_asc', group: 'none' });
+      allProjectImages.push(...firstPage.groups.flatMap(group => group.items));
+      for (let page = 2; page <= firstPage.totalPages; page += 1) {
+        const next = await API.browseProjectImages(projectId, { page, pageSize: 100, sort: 'uploadedAt_asc', group: 'none' });
+        if (generation !== imageLoadGeneration) return;
+        allProjectImages.push(...next.groups.flatMap(group => group.items));
+      }
+    } else {
+      allProjectImages.push(...await API.getImages(projectId));
+    }
     const assignedIds = new Set();
     batches.forEach(batch => {
       const mySubs = (batch.subBatches || []).filter(sb => sb.assignedTo === me.id);
@@ -251,7 +263,10 @@
         || (img.tags || []).some(tag => String(tag).toLowerCase().includes(q));
     });
 
-    visibleImages.forEach(({ img, idx }) => {
+    const renderEntries = visibleImages.slice(0, imageRenderLimit);
+    const currentVisible = visibleImages.find(entry => entry.idx === currentIndex);
+    if (currentVisible && !renderEntries.some(entry => entry.idx === currentIndex)) renderEntries.push(currentVisible);
+    renderEntries.forEach(({ img, idx }) => {
       let el;
       if (viewMode === 'list') {
         el = document.createElement('li');
@@ -279,6 +294,13 @@
       });
       imagesList.appendChild(el);
     });
+    if (visibleImages.length > renderEntries.length) {
+      const more = document.createElement('li');
+      more.className = 'annotator-load-more';
+      more.innerHTML = `<button type="button">Load more images <span>(${visibleImages.length - renderEntries.length} remaining)</span></button>`;
+      more.querySelector('button').addEventListener('click', () => { imageRenderLimit += 120; renderImageList(); });
+      imagesList.appendChild(more);
+    }
   }
 
   const imageStatusSelect = document.getElementById('image-status-filter');
@@ -434,6 +456,7 @@
 
   // -- Shapes change callback -------------------------------------------------
   let annotationListShapes = null;
+  let annotationRenderLimit = 160;
   function onShapesChange(shapes, selectedId, dirty = false) {
     if (dirty) { unsaved = true; editGeneration += 1; }
     saveIndicator.classList[unsaved ? 'add' : 'remove']('show');
@@ -452,7 +475,10 @@
     }
     annotationListShapes = shapes;
     annotationList.innerHTML = '';
-    shapes.forEach(s => {
+    const renderShapes = shapes.slice(0, annotationRenderLimit);
+    const selectedShape = selectedId == null ? null : shapes.find(shape => shape.id === selectedId);
+    if (selectedShape && !renderShapes.some(shape => shape.id === selectedId)) renderShapes.push(selectedShape);
+    renderShapes.forEach(s => {
       const li = document.createElement('li');
       li.dataset.annotationId = s.id;
       li.tabIndex = 0;
@@ -497,6 +523,13 @@
       li.addEventListener('mouseleave', () => Canvas.clearHighlight());
       annotationList.appendChild(li);
     });
+    if (shapes.length > renderShapes.length) {
+      const more = document.createElement('li');
+      more.className = 'annotation-load-more';
+      more.innerHTML = `<button type="button">Load more annotations <span>(${shapes.length - renderShapes.length} remaining)</span></button>`;
+      more.querySelector('button').addEventListener('click', () => { annotationRenderLimit += 160; renderAnnotationList(shapes, selectedId, true); });
+      annotationList.appendChild(more);
+    }
   }
 
   // -- Save -------------------------------------------------------------------
