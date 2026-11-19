@@ -87,7 +87,7 @@ window.__libreFlowAutomationShell = true;
 
   async function loadProjectRestrictions() {
     const target = document.getElementById('api-key-projects');
-    if (!target || projectRestrictionState.loading) return;
+    if (!target) return;
     const requestSequence = ++projectRestrictionState.requestSequence;
     projectRestrictionState.loading = true;
     target.innerHTML = '<p class="muted">Loading projects…</p>';
