@@ -1,7 +1,7 @@
 {
   "title": "LibreFlow Annotate",
-  "summary": "A self-hosted workspace for labeling images and turning reviewed annotations into training datasets. Inspectors can run a model on a board image without uploading it to a third party.",
-  "status": "Active prototype",
+  "summary": "A self-hosted workspace with MCP and automation for labeling images and turning reviewed annotations into training datasets. Annotations can be drawn, reviewed, and versioned before export in formats including YOLO, COCO, and Pascal VOC. LibreFlow allows usage of a local detector for selected classes or point prompts to generate masks using the user's hardware; no more tokens or cloud inference!",
+  "status": "Public",
   "logo": {
     "src": "public/assets/libreflow-logo.svg",
     "alt": "LibreFlow Annotate logo"
@@ -10,13 +10,13 @@
   "images": [
     {
       "src": "docs/assets/showcase/annotator.webp",
-      "alt": "Five labeled boxes surround the controller, status LEDs, capacitor bank, USB-C port, and sensor module on a synthetic board.",
-      "caption": "A reviewer can check each component label against its location on the original board."
+      "alt": "A blue Arduino Uno is open in the annotator with colored bounding boxes around its components. The annotation panel lists 45 boxes.",
+      "caption": "This Arduino Uno has 45 saved component boxes, including the USB port, power connector, and pin sockets."
     },
     {
       "src": "docs/assets/showcase/dataset-versions.webp",
-      "alt": "The Versions form shows the source selector and a split of 70% training, 20% validation, and 10% test.",
-      "caption": "The version builder shows how many source images each split will receive before export."
+      "alt": "The Versions preview shows the annotated Arduino Uno next to its horizontal mirror. The USB and power connectors move from the left edge to the right.",
+      "caption": "The horizontal-flip preview moves all 45 boxes with the board, so an annotator can check alignment before generating training images."
     }
   ],
   "sections": [
@@ -25,19 +25,19 @@
     },
     {
       "type": "carousel",
-      "title": "From annotation to dataset release",
-      "summary": "Follow a synthetic board inspection from component labels to a training split.",
+      "title": "From component labels to training images",
+      "summary": "The same Arduino Uno appears in the annotation workspace and in a training augmentation preview.",
       "autoPlay": false,
       "images": [
         {
           "src": "docs/assets/showcase/annotator.webp",
-          "alt": "Five labeled boxes surround the controller, status LEDs, capacitor bank, USB-C port, and sensor module on a synthetic board.",
-          "caption": "A reviewer can check each component label against its location on the original board."
+          "alt": "A blue Arduino Uno is open in the annotator with colored bounding boxes around its components. The annotation panel lists 45 boxes.",
+          "caption": "This Arduino Uno has 45 saved component boxes, including the USB port, power connector, and pin sockets."
         },
         {
           "src": "docs/assets/showcase/dataset-versions.webp",
-          "alt": "The Versions form shows the source selector and a split of 70% training, 20% validation, and 10% test.",
-          "caption": "The version builder shows how many source images each split will receive before export."
+          "alt": "The Versions preview shows the annotated Arduino Uno next to its horizontal mirror. The USB and power connectors move from the left edge to the right.",
+          "caption": "The horizontal-flip preview moves all 45 boxes with the board, so an annotator can check alignment before generating training images."
         }
       ]
     },
@@ -81,10 +81,16 @@
     "Sharp",
     "Docker Compose"
   ],
-  "role": "I shaped the annotation and dataset workflows around board inspection. I wanted to run detection for a missing component class while keeping existing labels, then select reviewed batches for a training release.",
+  "role": "I designed the annotation workflow, implemented the front-end and back-end, and integrated a local detector for selected classes. I also created the versioning system and export formats.",
   "technicalHighlights": [
-    "Each detection tile starts with the original image pixels. LibreFlow maps boxes back onto the full board and merges overlapping detections of the same class.",
-    "Split assignment happens before augmentation. Generated training images keep a link to their source, so validation and test images stay out of the augmentation pool."
+    "Fully working annotation and review workflow with versioning and export used on actual projects.",
+    "Human-in-the-Loop (HITL) annotation working and implemented significantly reducing annotation workload.",
+    "Local inference for selected classes and point prompts to generate masks using the user's hardware.",
+    "Versioning system that records source images, split assignments, transformation settings, and file checksums for each version.",
+    "Tiling for large images to allow labeling of high-resolution images without downscaling.",
+    "Augmentation and preprocessing of images for training export, including rotation, flipping, color jitter, and random cropping.",
+    "Allows for multiple users to work on the same project with different roles and permissions.",
+    "Saving uploaded images as dataset to allow reuse of the same images for different projects and versions."
   ],
   "challengesAndSolutions": [
     {
@@ -94,14 +100,48 @@
     {
       "challenge": "A training export can be difficult to trace once the working project changes.",
       "solution": "Each version records its source images, split assignments, transformation settings, and file checksums."
+    },
+    {
+      "challenge": "Small components can disappear when a high-resolution board photo is resized for a detector. A component on a tile boundary can also appear twice.",
+      "solution": "LibreFlow crops overlapping tiles at native resolution, translates each prediction back to board coordinates, and merges overlapping boxes of the same class. Reviewers inspect the results on the original image."
+    },
+    {
+      "challenge": "Drawing an irregular outline by hand is slow, and a first model prediction can include part of a neighboring component.",
+      "solution": "An annotator can give the local segmentation model foreground and background point prompts, inspect the proposed contour, and edit the mask before saving."
+    },
+    {
+      "challenge": "A crop or rotation can move a label off its object. Augmented copies can also leak into the validation set if splitting happens too late.",
+      "solution": "The version builder assigns source images to splits first, applies geometric changes to the image and its annotations together, and generates augmented copies only for training."
+    },
+    {
+      "challenge": "An approval can become stale when a collaborator edits a label after review.",
+      "solution": "Editing submitted or approved annotations returns the image to work in progress. Open issues block approval, and the project owner or assigned reviewer can check the correction against the revision history."
+    },
+    {
+      "challenge": "Two projects may need the same board photos for different labeling tasks.",
+      "solution": "A team can save the source images as a dataset, then import them as a new batch with optional tags. The new batch starts unlabeled, so its annotations can evolve independently."
     }
   ],
   "resultsImpact": [
+    "Eliminated the need to use other annotation platforms and tools for labeling, reviewing, and exporting datasets that charges usage, publicizes datasets, and limited to existing features.",
     "A reviewer can trace a training image back to its source and inspect how it was transformed.",
-    "A team can export a saved version again while continuing to label new images in the project."
+    "A team can export a saved version again while continuing to label new images in the project.",
+    "Delivered industry-level datasets used in training CV and ML models during my tenure of employment.",
+    "Significant reduction in annotation workload by using model-assisted labeling and review.",
+    "An annotator can add predictions for a missing class or refine a single mask locally while keeping earlier labels available for review.",
+    "Reviewers can attach a correction to the affected annotation and see when a later edit reopens an approved image.",
+    "A second project can reuse a board-image collection and its tags while keeping its labeling decisions separate."
   ],
   "lessonsLearned": [
+    "Creating your own platform for labeling and reviewing images is a big investment, but it can pay off when you need to control your data and workflow.",
+    "Optimizing the annotation workflow for a specific use case can significantly reduce the time and effort required to label images.",
     "Show original and augmented image counts separately. A training multiplier is easier to interpret when the user can see both counts.",
-    "Keep the board visible at the current zoom when jumping between annotations so reviewers can judge each label in context."
+    "Keep the board visible at the current zoom when jumping between annotations so reviewers can judge each label in context.",
+    "Tile size and overlap are review decisions as well as model settings. A small component at the edge of a crop may need the neighboring tile to be recognizable.",
+    "Split at the source-image level. Two rotated views of the same board should never land on opposite sides of a training and validation split.",
+    "An approval belongs to a particular revision. Returning edited images to the review queue keeps that promise visible to collaborators.",
+    "Annotators can be more productive when they can see the model's predictions and correct them in place rather than drawing from scratch.",
+    "A local model can be used to generate masks for a single object or class, but it is not a replacement for human review.",
+    "Model assistance is most useful when the annotator can narrow the request to one class or one object and correct the result in place."
   ]
 }

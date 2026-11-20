@@ -134,7 +134,10 @@ input:focus, select:focus { outline: none; border-color: #6c63ff; }
   flex: 1 1 150px;
 }
 .images-tools input, .images-tools select { min-width: 0; width: 100%; box-sizing: border-box; min-height: 44px; }
-.images-tools input { flex: 1 1 240px; }
+/* The input is a child of a column label, so a row-oriented flex basis here
+   would become a 240px-tall control at tablet widths. Let the label own the
+   width and keep controls at their normal intrinsic height. */
+.images-tools input { flex: 0 1 auto; }
 .image-search-hint { margin: 6px 0 0; color: var(--text-dim); font-size: 12px; }
 .dataset-image-page-size-label {
   display: inline-flex;
@@ -257,6 +260,10 @@ input:focus, select:focus { outline: none; border-color: #6c63ff; }
   opacity: 1;
   pointer-events: auto;
 }
+.img-card:focus-within .btn-del-img {
+  opacity: 1;
+  pointer-events: auto;
+}
 .btn-del-img:hover { color: #e05c5c; border-color: #e05c5c; }
 
 .modal {
@@ -308,7 +315,6 @@ input:focus, select:focus { outline: none; border-color: #6c63ff; }
   .show-dataset-list .dataset-main-card { display: none; }
   .dataset-images-scroll { min-height: 240px; max-height: 60dvh; }
   .toolbar, .images-tools { align-items: stretch; }
-  .images-tools input { flex-basis: 100%; }
   .modal { padding: 12px; }
   .modal-box { max-width: 100%; max-height: calc(100dvh - 24px); overflow-y: auto; }
   .datasets-list-card { max-height: calc(100dvh - 80px); }

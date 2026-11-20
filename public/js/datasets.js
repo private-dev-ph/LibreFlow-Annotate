@@ -326,7 +326,7 @@
         <div class="img-card">
           ${ds.userId === me.id ? `<button class="btn btn-del-img" data-id="${esc(img.id)}" title="Delete image" aria-label="Delete image">${LibreFlowIcons.icon('close')}</button>` : ''}
           <img src="/datasets-files/${esc(img.filename)}" alt="${esc(img.originalName)}" loading="lazy" />
-          <div class="img-name">${esc(img.originalName)}</div>
+          <div class="img-name" title="${esc(img.originalName)}">${esc(img.originalName)}</div>
           <div class="img-meta">${formatUtcDate(img.uploadedAt)} · ${formatBytes(img.size)}</div>
           <div>${(img.tags || []).map(t => `<span class="img-tag-chip">${esc(t)}</span>`).join('')}</div>
           <div class="img-actions">

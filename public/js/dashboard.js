@@ -104,7 +104,7 @@
         <div class="card-icon">${LibreFlowIcons.icon('folder', 'Project')}</div>
         <div class="card-title">${escHtml(project.name)}</div>
         ${!isOwner ? '<span class="card-collab-badge">Collaborator</span>' : ''}
-        <button class="card-pin" type="button" data-id="${escHtml(project.id)}" aria-pressed="${project.pinned}" aria-label="${escHtml(pinLabel)}"${pinPending ? ' disabled' : ''}><span class="card-pin-label">${pinPending ? 'Saving…' : (project.pinned ? 'Pinned' : 'Pin')}</span></button>
+        <button class="card-pin" type="button" data-id="${escHtml(project.id)}" aria-pressed="${project.pinned}" aria-label="${escHtml(pinLabel)}" title="${escHtml(pinLabel)}"${pinPending ? ' disabled aria-busy="true"' : ''}><span class="card-pin-icon" aria-hidden="true">${LibreFlowIcons.icon(project.pinned ? 'pinFilled' : 'pin')}</span><span class="card-pin-label sr-only">${pinPending ? 'Saving…' : (project.pinned ? 'Pinned' : 'Pin')}</span></button>
       </div>
       <div class="card-desc">${escHtml(project.description || 'No description.')}</div>
       <div class="card-stats">

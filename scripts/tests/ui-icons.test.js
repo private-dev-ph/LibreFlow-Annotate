@@ -10,7 +10,7 @@ function loadIcons() {
   return context.window.LibreFlowIcons;
 }
 
-const ICON_NAMES = 'check close warning info clock users package brain folder file image trash arrowRight search upload download briefcase grid list camera arrowLeft rotateLeft rotateRight expand plus minus chevronLeft chevronRight chevronDown chevronUp eye eyeOff bell sun moon monitor logOut moreVertical pencil refresh loader play pause square circle circleSlash mousePointer box rotatedBox polygon point mask polyline skeleton sparkles undo redo zoomIn zoomOut save tag keyboard filter externalLink copy link shieldCheck key database layers inbox settings checkCircle xCircle fileArchive folderOpen github'.split(' ');
+const ICON_NAMES = 'check close warning info clock users package brain folder file image trash arrowRight search upload download briefcase grid list camera arrowLeft rotateLeft rotateRight expand plus minus chevronLeft chevronRight chevronDown chevronUp eye eyeOff bell sun moon monitor logOut moreVertical pencil refresh loader play pause square circle circleSlash mousePointer box rotatedBox polygon point mask polyline skeleton sparkles undo redo zoomIn zoomOut save tag keyboard filter externalLink copy link shieldCheck key database layers inbox settings checkCircle xCircle fileArchive folderOpen github pin pinFilled'.split(' ');
 
 test('shared icon registry covers the public catalog with consistent SVG attributes', () => {
   const icons = loadIcons();
@@ -25,6 +25,8 @@ test('shared icon registry covers the public catalog with consistent SVG attribu
   }
   assert.match(icons.icon('box'), /<rect/);
   assert.match(icons.icon('rotatedBox'), /rotate\(18 12 12\)/);
+  assert.match(icons.icon('pin'), /M7 3h10/);
+  assert.match(icons.icon('pinFilled'), /fill="currentColor"/);
 });
 
 test('icon labels escape markup and unknown names cannot inject class markup', () => {

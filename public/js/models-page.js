@@ -304,12 +304,12 @@
           ${isOwner ? `
           <div class="model-row-controls">
             <div class="share-toggle-wrap" title="When on, all collaborators of this project can see this model">
-              <label class="share-toggle-label">
+              <button type="button" class="share-toggle-label" role="switch" aria-checked="${Boolean(m.sharedWithCollaborators)}" data-id="${esc(m.id)}">
                 <span>Share with collaborators</span>
-                <div class="toggle-switch ${m.sharedWithCollaborators ? 'on' : ''}" data-id="${esc(m.id)}" data-shared="${m.sharedWithCollaborators ? '1' : '0'}">
-                  <div class="toggle-knob"></div>
-                </div>
-              </label>
+                <span class="toggle-switch" aria-hidden="true">
+                  <span class="toggle-knob"></span>
+                </span>
+              </button>
               ${m.sharedWithCollaborators ? `<span class="share-on-chip">Shared</span>` : ''}
             </div>
             <div class="model-row-btns">
@@ -325,13 +325,13 @@
     }).join('');
 
     // Toggle share
-    modelsList.querySelectorAll('.toggle-switch').forEach(toggle => {
+    modelsList.querySelectorAll('.share-toggle-label').forEach(toggle => {
       toggle.addEventListener('click', async () => {
         const id     = toggle.dataset.id;
-        const oldVal = toggle.dataset.shared === '1';
+        const oldVal = toggle.getAttribute('aria-checked') === 'true';
         const newVal = !oldVal;
-        toggle.classList.toggle('on', newVal);
-        toggle.dataset.shared = newVal ? '1' : '0';
+        toggle.disabled = true;
+        toggle.setAttribute('aria-checked', String(newVal));
         try {
           const updated = await API.patchModel(id, { sharedWithCollaborators: newVal });
           if (updated.error) throw new Error(updated.error);
@@ -341,10 +341,11 @@
           await loadModels();
         } catch(e) {
           // revert
-          toggle.classList.toggle('on', oldVal);
-          toggle.dataset.shared = oldVal ? '1' : '0';
+          toggle.setAttribute('aria-checked', String(oldVal));
           Notify.error('Failed to update sharing', e.message);
           await loadModels();
+        } finally {
+          toggle.disabled = false;
         }
       });
     });

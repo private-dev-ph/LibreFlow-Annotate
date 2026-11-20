@@ -709,7 +709,7 @@ summary:focus-visible,
 }
 @media (pointer: coarse), (max-width: 600px) {
   button, .card-btn, .btn-new-project, .upload-btn, .tab-btn,
-  .theme-mode-toggle, .toggle-switch, .btn-mark-all-read {
+  .theme-mode-toggle, .btn-mark-all-read {
     min-height: 44px;
     min-width: 44px;
   }
@@ -719,7 +719,6 @@ summary:focus-visible,
     min-width: 0;
     max-width: 100%;
   }
-  .toggle-knob { top: 50%; margin-top: -8px; }
 }
 
 /* Short landscape screens reserve vertical space for the image workspace. */

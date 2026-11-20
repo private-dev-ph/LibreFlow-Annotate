@@ -12,9 +12,9 @@
 
 Start with a folder of images, draw boxes, polygons, masks, or points in the annotator, check the labels, choose a train/validation/test split, and export a dataset version for training. LibreFlow keeps those steps in one local-first workspace for computer-vision teams.
 
-![LibreFlow Annotate annotator showing a synthetic inspection example](docs/assets/showcase/annotator.webp)
+![Saved component bounding boxes on a board photograph from the Arduino project](docs/assets/showcase/annotator.webp)
 
-The example uses synthetic inspection imagery. The [dataset version screenshot](docs/assets/showcase/dataset-versions.webp) shows how to split labeled images into training, validation, and test sets. In the self-hosted app, images stay on the operator's machine and a local Python service runs model inference.
+The Arduino project shown here contains 1,995 component annotations across 27 board images. In the [horizontal-flip preview](docs/assets/showcase/dataset-versions.webp), the Uno and its 45 bounding boxes mirror together so you can check label alignment before export. In the self-hosted app, images stay on the operator's machine and a local Python service runs model inference.
 
 ## Privacy-first web mode
 
